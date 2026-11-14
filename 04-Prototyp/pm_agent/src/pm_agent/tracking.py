@@ -234,16 +234,14 @@ class Forecast:
     schedule: list[ScheduledTask]  # the forecast dates of the unfinished tasks
 
 
-def forecast(tracking: Tracking, today: date, reassign: dict[str, str] | None = None) -> Forecast:
-    """Schedule what is not finished from today on and compare it with the plan.
+def rest_plan(tracking: Tracking, reassign: dict[str, str] | None = None) -> Plan | None:
+    """The unfinished tasks as a plan of their own; None if every task is finished.
 
-    Finished tasks are done, whatever their planned dates. An unfinished task counts with
-    what the project lead says is left of it. Without that, an open task counts with its
-    full estimate and a started one with the estimate minus the booked hours. The same
-    scheduling as for the plan itself (planning.check_plan), so both ends are comparable.
-
-    `reassign` (task ID -> member) answers "what if": the forecast with these unfinished tasks
-    given to someone else. The names must be team members."""
+    A task counts with what the project lead says is left of it. Without that, an open task
+    counts with its full estimate and a started one with the estimate minus the booked
+    hours. Dependencies on finished tasks are gone. `reassign` (task ID -> member) gives
+    tasks to someone else."""
+    state = tracking.progress
 
     def left(task: Task) -> float:
         done = state[task.id]
@@ -253,16 +251,10 @@ def forecast(tracking: Tracking, today: date, reassign: dict[str, str] | None = 
             return max(task.estimate_hours - done.actual_hours, MIN_REST_HOURS)
         return task.estimate_hours
 
-    project, plan = tracking.project, tracking.plan
-    planned_end = check_plan(plan, tracking.team, project).end_date
-    state = tracking.progress
-    open_ids = {task.id for task in plan.tasks if state[task.id].status != "fertig"}
+    open_ids = {task.id for task in tracking.plan.tasks if state[task.id].status != "fertig"}
     if not open_ids:
-        return Forecast(
-            planned_end=planned_end, end=None, shift=0, deadline_gap=0, blocked={}, schedule=[]
-        )
-
-    rest = Plan(
+        return None
+    return Plan(
         tasks=[
             task.model_copy(
                 update={
@@ -270,15 +262,48 @@ def forecast(tracking: Tracking, today: date, reassign: dict[str, str] | None = 
                     "depends_on": [dep for dep in task.depends_on if dep in open_ids],
                 }
             )
-            for task in plan.tasks
+            for task in tracking.plan.tasks
             if task.id in open_ids
         ],
         assignments=[
             a.model_copy(update={"member": (reassign or {}).get(a.task_id, a.member)})
-            for a in plan.assignments
+            for a in tracking.plan.assignments
             if a.task_id in open_ids
         ],
+        risks=tracking.plan.risks,
     )
+
+
+def rest_project(tracking: Tracking, today: date) -> tuple[Project, Plan]:
+    """What is left of the adopted project as a project of its own, to plan it again: it
+    starts today and keeps the deadline. Raises InputError if there is nothing to plan."""
+    rest = rest_plan(tracking)
+    project = tracking.project
+    if rest is None:
+        raise InputError("Alle Aufgaben sind fertig: Es gibt nichts umzuplanen")
+    if today > project.deadline:
+        raise InputError(
+            f"Die Deadline ({_date(project.deadline)}) liegt in der Vergangenheit: Bis dahin "
+            "lässt sich nichts mehr planen"
+        )
+    start = max(today, project.start_date)
+    return Project(idea=project.idea, start_date=start, deadline=project.deadline), rest
+
+
+def forecast(tracking: Tracking, today: date, reassign: dict[str, str] | None = None) -> Forecast:
+    """Schedule what is not finished (rest_plan) from today on and compare it with the plan.
+    The same scheduling as for the plan itself (planning.check_plan), so both ends are
+    comparable.
+
+    `reassign` (task ID -> member) answers "what if": the forecast with these unfinished tasks
+    given to someone else. The names must be team members."""
+    project, plan = tracking.project, tracking.plan
+    planned_end = check_plan(plan, tracking.team, project).end_date
+    rest = rest_plan(tracking, reassign)
+    if rest is None:
+        return Forecast(
+            planned_end=planned_end, end=None, shift=0, deadline_gap=0, blocked={}, schedule=[]
+        )
     # The last possible date as deadline: only the dates are wanted here. Today can lie
     # behind the real deadline, and check_plan would then find no workday to plan in.
     open_end = Project(

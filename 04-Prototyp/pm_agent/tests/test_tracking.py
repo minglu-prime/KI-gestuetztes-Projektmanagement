@@ -19,6 +19,7 @@ from pm_agent.tracking import (
     next_step,
     progress_rows,
     reassignment_effect,
+    rest_project,
     save,
     status_report,
     work_packages,
@@ -479,3 +480,35 @@ def test_the_next_step_follows_from_the_state_of_the_project(tracking):
         "Abschluss fest.",
         "durchfuehrung",
     )
+
+
+def test_the_rest_of_a_project_is_a_project_from_today_with_what_is_left(tracking):
+    # Thu 12.11.: A is finished, B has 4 of its 16 h booked.
+    project, plan = rest_project(apply_rows(tracking, ROWS), date(2026, 11, 12))
+
+    assert (project.idea, project.start_date, project.deadline) == (
+        PROJECT.idea,
+        date(2026, 11, 12),
+        PROJECT.deadline,
+    )
+    (task,) = plan.tasks
+    assert (task.id, task.title, task.estimate_hours) == ("B", "API", 12)
+    assert task.depends_on == []  # A is done: nothing to wait for
+    assert [(a.task_id, a.member, a.reason) for a in plan.assignments] == [
+        ("B", "Anna", "kennt Python")
+    ]
+    assert plan.risks == PLAN.risks
+
+
+def test_the_rest_starts_no_earlier_than_the_project(tracking):
+    project, plan = rest_project(tracking, date(2026, 11, 2))  # a week before the start
+    assert project.start_date == PROJECT.start_date
+    assert [t.id for t in plan.tasks] == ["A", "B"] and plan.tasks[1].depends_on == ["A"]
+
+
+def test_there_is_no_rest_of_a_finished_project_or_after_the_deadline(tracking):
+    done = progressed(tracking, A="fertig", B="fertig")
+    with pytest.raises(InputError, match="Alle Aufgaben sind fertig"):
+        rest_project(done, date(2026, 11, 12))
+    with pytest.raises(InputError, match=r"Die Deadline \(18.12.2026\) liegt in der Vergangenheit"):
+        rest_project(tracking, date(2026, 12, 21))

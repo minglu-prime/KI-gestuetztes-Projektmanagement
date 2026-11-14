@@ -385,8 +385,8 @@ def bar_end(last_day: date) -> date:
     The axis marks the start of each day. A bar covers whole days, so it runs to the start
     of the day after its last day. The deadline day is a working day too, so its line sits
     at the end of the day the same way. Drawn at its start, a task finishing on the deadline
-    looked late."""
-    return last_day + timedelta(days=1)
+    looked late. The last day of the calendar has no day after it and stays where it is."""
+    return last_day if last_day == date.max else last_day + timedelta(days=1)
 
 
 def gantt(plan: Plan, result: CheckResult, deadline: date) -> tuple[list[dict[str, Any]], date]:

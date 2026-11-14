@@ -401,6 +401,25 @@ def test_durchfuehrung_says_where_the_project_stands(tracked):
 WAYS_ON = ["Fortschritt erfassen", "Stand prüfen"]
 
 
+def test_the_rest_of_the_project_goes_from_kontrolle_into_the_planung(site):
+    # A deadline that never passes, so that this holds whatever today is.
+    open_end = PROJECT.model_copy(update={"deadline": date.max})
+    tracking.adopt(open_end, TEAM, PLAN)
+    tracking.save(tracking.apply_rows(tracking.load(), [{"ID": "A", "Status": "fertig"}]))
+
+    at = site.switch_page("pages/kontrolle.py").run()
+    button(at, "Rest mit Claude umplanen").click()
+    at.run()
+
+    assert not at.exception and not at.error
+    assert at.header[0].value == "Planung"
+    assert at.session_state["source"] == "Rest des übernommenen Projekts"
+    assert [t.id for t in at.session_state["plan"].tasks] == ["B"]  # A is finished
+    assert at.session_state["step"] == "5 · Anpassen"  # where the conversation is
+    assert at.date_input(key="start").value == max(date.today(), PROJECT.start_date)
+    assert list(at.session_state["team_df"]["Name"]) == ["Anna"]
+
+
 def test_the_startseite_says_where_the_project_is_heading(tracked):
     at = tracked.run()
     assert not at.exception

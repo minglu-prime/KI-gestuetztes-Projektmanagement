@@ -88,6 +88,20 @@ if tracking is not None:
                 held = ", ".join(waiting) if waiting else "keine weitere Aufgabe"
                 st.markdown(f"- **{late} · {titles[late]}** hält auf: {held}")
 
+            # From here the project lead can act: plan the rest again, with Claude.
+            if st.button(
+                "Rest mit Claude umplanen",
+                icon=":material/forum:",
+                type="primary" if outlook.deadline_gap > 0 else "secondary",
+            ):
+                state.rest_requested = True
+                st.switch_page("pages/planung.py")
+            st.caption(
+                "Lädt die unfertigen Aufgaben als Plan ab heute in die Planung. Dort lässt er "
+                "sich im Gespräch mit Claude ändern und wieder als Projekt übernehmen. Das "
+                "übernommene Projekt bleibt bis dahin, wie es ist."
+            )
+
             kinds = ["Plan", "Prognose"]
             bars = (
                 alt.Chart(pd.DataFrame(forecast_bars(result, outlook)))

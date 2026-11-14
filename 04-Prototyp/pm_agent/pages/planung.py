@@ -20,7 +20,7 @@ from pydantic import ValidationError
 from pm_agent.agent import PlanningError, run_planning, run_replanning
 from pm_agent.models import Project
 from pm_agent.planning import check_plan
-from pm_agent.tracking import adopt, has_progress
+from pm_agent.tracking import adopt, has_progress, rest_project
 from pm_agent.tracking import load as load_tracking
 from pm_agent.ui import chip, round_printer, strip
 from pm_agent.workbench import (
@@ -120,6 +120,23 @@ def open_run(path) -> None:
     state.step = STEPS[3]  # straight to the result
 
 
+def load_rest() -> None:
+    """The unfinished part of the adopted project becomes the current plan, starting today,
+    so that it can be changed in the conversation and adopted again. Runs before the
+    widgets, so it may fill their keys. Raises InputError if there is nothing to load."""
+    adopted = load_tracking()
+    if adopted is None:
+        raise InputError("Es ist kein Projekt übernommen")
+    project, plan = rest_project(adopted, date.today())
+    state.team_df = pd.DataFrame(team_rows(adopted.team), columns=TEAM_COLUMNS)
+    state.team_current = None
+    state.team_version += 1
+    state.update(idea=project.idea, start=project.start_date, deadline=project.deadline)
+    show_plan(plan, [], "Rest des übernommenen Projekts", None)
+    state.update(chat=[], proposal=None)  # the conversation was about another plan
+    state.step = STEPS[4]  # straight to the step with the conversation
+
+
 def ask() -> None:
     """Callback of the chat input: keep the wish for the run that follows."""
     state.asked = state.wish
@@ -168,11 +185,19 @@ def next_step(label: str, step: str, ready: bool, key: str) -> None:
 init()
 if state.get("page_changed"):  # set by app.py
     restore_editors()
+rest_error = None
+if state.pop("rest_requested", False):  # set by the Kontrolle page
+    try:
+        load_rest()
+    except InputError as err:
+        rest_error = str(err)
 st.header("Planung")
 st.caption(
     "Claude schlägt einen Plan vor, Python prüft ihn deterministisch, die Projektleitung "
     "entscheidet."
 )
+if rest_error:
+    st.error(f"Der Rest des Projekts konnte nicht geladen werden: {rest_error}")
 status_strip = st.empty()  # filled at the end, when team, project and plan are known
 # on_change="rerun" makes the selection a value in the session state, so buttons can open a
 # step. Every step is still rendered on every run (see the module docstring).

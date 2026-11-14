@@ -11,6 +11,7 @@ from pm_agent.planning import check_plan
 from pm_agent.workbench import (
     InputError,
     append_run,
+    bar_end,
     explain_task,
     gantt,
     load_run,
@@ -287,3 +288,11 @@ def test_the_bars_of_the_gantt_chart_carry_slack_and_the_critical_path():
         ("B · API", True, 0),
         ("C · Doku", False, 2),
     ]
+
+
+def test_a_deadline_on_the_last_day_of_the_calendar_can_still_be_drawn():
+    # A day after 31.12.9999 does not exist. The charts drew the line there and crashed.
+    assert bar_end(date(2026, 11, 11)) == date(2026, 11, 12)
+    assert bar_end(date.max) == date.max
+    bars, line = gantt(PLAN, check_plan(PLAN, TEAM, PROJECT), date.max)
+    assert line == date.max and len(bars) == 2
