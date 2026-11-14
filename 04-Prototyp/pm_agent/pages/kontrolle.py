@@ -100,7 +100,7 @@ if tracking is not None:
         rate = st.number_input(
             "Stundensatz (€)", min_value=0.0, value=None, step=5.0, placeholder="nicht gesetzt"
         )
-        if rate:
+        if rate is not None:
             plan_cost, actual_cost = st.columns(2)
             plan_cost.metric("Plankosten gesamt", f"{result.planned_hours * rate:,.2f} €")
             actual_cost.metric("Ist-Kosten bisher", f"{result.actual_hours * rate:,.2f} €")
