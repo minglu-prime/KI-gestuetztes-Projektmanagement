@@ -22,7 +22,7 @@ from pm_agent.models import Project
 from pm_agent.planning import check_plan
 from pm_agent.tracking import adopt, has_progress, rest_project
 from pm_agent.tracking import load as load_tracking
-from pm_agent.ui import chip, round_printer, strip
+from pm_agent.ui import BUSY_HINT, chip, round_printer, strip
 from pm_agent.workbench import (
     PLAN_COLUMNS,
     RUNS_CSV,
@@ -101,8 +101,10 @@ def show_plan(plan, rounds, source, agent_seconds, rounds_start=None) -> None:
         rounds_start=rounds_start,
         source=source,
         agent_seconds=agent_seconds,
+        round_count=len(rounds),
         shown_at=time.monotonic(),
         edited=False,
+        hand_edited=False,
         plan_df=pd.DataFrame(plan_rows(plan), columns=PLAN_COLUMNS),
         plan_current=None,
         risks_text="\n".join(plan.risks),
@@ -190,13 +192,19 @@ def decide(accept: bool) -> None:
         {"wish": proposal["wish"], "changes": proposal["changes"], "accepted": accept}
     )
     if accept:
+        # What the export record says about the plan as a whole goes on: the agent's time
+        # and rounds add up, a hand edit stays a hand edit, the review began when it began.
+        seconds = (state.agent_seconds or 0) + proposal["seconds"]
+        rounds = state.get("round_count", len(state.rounds)) + len(proposal["rounds"])
+        hand_edited, shown_at = state.get("hand_edited", state.edited), state.shown_at
         show_plan(
             proposal["plan"],
             proposal["rounds"],
             "Agent, auf Wunsch geändert",
-            proposal["seconds"],
+            round(seconds, 1),
             rounds_start=proposal["basis"],
         )
+        state.update(round_count=rounds, hand_edited=hand_edited, shown_at=shown_at)
 
 
 def whole_percent(share: float | None) -> float | None:
@@ -347,6 +355,7 @@ with tabs[2]:
         ):
             rounds = []
             with st.status("Claude plant …", expanded=True) as status:
+                st.caption(BUSY_HINT)
                 show_round = round_printer()
 
                 def on_round(record):
@@ -636,6 +645,7 @@ with tabs[4]:
                     st.text(wish)
                 change_rounds = []
                 with st.status("Claude ändert den Plan …", expanded=True) as status:
+                    st.caption(BUSY_HINT)
                     with st.container(key="rounds-change"):
                         show_change_round = round_printer(state.plan)
 
@@ -772,7 +782,12 @@ with tabs[4]:
             except InputError as err:
                 st.error(f"Bitte korrigieren:\n\n{err}")
             else:
-                state.update(plan=new, edited=new != state.original)
+                changed = new != state.original
+                state.update(
+                    plan=new,
+                    edited=changed,
+                    hand_edited=state.get("hand_edited", False) or changed,
+                )
                 st.rerun()
         next_step("Ergebnis ansehen", STEPS[3], False, "back_to_result")
 
@@ -791,9 +806,9 @@ with tabs[5]:
                     "exportiert": datetime.now().astimezone().isoformat(timespec="seconds"),
                     "quelle": state.source,
                     "agent_sekunden": state.agent_seconds,
-                    "runden": len(state.rounds),
+                    "runden": state.get("round_count", len(state.rounds)),
                     "pruefung_sekunden": round(time.monotonic() - state.shown_at, 1),
-                    "angepasst": state.edited,
+                    "angepasst": state.get("hand_edited", state.edited),
                     "tasks": len(state.plan.tasks),
                     "fehler": len(result.errors),
                     "warnungen": len(result.warnings),

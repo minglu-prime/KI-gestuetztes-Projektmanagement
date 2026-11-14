@@ -57,6 +57,10 @@ def consent(key: str) -> bool:
     )
 
 
+# Streamlit ends a running script when any widget on the page is used. With an agent in
+# the middle of its rounds that loses the run, and the tokens it has used.
+BUSY_HINT = "Solange Claude arbeitet, bricht jeder Klick auf dieser Seite den Lauf ab."
+
 # A first redraft can touch every task. The view names the first changes and counts the rest;
 # the proposal the project lead decides on always lists all of them.
 SHOWN_CHANGES = 8
@@ -98,6 +102,7 @@ def run_with_progress(label: str, run: Callable[[Callable[[dict[str, Any]], None
     rounds = 0
     result = failure = None
     with st.status(label, expanded=True) as status:
+        st.caption(BUSY_HINT)
 
         def on_round(record: dict[str, Any]) -> None:
             nonlocal rounds

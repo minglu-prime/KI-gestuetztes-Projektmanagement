@@ -252,6 +252,26 @@ def test_claude_is_not_asked_while_the_table_holds_edits_that_were_not_checked(w
     assert "Tabelle zurücksetzen" in [b.label for b in at.button]
 
 
+def test_taking_a_change_keeps_what_the_export_record_needs(with_plan):
+    # As after 3 rounds and 90 s of planning and a hand edit confirmed with "Erneut prüfen".
+    with_plan.session_state["agent_seconds"] = 90.0
+    with_plan.session_state["round_count"] = 3
+    with_plan.session_state["hand_edited"] = True
+    shown_at = with_plan.session_state["shown_at"]
+    at = with_plan.chat_input(key="wish").set_value(WISH).run()
+    button(at, "Übernehmen").click()
+    at.run()
+
+    assert not at.exception
+    # runs.csv is the data of the before/after comparison: the change by Claude adds to the
+    # agent's time and rounds, and does not erase that the lead edited the plan by hand or
+    # when the review began.
+    assert at.session_state["agent_seconds"] >= 90.0
+    assert at.session_state["round_count"] == 4
+    assert at.session_state["hand_edited"] is True
+    assert at.session_state["shown_at"] == shown_at
+
+
 def test_a_dropped_proposal_leaves_the_plan_as_it_was(with_plan):
     at = with_plan.chat_input(key="wish").set_value(WISH).run()
     button(at, "Verwerfen").click()
