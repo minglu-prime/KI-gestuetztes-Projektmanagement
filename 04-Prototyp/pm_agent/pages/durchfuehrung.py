@@ -8,6 +8,7 @@ import streamlit as st
 from pm_agent import followup
 from pm_agent.tracking import (
     PROGRESS_COLUMNS,
+    PROGRESS_READ_ONLY,
     STATUSES,
     apply_rows,
     evaluate,
@@ -60,7 +61,7 @@ with st.container(border=True, key="panel-progress"):
         key=f"progress_editor_{state.get('progress_version', 0)}",
         hide_index=True,
         width="stretch",
-        disabled=PROGRESS_COLUMNS[:5],
+        disabled=PROGRESS_READ_ONLY,
         column_config={
             "Status": st.column_config.SelectboxColumn(options=STATUSES, required=True),
             "Ist (h)": st.column_config.NumberColumn(min_value=0.0, step=0.5),
@@ -74,7 +75,8 @@ with st.container(border=True, key="panel-progress"):
     )
     st.caption(
         "Status, Ist-Stunden, Rest und Notiz lassen sich ändern. Änderungen gelten erst nach "
-        "dem Speichern."
+        "dem Speichern. „Prognose Ende“ zeigt, wann die Aufgabe nach heutigem Stand fertig "
+        "wird."
     )
     if st.button("Fortschritt speichern", type="primary", icon=":material/save:"):
         try:

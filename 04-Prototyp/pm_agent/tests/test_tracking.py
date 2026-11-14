@@ -647,3 +647,22 @@ def test_the_control_document_takes_the_hourly_rate_and_the_agents_report(two_pe
     )
     assert "*Vorschlag des Kontroll-Agenten (Claude), von der Projektleitung zu prüfen.*" in text
     assert "$" not in text
+
+
+def test_the_progress_table_says_when_each_task_is_expected_to_end(tracking):
+    # Tue 10.11.: A was planned for Monday and is still open.
+    rows = progress_rows(tracking, today=date(2026, 11, 10))
+    assert [(r["ID"], r["Geplantes Ende"], r["Prognose Ende"]) for r in rows] == [
+        ("A", "09.11.2026", "10.11.2026"),
+        ("B", "11.11.2026", "12.11.2026"),
+    ]
+    done = progress_rows(progressed(tracking, A="fertig"), today=date(2026, 11, 10))
+    assert [r["Prognose Ende"] for r in done] == ["fertig", "11.11.2026"]
+    # No forecast, no dates: the reason is on the Kontrolle page.
+    absurd = apply_rows(tracking, [{"ID": "B", "Status": "in Arbeit", "Rest (h)": 20_000_000}])
+    assert [r["Prognose Ende"] for r in progress_rows(absurd, today=date(2026, 11, 10))] == [
+        "nicht berechenbar",
+        "nicht berechenbar",
+    ]
+    # The new column is read-only: saving the table as shown changes nothing.
+    assert apply_rows(tracking, rows) == tracking

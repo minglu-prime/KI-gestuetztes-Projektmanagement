@@ -41,6 +41,7 @@ PROGRESS_COLUMNS = [
     "Person",
     "Plan (h)",
     "Geplantes Ende",
+    "Prognose Ende",
     "Status",
     "Ist (h)",
     "Rest (h)",
@@ -487,9 +488,17 @@ def forecast_bars(evaluation: Evaluation, outlook: Forecast) -> list[dict[str, A
     return bars
 
 
-def progress_rows(tracking: Tracking) -> list[dict[str, Any]]:
+# The columns of the progress table that the project lead cannot change.
+PROGRESS_READ_ONLY = PROGRESS_COLUMNS[:6]
+
+
+def progress_rows(tracking: Tracking, today: date | None = None) -> list[dict[str, Any]]:
     """One row per task for the progress table. Status, Ist (h), Rest (h) and Notiz are
-    edited."""
+    edited; "Prognose Ende" is where the forecast puts the task."""
+    today = today or date.today()
+    outlook = forecast(tracking, today)
+    expected = {s.task_id: _date(s.end) for s in outlook.schedule}
+    missing = "nicht berechenbar" if outlook.problem else "fertig"
     return [
         dict(
             zip(
@@ -500,6 +509,7 @@ def progress_rows(tracking: Tracking) -> list[dict[str, Any]]:
                     t.member,
                     t.planned_hours,
                     _date(t.planned_end),
+                    expected.get(t.id, missing),
                     t.status,
                     t.actual_hours,
                     t.remaining_hours,
@@ -508,7 +518,7 @@ def progress_rows(tracking: Tracking) -> list[dict[str, Any]]:
                 strict=True,
             )
         )
-        for t in evaluate(tracking, date.today()).tasks
+        for t in evaluate(tracking, today).tasks
     ]
 
 
