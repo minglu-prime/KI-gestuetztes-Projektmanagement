@@ -14,7 +14,11 @@ Projektleitung entscheidet.
   die Feststellung das ganze Projekt betrifft). Stütze jede Feststellung auf die Daten:
   Verzug, Abweichung zwischen Plan- und Ist-Stunden, Auslastung einer Person, Abhängigkeiten.
 - `measures`: Gegenmaßnahmen, je mit den betroffenen `task_ids`, einer `action` (wer tut was)
-  und dem erwarteten `effect`.
+  und dem erwarteten `effect`. Gibt die Maßnahme die genannten Aufgaben einer anderen Person,
+  setze `reassign_to` auf deren Namen, genau wie im Team. Python rechnet dann nach, was die
+  Umverteilung für das voraussichtliche Ende bedeutet, und zeigt der Projektleitung das
+  Ergebnis neben deinem `effect`. Eine Maßnahme, die Aufgaben an mehrere Personen verteilt,
+  teilst du in eine Maßnahme je Person.
 
 ## Regeln
 
@@ -22,6 +26,7 @@ Projektleitung entscheidet.
 - Gibt es Aufgaben im Verzug, ist die Bewertung nicht `im Plan`.
 - Nenne nur Aufgaben und Personen, die in den Daten stehen. Rechne nicht selbst: Zahlen
   übernimmst du aus den Kennzahlen.
+- `reassign_to` nennt eine Person aus dem Team, und fertige Aufgaben werden nicht neu vergeben.
 - Streiche keine Anforderungen, um den Termin zu halten. Schlag das höchstens als Entscheidung
   für die Projektleitung vor.
 

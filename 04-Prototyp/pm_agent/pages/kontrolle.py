@@ -7,7 +7,15 @@ import pandas as pd
 import streamlit as st
 
 from pm_agent import followup, workbench
-from pm_agent.tracking import agent_runs, evaluate, forecast, forecast_bars, has_progress, percent
+from pm_agent.tracking import (
+    agent_runs,
+    evaluate,
+    forecast,
+    forecast_bars,
+    has_progress,
+    percent,
+    reassignment_effect,
+)
 from pm_agent.ui import adopted_project, consent, run_with_progress
 
 state = st.session_state
@@ -224,12 +232,22 @@ if tracking is not None:
                                 {
                                     "Aufgaben": ", ".join(m.task_ids),
                                     "Maßnahme": m.action,
-                                    "Erwartete Wirkung": m.effect,
+                                    "Erwartete Wirkung (Claude)": m.effect,
+                                    "Nachgerechnet (Python)": reassignment_effect(
+                                        tracking, date.today(), m.task_ids, m.reassign_to
+                                    )
+                                    if m.reassign_to
+                                    else "Keine Umverteilung: nicht nachrechenbar",
                                 }
                                 for m in report.measures
                             ]
                         ),
                         hide_index=True,
+                    )
+                    st.caption(
+                        "Gibt eine Maßnahme Aufgaben einer anderen Person, rechnet Python die "
+                        "Prognose mit dieser Umverteilung neu. Andere Maßnahmen (priorisieren, "
+                        "klären, Umfang ändern) lassen sich nicht nachrechnen."
                     )
                 else:
                     st.caption("Claude schlägt keine Gegenmaßnahmen vor.")

@@ -234,13 +234,16 @@ class Forecast:
     schedule: list[ScheduledTask]  # the forecast dates of the unfinished tasks
 
 
-def forecast(tracking: Tracking, today: date) -> Forecast:
+def forecast(tracking: Tracking, today: date, reassign: dict[str, str] | None = None) -> Forecast:
     """Schedule what is not finished from today on and compare it with the plan.
 
     Finished tasks are done, whatever their planned dates. An unfinished task counts with
     what the project lead says is left of it. Without that, an open task counts with its
     full estimate and a started one with the estimate minus the booked hours. The same
-    scheduling as for the plan itself (planning.check_plan), so both ends are comparable."""
+    scheduling as for the plan itself (planning.check_plan), so both ends are comparable.
+
+    `reassign` (task ID -> member) answers "what if": the forecast with these unfinished tasks
+    given to someone else. The names must be team members."""
 
     def left(task: Task) -> float:
         done = state[task.id]
@@ -270,7 +273,11 @@ def forecast(tracking: Tracking, today: date) -> Forecast:
             for task in plan.tasks
             if task.id in open_ids
         ],
-        assignments=[a for a in plan.assignments if a.task_id in open_ids],
+        assignments=[
+            a.model_copy(update={"member": (reassign or {}).get(a.task_id, a.member)})
+            for a in plan.assignments
+            if a.task_id in open_ids
+        ],
     )
     # The last possible date as deadline: only the dates are wanted here. Today can lie
     # behind the real deadline, and check_plan would then find no workday to plan in.
@@ -298,6 +305,35 @@ def forecast(tracking: Tracking, today: date) -> Forecast:
         blocked=waiting,
         schedule=expected.schedule,
     )
+
+
+def reassignment_effect(tracking: Tracking, today: date, task_ids: list[str], member: str) -> str:
+    """What giving these tasks to `member` does to the forecast, as one sentence. Finished
+    tasks stay where they are."""
+    people = {m.name: m for m in tracking.team}
+    if member not in people:
+        return f"Nicht prüfbar: {member} ist nicht im Team"
+    tasks = {task.id: task for task in tracking.plan.tasks}
+    moved = [tid for tid in task_ids if tracking.progress[tid].status != "fertig"]
+    before = forecast(tracking, today)
+    if before.end is None:
+        return "Alle Aufgaben sind fertig."
+    after = forecast(tracking, today, reassign=dict.fromkeys(moved, member))
+    shift = workday_shift(before.end, after.end)
+    if shift:
+        days = f"{abs(shift)} Arbeitstag{'' if abs(shift) == 1 else 'e'}"
+        text = (
+            f"Voraussichtliches Ende {_date(after.end)} statt {_date(before.end)} "
+            f"({days} {'früher' if shift < 0 else 'später'})"
+        )
+    else:
+        text = f"Das voraussichtliche Ende bleibt der {_date(before.end)}"
+    known = {skill.casefold() for skill in people[member].skills}
+    for tid in moved:
+        missing = [s for s in tasks[tid].required_skills if s.casefold() not in known]
+        if missing:
+            text += f". {member} hat {', '.join(missing)} nicht angegeben ({tid})"
+    return text
 
 
 def forecast_text(outlook: Forecast, deadline: date) -> str:

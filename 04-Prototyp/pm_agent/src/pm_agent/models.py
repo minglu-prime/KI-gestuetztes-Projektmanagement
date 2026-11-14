@@ -127,7 +127,10 @@ class Finding(_Model):
 class Measure(_Model):
     task_ids: list[NonEmpty] = Field(min_length=1)
     action: NonEmpty
-    effect: NonEmpty  # what the measure is expected to change
+    effect: NonEmpty  # what the measure is expected to change, in Claude's words
+    # Set if the measure gives its tasks to this team member. Python then computes what that
+    # does to the forecast, so the effect is not only claimed.
+    reassign_to: NonEmpty | None = None
 
 
 class ControlReport(_Model):

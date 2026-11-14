@@ -459,7 +459,15 @@ def test_the_control_agent_shows_assessment_findings_and_measures(tracked, monke
     report = ControlReport(
         assessment="gefährdet",
         findings=[{"task_ids": ["B"], "observation": "B hat noch nicht begonnen."}],
-        measures=[{"task_ids": ["B"], "action": "Anna beginnt B.", "effect": "Verzug sinkt."}],
+        measures=[
+            {"task_ids": ["B"], "action": "Anna beginnt B.", "effect": "Verzug sinkt."},
+            {
+                "task_ids": ["B"],
+                "action": "Anna übernimmt B.",
+                "effect": "B wird früher fertig.",
+                "reassign_to": "Anna",
+            },
+        ],
     )
     monkeypatch.setattr(followup, "run_control_report", lambda *args, **kwargs: report)
     at = tracked.switch_page("pages/kontrolle.py").run()
@@ -474,9 +482,17 @@ def test_the_control_agent_shows_assessment_findings_and_measures(tracked, monke
     assert {m.label: m.value for m in at.metric}["Bewertung"] == "gefährdet"
     assert "- **B:** B hat noch nicht begonnen." in [m.value for m in at.markdown]
     (measures,) = [d.value for d in at.dataframe if "Maßnahme" in d.value.columns]
-    assert measures.to_dict("records") == [
-        {"Aufgaben": "B", "Maßnahme": "Anna beginnt B.", "Erwartete Wirkung": "Verzug sinkt."}
-    ]
+    first, second = measures.to_dict("records")
+    assert first == {
+        "Aufgaben": "B",
+        "Maßnahme": "Anna beginnt B.",
+        "Erwartete Wirkung (Claude)": "Verzug sinkt.",
+        "Nachgerechnet (Python)": "Keine Umverteilung: nicht nachrechenbar",
+    }
+    # B is Anna's already: Python finds that giving it to her changes nothing, whatever
+    # Claude expected.
+    assert second["Erwartete Wirkung (Claude)"] == "B wird früher fertig."
+    assert second["Nachgerechnet (Python)"].startswith("Das voraussichtliche Ende bleibt der ")
 
 
 def test_a_failing_agent_shows_the_reason_and_no_result(tracked, monkeypatch):

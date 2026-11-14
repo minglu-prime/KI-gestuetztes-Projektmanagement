@@ -4,7 +4,7 @@ from datetime import date
 import pytest
 from test_tools import PROJECT, TEAM, plan_input
 
-from pm_agent.models import Plan, StatusSummary
+from pm_agent.models import Member, Plan, StatusSummary
 from pm_agent.tracking import (
     Progress,
     adopt,
@@ -17,6 +17,7 @@ from pm_agent.tracking import (
     has_progress,
     load,
     progress_rows,
+    reassignment_effect,
     save,
     status_report,
     work_packages,
@@ -380,4 +381,63 @@ def test_an_unreadable_remaining_estimate_names_the_row_and_the_problem(tracking
 def test_progress_saved_before_remaining_estimates_existed_still_loads():
     assert (
         Progress.model_validate({"status": "in Arbeit", "actual_hours": 3}).remaining_hours is None
+    )
+
+
+@pytest.fixture
+def two_people(tmp_path):
+    """Anna has two independent tasks of two days each; Ben (SQL, full time) has none."""
+    ben = Member(name="Ben", skills={"SQL": 3}, hours_per_week=40)
+    plan = Plan.model_validate(
+        {
+            "tasks": [
+                {
+                    "id": "X",
+                    "title": "Backend",
+                    "estimate_hours": 16,
+                    "required_skills": ["Python"],
+                },
+                {"id": "Y", "title": "Datenbank", "estimate_hours": 16, "required_skills": ["SQL"]},
+            ],
+            "assignments": [
+                {"task_id": "X", "member": "Anna", "reason": "kennt Python"},
+                {"task_id": "Y", "member": "Anna", "reason": "hat Zeit"},
+            ],
+        }
+    )
+    return adopt(PROJECT, [*TEAM, ben], plan, path=tmp_path / "projekt.json")
+
+
+def test_the_forecast_can_be_computed_with_tasks_given_to_someone_else(two_people):
+    monday = date(2026, 11, 9)
+    assert forecast(two_people, monday).end == date(2026, 11, 12)  # Anna alone: four days
+    shared = forecast(two_people, monday, reassign={"Y": "Ben"})
+    assert shared.end == date(2026, 11, 10)
+    assert [(s.task_id, s.member) for s in shared.schedule] == [("X", "Anna"), ("Y", "Ben")]
+    assert shared.planned_end == date(2026, 11, 12)  # the plan itself is not touched
+
+
+def test_the_effect_of_a_reassignment_is_a_sentence_with_numbers(two_people):
+    monday = date(2026, 11, 9)
+    assert reassignment_effect(two_people, monday, ["Y"], "Ben") == (
+        "Voraussichtliches Ende 10.11.2026 statt 12.11.2026 (2 Arbeitstage früher)"
+    )
+    # Ben has not named Python: the sentence says so.
+    assert reassignment_effect(two_people, monday, ["X"], "Ben") == (
+        "Voraussichtliches Ende 10.11.2026 statt 12.11.2026 (2 Arbeitstage früher). "
+        "Ben hat Python nicht angegeben (X)"
+    )
+    # Giving both to Ben only moves the queue to him.
+    assert reassignment_effect(two_people, monday, ["X", "Y"], "Ben") == (
+        "Das voraussichtliche Ende bleibt der 12.11.2026. Ben hat Python nicht angegeben (X)"
+    )
+    assert reassignment_effect(two_people, monday, ["Y"], "Zoe") == (
+        "Nicht prüfbar: Zoe ist nicht im Team"
+    )
+
+
+def test_a_finished_task_is_left_out_of_a_reassignment(two_people):
+    done = apply_rows(two_people, [{"ID": "Y", "Status": "fertig", "Ist (h)": 16}])
+    assert reassignment_effect(done, date(2026, 11, 9), ["Y"], "Ben") == (
+        "Das voraussichtliche Ende bleibt der 10.11.2026"
     )
