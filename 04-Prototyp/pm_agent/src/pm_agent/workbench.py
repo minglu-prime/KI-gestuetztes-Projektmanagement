@@ -9,23 +9,34 @@ import csv
 import io
 import json
 import re
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 from pydantic import ValidationError
 
 from pm_agent.agent import LOG_DIR
-from pm_agent.models import Assignment, CheckResult, Member, Plan, Project, Task
+from pm_agent.models import (
+    Absence,
+    Assignment,
+    CheckResult,
+    Member,
+    Plan,
+    Project,
+    Task,
+)
 from pm_agent.planning import workday_shift
 
 DATA_DIR = LOG_DIR.parent / "data"
 TEAM_FILE = DATA_DIR / "team.json"
 RUNS_CSV = LOG_DIR / "runs.csv"
 
-TEAM_COLUMNS = ["Name", "Skills", "Stunden/Woche", "Notiz"]
+TEAM_COLUMNS = ["Name", "Skills", "Stunden/Woche", "Abwesend", "Notiz"]
 PLAN_COLUMNS = ["ID", "Aufgabe", "Person", "Stunden", "Abhängig von", "Skills", "Begründung"]
 _SKILL = re.compile(r"^(.+?)\s*[: ]\s*([1-5])$")
+_DAY = r"(\d{1,2}\.\d{1,2}\.\d{4})"
+# One day, or two days with "-", "–" or "bis" between them.
+_ABSENCE = re.compile(rf"^{_DAY}(?:\s*(?:-|–|bis)\s*{_DAY})?$")
 
 
 class InputError(ValueError):
@@ -38,6 +49,10 @@ def team_rows(team: list[Member]) -> list[dict[str, Any]]:
             "Name": m.name,
             "Skills": ", ".join(f"{skill} {level}" for skill, level in m.skills.items()),
             "Stunden/Woche": m.hours_per_week,
+            "Abwesend": ", ".join(
+                _date(a.first) if a.first == a.last else f"{_date(a.first)}–{_date(a.last)}"
+                for a in m.absences
+            ),
             "Notiz": m.note,
         }
         for m in team
@@ -57,6 +72,7 @@ def rows_to_team(rows: list[dict[str, Any]]) -> list[Member]:
                     name=name,
                     skills=_skills(_cell(row.get("Skills"))),
                     hours_per_week=row.get("Stunden/Woche"),
+                    absences=_absences(_cell(row.get("Abwesend"))),
                     note=_cell(row.get("Notiz")),
                 )
             )
@@ -382,6 +398,21 @@ def _skills(text: str) -> dict[str, int]:
             raise InputError(f"Skill '{part}' nicht lesbar, erwartet zum Beispiel 'Python 4'")
         skills[match[1]] = int(match[2])
     return skills
+
+
+def _absences(text: str) -> list[Absence]:
+    absences = []
+    for part in filter(None, (p.strip() for p in text.split(","))):
+        match = _ABSENCE.match(part)
+        try:
+            days = [datetime.strptime(day, "%d.%m.%Y").date() for day in match.groups() if day]
+        except (AttributeError, ValueError):  # no match, or a date like 31.02.
+            raise InputError(
+                f"Abwesenheit '{part}' nicht lesbar, erwartet zum Beispiel "
+                "'01.12.2026–05.12.2026' oder '23.12.2026'"
+            ) from None
+        absences.append(Absence(first=days[0], last=days[-1]))
+    return absences
 
 
 def _list(value: Any) -> list[str]:

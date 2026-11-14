@@ -2,7 +2,8 @@
 verifies, so dates, loads and the critical path are exact and unit-tested.
 
 Time model: workdays Mon-Fri, no holidays. A member works hours_per_week / 5 hours per
-workday, on one task at a time. Workday 0 is the first Mon-Fri on or after the start date.
+workday, on one task at a time, and not at all on the days of their absences. Workday 0 is the
+first Mon-Fri on or after the start date.
 """
 
 import math
@@ -27,7 +28,8 @@ def check_plan(plan: Plan, team: list[Member], project: Project) -> CheckResult:
 
     members = {m.name: m for m in team}
     owner = {a.task_id: a.member for a in plan.assignments}
-    start, end, driver = _schedule(plan, members, owner)
+    away = {m.name: _away(m, project.start_date) for m in team}
+    start, end, driver = _schedule(plan, members, owner, away)
     last = max(plan.tasks, key=lambda t: end[t.id]).id
     # Dates end on 31.12.9999. Written as "not <=" so that an infinite offset fails too.
     if not end[last] <= count_workdays(project.start_date, date.max):
@@ -66,13 +68,15 @@ def check_plan(plan: Plan, team: list[Member], project: Project) -> CheckResult:
         assigned[owner[task.id]] += task.estimate_hours
     load = []
     for member in team:
-        capacity = member.hours_per_week / WORKDAYS_PER_WEEK * window
+        # Workdays 0 to window - 1 lie before the deadline; the absent ones do not count.
+        absent = sum(max(0, min(last, window - 1) - first + 1) for first, last in away[member.name])
+        capacity = member.hours_per_week / WORKDAYS_PER_WEEK * (window - absent)
         load.append(
             MemberLoad(
                 member=member.name,
                 assigned_hours=assigned[member.name],
                 capacity_hours=capacity,
-                utilization=assigned[member.name] / capacity,
+                utilization=assigned[member.name] / capacity if capacity else None,
             )
         )
 
@@ -92,7 +96,13 @@ def check_plan(plan: Plan, team: list[Member], project: Project) -> CheckResult:
             "bleibt kein Arbeitstag Puffer"
         )
     for item in load:
-        if round(item.utilization, _DIGITS) > 1:
+        if item.utilization is None:
+            if item.assigned_hours:
+                warnings.append(
+                    f"{item.member} ist bis zur Deadline durchgehend abwesend, hat aber "
+                    f"{_hours(item.assigned_hours)} h zugewiesen"
+                )
+        elif round(item.utilization, _DIGITS) > 1:
             percent = math.ceil(round(item.utilization * 100, _DIGITS))  # never reads "100%"
             warnings.append(
                 f"{item.member} ist überlastet: {_hours(item.assigned_hours)} h zugewiesen, "
@@ -190,8 +200,54 @@ def _structural_errors(plan: Plan, team: list[Member], project: Project) -> list
     return errors
 
 
+def _away(member: Member, start: date) -> list[tuple[int, int]]:
+    """The member's absences as ranges of workday offsets (first, last), sorted and merged.
+    Ranges, not single days: an absence can be as long as the calendar."""
+    day0 = _next_workday(start)
+    ranges = []
+    for absence in member.absences:
+        first = (
+            0 if absence.first <= day0 else count_workdays(day0, absence.first - timedelta(days=1))
+        )
+        last = count_workdays(day0, absence.last) - 1
+        if last >= first:  # otherwise no workday of the project lies in it
+            ranges.append((first, last))
+    merged: list[tuple[int, int]] = []
+    for first, last in sorted(ranges):
+        if merged and first <= merged[-1][1] + 1:
+            merged[-1] = (merged[-1][0], max(merged[-1][1], last))
+        else:
+            merged.append((first, last))
+    return merged
+
+
+def _work(
+    earliest: float, hours: float, daily_hours: float, away: list[tuple[int, int]]
+) -> tuple[float, float]:
+    """When `hours` of work that may begin at offset `earliest` really begin and end, with
+    the workdays in `away` left out. Without absences this is earliest + hours / daily_hours."""
+    at, begin, left = earliest, None, hours
+    for first, last in away:
+        day = round(at, _DIGITS)
+        if day >= last + 1:
+            continue  # this absence is over
+        if day >= first:
+            at = float(last + 1)  # in the middle of it: wait for its end
+            continue
+        room = (first - at) * daily_hours
+        begin = at if begin is None else begin
+        if round(left - room, _DIGITS) <= 0:
+            return begin, at + left / daily_hours
+        left -= room
+        at = float(last + 1)
+    return (at if begin is None else begin), at + left / daily_hours
+
+
 def _schedule(
-    plan: Plan, members: dict[str, Member], owner: dict[str, str]
+    plan: Plan,
+    members: dict[str, Member],
+    owner: dict[str, str],
+    away: dict[str, list[tuple[int, int]]],
 ) -> tuple[dict[str, float], dict[str, float], dict[str, str | None]]:
     """Start and end of each task in workday offsets, plus the task that set each start
     (a dependency, or the member's previous task; None if it starts at 0)."""
@@ -208,9 +264,9 @@ def _schedule(
         candidates = [(end[dep], dep) for dep in task.depends_on]
         if member in free_at:
             candidates.append(free_at[member])
-        start[tid], driver[tid] = max(candidates, default=(0.0, None))
+        earliest, driver[tid] = max(candidates, default=(0.0, None))
         daily_hours = members[member].hours_per_week / WORKDAYS_PER_WEEK
-        end[tid] = start[tid] + task.estimate_hours / daily_hours
+        start[tid], end[tid] = _work(earliest, task.estimate_hours, daily_hours, away[member])
         free_at[member] = (end[tid], tid)
     return start, end, driver
 

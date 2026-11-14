@@ -20,12 +20,26 @@ class _Model(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
 
 
+class Absence(_Model):
+    """Days on which a member does not work, both ends included."""
+
+    first: date
+    last: date
+
+    @model_validator(mode="after")
+    def _not_backwards(self) -> "Absence":
+        if self.last < self.first:
+            raise ValueError("Das Ende der Abwesenheit liegt vor ihrem Beginn")
+        return self
+
+
 class Member(_Model):
     name: NonEmpty
     skills: dict[NonEmpty, SkillLevel] = Field(default_factory=dict)
     # A week has 168 hours. Below 1 h a member cannot be planned, and tiny values
     # underflow to 0 h per workday.
     hours_per_week: float = Field(ge=1, le=7 * 24)
+    absences: list[Absence] = Field(default_factory=list)
     note: str = ""
 
 
@@ -74,7 +88,8 @@ class MemberLoad(_Model):
     member: str
     assigned_hours: float
     capacity_hours: float  # available between start date and deadline
-    utilization: float  # assigned / capacity; above 1.0 means overloaded
+    # assigned / capacity; above 1.0 means overloaded. None: away until the deadline.
+    utilization: float | None
 
 
 class CheckResult(_Model):

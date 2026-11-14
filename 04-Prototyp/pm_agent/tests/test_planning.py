@@ -256,3 +256,103 @@ def test_workday_shift_counts_workdays_between_two_dates_with_a_sign():
     assert workday_shift(date(2026, 11, 12), date(2026, 11, 11)) == -1
     assert workday_shift(date(2026, 11, 13), date(2026, 11, 16)) == 1  # Friday to Monday
     assert workday_shift(MON, MON) == 0
+
+
+def away(first, last=None, name="Anna", hours=40):
+    """Anna (8 h per workday) with one absence."""
+    absence = {"first": first, "last": last or first}
+    return Member(name=name, skills={"Python": 4}, hours_per_week=hours, absences=[absence])
+
+
+def test_work_starts_after_an_absence_on_the_first_day():
+    p = plan(task("A", 8), owners={"A": "Anna"})
+    s = by_id(check_plan(p, [away(MON)], project()))
+    assert (s["A"].start, s["A"].end) == (date(2026, 11, 10), date(2026, 11, 10))
+
+
+def test_an_absence_in_the_middle_of_a_task_stretches_it():
+    p = plan(task("A", 24), owners={"A": "Anna"})  # three days of work
+    s = by_id(check_plan(p, [away(date(2026, 11, 10))], project()))  # away on Tuesday
+    assert (s["A"].start, s["A"].end) == (MON, date(2026, 11, 12))  # Mon, Wed, Thu
+
+
+def test_an_absence_over_a_weekend_costs_its_workdays_only():
+    p = plan(task("A", 40), owners={"A": "Anna"})  # one week of work
+    friday_to_monday = away(date(2026, 11, 13), date(2026, 11, 16))
+    s = by_id(check_plan(p, [friday_to_monday], project()))
+    # Mon-Thu, then Tue 17.11.: Friday and Monday are gone.
+    assert (s["A"].start, s["A"].end) == (MON, date(2026, 11, 17))
+
+
+def test_the_rest_of_a_day_is_used_before_an_absence():
+    # A takes the first half of Monday. B (8 h) gets the second half, waits out Tuesday and
+    # ends on Wednesday at noon.
+    p = plan(task("A", 4), task("B", 8, deps=["A"]), owners={"A": "Anna", "B": "Anna"})
+    s = by_id(check_plan(p, [away(date(2026, 11, 10))], project()))
+    assert (s["B"].start, s["B"].end) == (MON, date(2026, 11, 11))
+
+
+def test_absences_outside_the_project_and_on_weekends_change_nothing():
+    p = plan(task("A", 8), task("B", 16, deps=["A"]), owners={"A": "Anna", "B": "Anna"})
+    plain = check_plan(p, [ANNA], project())
+    for first, last in [
+        (date(2026, 10, 1), date(2026, 11, 8)),  # before the start
+        (date(2026, 11, 14), date(2026, 11, 15)),  # a weekend
+        (date(2027, 1, 4), date(2027, 1, 8)),  # after the plan has ended
+    ]:
+        result = check_plan(p, [away(first, last)], project())
+        assert result.schedule == plain.schedule, (first, last)
+
+
+def test_an_absence_of_one_person_does_not_move_the_others():
+    p = plan(task("A", 8), task("B", 8), owners={"A": "Anna", "B": "Ben"})
+    s = by_id(check_plan(p, [away(MON), BEN], project()))
+    assert s["A"].start == date(2026, 11, 10) and s["B"].start == MON
+
+
+def test_absent_days_are_not_available_until_the_deadline():
+    # Mon-Fri window, Anna is away on two of the five days: 24 h instead of 40 h.
+    p = plan(task("A", 32), owners={"A": "Anna"})
+    two_days = away(date(2026, 11, 10), date(2026, 11, 11))
+    result = check_plan(p, [two_days], project(deadline=date(2026, 11, 13)))
+    assert result.load[0].capacity_hours == 24
+    assert result.load[0].utilization == pytest.approx(32 / 24)
+    assert "Anna ist überlastet: 32 h zugewiesen, bis zur Deadline sind 24 h verfügbar (134%)" in (
+        result.warnings
+    )
+
+
+def test_someone_away_for_the_whole_project_has_no_capacity_and_that_is_said():
+    p = plan(task("A", 8), owners={"A": "Anna"})
+    gone = away(date(2026, 11, 1), date(2026, 12, 31))
+    result = check_plan(p, [gone], project())  # deadline 18.12.
+    assert result.ok
+    assert (result.load[0].capacity_hours, result.load[0].utilization) == (0, None)
+    assert result.schedule[0].start == date(2027, 1, 1)
+    assert (
+        "Anna ist bis zur Deadline durchgehend abwesend, hat aber 8 h zugewiesen" in result.warnings
+    )
+
+
+def test_an_absence_to_the_end_of_the_calendar_is_an_error_not_an_endless_loop():
+    p = plan(task("A", 8), owners={"A": "Anna"})
+    result = check_plan(p, [away(MON, date.max)], project())
+    assert result.errors == [
+        "Task 'A' würde erst nach dem 31.12.9999 enden, so weit reicht der Kalender nicht"
+    ]
+
+
+def test_overlapping_and_unsorted_absences_count_once():
+    anna = Member(
+        name="Anna",
+        hours_per_week=40,
+        absences=[
+            {"first": date(2026, 11, 11), "last": date(2026, 11, 12)},
+            {"first": date(2026, 11, 10), "last": date(2026, 11, 11)},
+        ],
+    )
+    p = plan(task("A", 16), owners={"A": "Anna"})
+    result = check_plan(p, [anna], project(deadline=date(2026, 11, 13)))
+    s = by_id(result)
+    assert (s["A"].start, s["A"].end) == (MON, date(2026, 11, 13))  # Mon, then Fri
+    assert result.load[0].capacity_hours == 16  # five days, three of them away

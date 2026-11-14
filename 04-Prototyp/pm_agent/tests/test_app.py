@@ -12,7 +12,7 @@ from test_tools import PROJECT, TEAM, plan_input
 
 from pm_agent import agent, followup, lab_server, tracking, workbench
 from pm_agent.agent import AgentError, PlanningError
-from pm_agent.models import ControlReport, Plan, StatusSummary
+from pm_agent.models import Absence, ControlReport, Plan, StatusSummary
 
 SITE = Path(__file__).parents[1] / "app.py"
 PLANUNG = "pages/planung.py"
@@ -204,6 +204,22 @@ def test_a_failing_change_shows_the_reason_and_no_proposal(with_plan, monkeypatc
     assert [e.value for e in at.error] == ["Claude hat nach 10 Runden noch keinen gültigen Plan."]
     assert at.session_state["proposal"] is None
     assert "Übernehmen" not in [b.label for b in at.button]
+
+
+def test_an_absence_in_the_team_table_moves_the_plan(local, monkeypatch):
+    monday = Absence(first=date(2026, 11, 9), last=date(2026, 11, 9))
+    away = TEAM[0].model_copy(update={"absences": [monday]})
+    monkeypatch.setattr(workbench, "load_team", lambda: [away])
+    monkeypatch.setattr(agent, "run_planning", lambda project, team, on_round=None: PLAN)
+    at = AppTest.from_file(str(SITE.parent / PLANUNG), default_timeout=30).run()
+    at = fill_project(at)
+    button(at, "Plan mit Claude erstellen").click()
+    at.run()
+
+    assert not at.exception
+    assert at.session_state["team_df"]["Abwesend"].tolist() == ["09.11.2026"]
+    # Without the absence the plan ends on 11.11.: the work starts a day later.
+    assert {m.label: m.value for m in at.metric}["Planende"] == "12.11.2026"
 
 
 def test_an_agent_error_is_shown_to_the_project_lead(app, monkeypatch):

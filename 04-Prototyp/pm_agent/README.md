@@ -46,7 +46,9 @@ sie funktionieren die Runden ohne KI, KI-Runden melden einen Fehler.
 
 Sechs Schritte als Reiter:
 
-1. **Team**: Personen mit Skills (z. B. `Python 4, SQL 3`) und Wochenstunden; lokal speichern
+1. **Team**: Personen mit Skills (z. B. `Python 4, SQL 3`), Wochenstunden und Abwesenheiten
+   (z. B. `01.12.2026–05.12.2026, 23.12.2026`: an diesen Tagen wird für die Person keine
+   Arbeit eingeplant); lokal speichern
    in `data/team.json`. Ohne Zustimmung des Teams startet keine Planung.
 2. **Projekt**: Idee, Start, Deadline.
 3. **Planung**: Claude plant, jede Runde erscheint sofort. Alternativ einen protokollierten Lauf

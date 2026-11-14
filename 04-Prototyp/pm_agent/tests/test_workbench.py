@@ -191,3 +191,43 @@ def test_a_task_that_ends_after_the_deadline_crosses_the_line():
     result = check_plan(PLAN, TEAM, PROJECT.model_copy(update={"deadline": date(2026, 11, 10)}))
     bars, line = gantt(PLAN, result, date(2026, 11, 10))
     assert max(b["Ende"] for b in bars) > line
+
+
+def test_absences_are_read_from_the_team_table_and_written_back_the_same_way():
+    rows = [
+        {
+            "Name": "Anna",
+            "Skills": "",
+            "Stunden/Woche": 20,
+            "Abwesend": "01.12.2026–05.12.2026, 23.12.2026, 4.1.2027 - 8.1.2027, "
+            "01.02.2027 bis 02.02.2027",
+        }
+    ]
+    (anna,) = rows_to_team(rows)
+    assert [(a.first, a.last) for a in anna.absences] == [
+        (date(2026, 12, 1), date(2026, 12, 5)),
+        (date(2026, 12, 23), date(2026, 12, 23)),
+        (date(2027, 1, 4), date(2027, 1, 8)),
+        (date(2027, 2, 1), date(2027, 2, 2)),
+    ]
+    (row,) = team_rows([anna])
+    assert row["Abwesend"] == (
+        "01.12.2026–05.12.2026, 23.12.2026, 04.01.2027–08.01.2027, 01.02.2027–02.02.2027"
+    )
+    assert rows_to_team([row]) == [anna]
+
+
+def test_an_unreadable_absence_names_the_row_and_shows_the_expected_form():
+    rows = [{"Name": "Anna", "Skills": "", "Stunden/Woche": 20, "Abwesend": "nächste Woche"}]
+    with pytest.raises(InputError) as err:
+        rows_to_team(rows)
+    assert str(err.value) == (
+        "Zeile 1 (Anna): Abwesenheit 'nächste Woche' nicht lesbar, erwartet zum Beispiel "
+        "'01.12.2026–05.12.2026' oder '23.12.2026'"
+    )
+    rows[0]["Abwesend"] = "31.02.2027"
+    with pytest.raises(InputError, match="Abwesenheit '31.02.2027' nicht lesbar"):
+        rows_to_team(rows)
+    rows[0]["Abwesend"] = "05.12.2026–01.12.2026"
+    with pytest.raises(InputError, match="Ende der Abwesenheit liegt vor ihrem Beginn"):
+        rows_to_team(rows)

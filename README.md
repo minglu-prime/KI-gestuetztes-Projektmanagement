@@ -194,7 +194,8 @@ Einzelheiten zu Seiten, Agenten und Entwicklung:
 
 Was der Prototyp bewusst vereinfacht:
 
-- **Kalender:** Arbeitstage Montag bis Freitag, keine Feiertage, keine Abwesenheiten.
+- **Kalender:** Arbeitstage Montag bis Freitag, keine Feiertage. Abwesenheiten trägt die
+  Projektleitung je Person ein; an diesen Tagen wird keine Arbeit eingeplant.
 - **Arbeit:** eine Person arbeitet an einer Aufgabe zur selben Zeit; eine Aufgabe gehört einer
   Person.
 - **Terminierung:** Aufgaben werden in der Reihenfolge ihrer Abhängigkeiten eingeplant, nicht

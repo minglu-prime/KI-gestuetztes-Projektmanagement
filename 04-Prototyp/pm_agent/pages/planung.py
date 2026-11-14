@@ -175,7 +175,8 @@ with tabs[0]:
     st.subheader("Team")
     st.caption(
         "Wer arbeitet mit? Skills mit Stufe 1–5 und die Stunden pro Woche bestimmen, wem "
-        "welche Aufgabe zugewiesen wird."
+        "welche Aufgabe zugewiesen wird. An Tagen unter „Abwesend“ wird für die Person keine "
+        "Arbeit eingeplant."
     )
     if state.team_file_error:
         st.error(f"Gespeichertes Team konnte nicht geladen werden: {state.team_file_error}")
@@ -190,6 +191,9 @@ with tabs[0]:
                 help="Skill mit Stufe 1–5, z. B. Python 4, SQL 3"
             ),
             "Stunden/Woche": st.column_config.NumberColumn(min_value=1, max_value=168),
+            "Abwesend": st.column_config.TextColumn(
+                help="Tage ohne Arbeit, z. B. 01.12.2026–05.12.2026, 23.12.2026"
+            ),
             "Notiz": st.column_config.TextColumn(help="z. B. Urlaub, Prüfungsphase"),
         },
     )
