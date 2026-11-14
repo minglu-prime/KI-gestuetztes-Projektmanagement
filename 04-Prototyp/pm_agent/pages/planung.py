@@ -41,6 +41,7 @@ from pm_agent.workbench import (
     rows_to_team,
     save_team,
     saved_runs,
+    suggested_wishes,
     team_rows,
     to_csv,
     to_markdown,
@@ -137,9 +138,10 @@ def load_rest() -> None:
     state.step = STEPS[4]  # straight to the step with the conversation
 
 
-def ask() -> None:
-    """Callback of the chat input: keep the wish for the run that follows."""
-    state.asked = state.wish
+def ask(wish: str | None = None) -> None:
+    """Callback of the chat input and of the suggested wishes: keep the wish for the run that
+    follows. Without an argument it is what was typed."""
+    state.asked = wish or state.wish
 
 
 def decide(accept: bool) -> None:
@@ -673,6 +675,18 @@ with tabs[4]:
                 st.caption("Für eine Änderung mit Claude fehlt noch: " + ", ".join(blocked) + ".")
             elif proposal is not None:
                 st.caption("Entscheide erst über den offenen Vorschlag.")
+            else:
+                suggestions = suggested_wishes(state.plan, team, result, project)
+                if suggestions:
+                    st.caption("Naheliegend nach der Prüfung des Plans, mit einem Klick gefragt:")
+                    with st.container(horizontal=True, key="suggestions"):
+                        for number, suggestion in enumerate(suggestions):
+                            st.button(
+                                suggestion,
+                                key=f"suggestion_{number}",
+                                on_click=ask,
+                                args=(suggestion,),
+                            )
             st.chat_input(
                 "Was soll sich ändern?",
                 key="wish",

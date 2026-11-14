@@ -190,6 +190,24 @@ def test_a_change_asked_from_claude_is_shown_as_differences_before_it_counts(wit
     assert not at.chat_input(key="wish").disabled  # ready for the next wish
 
 
+def test_a_suggested_wish_is_asked_with_one_click(with_plan, monkeypatch):
+    asked = []
+
+    def replanned(project, team, plan, wish, on_round=None):
+        asked.append(wish)
+        return Plan.model_validate(plan_input(hours=16))
+
+    monkeypatch.setattr(agent, "run_replanning", replanned)
+    suggestion = "Was, wenn B (API) doppelt so lange dauert?"
+    button(with_plan, suggestion).click()
+    at = with_plan.run()
+
+    assert not at.exception and not at.error
+    assert asked == [suggestion]
+    assert at.session_state["proposal"]["wish"] == suggestion
+    assert suggestion not in [b.label for b in at.button]  # decide on the proposal first
+
+
 def test_a_dropped_proposal_leaves_the_plan_as_it_was(with_plan):
     at = with_plan.chat_input(key="wish").set_value(WISH).run()
     button(at, "Verwerfen").click()

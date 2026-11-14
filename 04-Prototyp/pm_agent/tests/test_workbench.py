@@ -22,6 +22,7 @@ from pm_agent.workbench import (
     rows_to_team,
     save_team,
     saved_runs,
+    suggested_wishes,
     team_rows,
     to_csv,
     to_markdown,
@@ -296,3 +297,42 @@ def test_a_deadline_on_the_last_day_of_the_calendar_can_still_be_drawn():
     assert bar_end(date.max) == date.max
     bars, line = gantt(PLAN, check_plan(PLAN, TEAM, PROJECT), date.max)
     assert line == date.max and len(bars) == 2
+
+
+def test_wishes_are_suggested_from_what_the_check_found():
+    team = [*TEAM, BEN]
+    suggestions = suggested_wishes(PLAN, team, check_plan(PLAN, team, PROJECT), PROJECT)
+    # Anna does A without SQL, Ben has it. And always: what if the longest critical task grows.
+    assert suggestions == [
+        "Gib A (Datenmodell) an Ben: Ben hat SQL angegeben.",
+        "Was, wenn B (API) doppelt so lange dauert?",
+    ]
+
+
+def test_a_late_plan_and_an_overloaded_person_come_first():
+    tight = PROJECT.model_copy(update={"deadline": date(2026, 11, 10)})  # the plan needs 3 days
+    team = [*TEAM, BEN]
+    suggestions = suggested_wishes(PLAN, team, check_plan(PLAN, team, tight), tight)
+    assert suggestions[:3] == [
+        "Der Plan soll spätestens am 10.11.2026 enden.",
+        "Entlaste Anna: Bis zur Deadline ist mehr zugewiesen als verfügbar.",
+        "Gib A (Datenmodell) an Ben: Ben hat SQL angegeben.",
+    ]
+    assert len(suggestions) <= 4
+
+
+def test_a_plan_that_ends_on_the_deadline_gets_a_wish_for_buffer():
+    on_the_day = PROJECT.model_copy(update={"deadline": date(2026, 11, 11)})
+    suggestions = suggested_wishes(PLAN, TEAM, check_plan(PLAN, TEAM, on_the_day), on_the_day)
+    assert suggestions[0] == "Schaffe vor der Deadline mindestens zwei Arbeitstage Puffer."
+
+
+def test_an_uneven_load_suggests_moving_work_and_a_broken_plan_suggests_nothing():
+    idle = Member(name="Dora", skills={"Python": 3}, hours_per_week=40)
+    tight = PROJECT.model_copy(update={"deadline": date(2026, 11, 13)})  # one week
+    result = check_plan(PLAN, [*TEAM, idle], tight)  # Anna 24 of 40 h, Dora nothing
+    assert "Verteile Arbeit von Anna auf Dora um." in suggested_wishes(
+        PLAN, [*TEAM, idle], result, tight
+    )
+    broken = Plan.model_validate(plan_input(member="Zoe"))
+    assert suggested_wishes(broken, TEAM, check_plan(broken, TEAM, PROJECT), PROJECT) == []

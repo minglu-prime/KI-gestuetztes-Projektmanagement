@@ -57,7 +57,8 @@ Sechs Schritte als Reiter:
    „Aufgabe im Detail“ erklärt eine Aufgabe: warum diese Person, welche Skills sie dafür hat,
    was vorher fertig sein muss und was darauf wartet, wie viele Arbeitstage Puffer sie hat
    und wer im Team sie sonst übernehmen könnte.
-5. **Anpassen**: zwei Wege. Mit Claude: einen Wunsch oder eine Annahme eintippen („Clara
+5. **Anpassen**: zwei Wege. Mit Claude: einen Wunsch oder eine Annahme eintippen oder einen
+   der Vorschläge anklicken, die Python aus der Prüfung ableitet („Clara
    übernimmt die Tests“, „Was, wenn das Backend doppelt so lange dauert?“); Claude ändert
    den Plan, Python prüft ihn und zeigt die Unterschiede zum bisherigen Plan, erst
    „Übernehmen“ macht ihn gültig. Von Hand: Tabelle ändern und erneut prüfen, ohne LLM.

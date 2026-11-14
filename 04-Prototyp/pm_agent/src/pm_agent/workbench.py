@@ -264,6 +264,54 @@ def explain_task(
     }
 
 
+def suggested_wishes(
+    plan: Plan, team: list[Member], result: CheckResult, project: Project
+) -> list[str]:
+    """Up to four things the project lead could ask Claude to change, read off the check of
+    the plan: what is most pressing first. Nothing for a plan with errors."""
+    if result.errors or result.end_date is None:
+        return []
+    tasks = {task.id: task for task in plan.tasks}
+    owner = {a.task_id: a.member for a in plan.assignments}
+    wishes = []
+    if result.end_date > project.deadline:
+        wishes.append(f"Der Plan soll spätestens am {_date(project.deadline)} enden.")
+    elif workday_shift(result.end_date, project.deadline) == 0:
+        wishes.append("Schaffe vor der Deadline mindestens zwei Arbeitstage Puffer.")
+    loads = [item for item in result.load if item.utilization is not None]
+    for item in loads:
+        if round(item.utilization, 9) > 1:
+            wishes.append(
+                f"Entlaste {item.member}: Bis zur Deadline ist mehr zugewiesen als verfügbar."
+            )
+            break
+    # A task whose person has not named a required skill, while someone else has.
+    skills = {m.name: {s.casefold(): level for s, level in m.skills.items()} for m in team}
+    for task in plan.tasks:
+        missing = [s for s in task.required_skills if s.casefold() not in skills[owner[task.id]]]
+        able = [
+            (skills[m.name][skill.casefold()], m.name)
+            for skill in missing[:1]
+            for m in team
+            if skill.casefold() in skills[m.name]
+        ]
+        if able:
+            best = max(able)[1]
+            wishes.append(
+                f"Gib {task.id} ({task.title}) an {best}: {best} hat {missing[0]} angegeben."
+            )
+            break
+    if len(loads) > 1:
+        busiest = max(loads, key=lambda item: item.utilization)
+        idlest = min(loads, key=lambda item: item.utilization)
+        if busiest.utilization - idlest.utilization >= 0.3:
+            wishes.append(f"Verteile Arbeit von {busiest.member} auf {idlest.member} um.")
+    if result.critical_path:
+        longest = max(result.critical_path, key=lambda tid: tasks[tid].estimate_hours)
+        wishes.append(f"Was, wenn {longest} ({tasks[longest].title}) doppelt so lange dauert?")
+    return wishes[:4]
+
+
 def plan_changes(before: Plan, after: Plan) -> list[str]:
     """What differs between two plans, one line per change, for the project lead. Reasons of
     assignments and descriptions are left out: they do not change what is planned.
