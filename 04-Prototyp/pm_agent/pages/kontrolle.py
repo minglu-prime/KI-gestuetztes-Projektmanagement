@@ -9,12 +9,13 @@ import streamlit as st
 from pm_agent import followup, workbench
 from pm_agent.tracking import (
     agent_runs,
+    control_document,
     evaluate,
     forecast,
     forecast_bars,
     has_progress,
+    measure_effect,
     percent,
-    reassignment_effect,
 )
 from pm_agent.ui import adopted_project, consent, run_with_progress
 
@@ -254,11 +255,9 @@ if tracking is not None:
                                     "Aufgaben": ", ".join(m.task_ids),
                                     "Maßnahme": m.action,
                                     "Erwartete Wirkung (Claude)": m.effect,
-                                    "Nachgerechnet (Python)": reassignment_effect(
+                                    "Nachgerechnet (Python)": measure_effect(
                                         tracking, date.today(), m.task_ids, m.reassign_to
-                                    )
-                                    if m.reassign_to
-                                    else "Keine Umverteilung: nicht nachrechenbar",
+                                    ),
                                 }
                                 for m in report.measures
                             ]
@@ -272,6 +271,30 @@ if tracking is not None:
                     )
                 else:
                     st.caption("Claude schlägt keine Gegenmaßnahmen vor.")
+
+if tracking is not None:
+    with st.container(border=True, key="panel-document"):
+        st.markdown("#### :material/description: Kontrollbericht")
+        st.caption(
+            "Alles von dieser Seite als ein Dokument: Kennzahlen, Prognose, Verzug, Kosten bei "
+            "gesetztem Stundensatz und, wenn erstellt, die Bewertung des Kontroll-Agenten."
+        )
+        current = state.get("control_report")
+        document = control_document(
+            tracking,
+            result,
+            report=current[1] if current and current[0] == tracking else None,
+            rate=rate,
+        )
+        st.download_button(
+            "Kontrollbericht als Markdown herunterladen",
+            document,
+            file_name=f"kontrollbericht-{date.today():%Y%m%d}.md",
+            mime="text/markdown",
+            icon=":material/download:",
+        )
+        with st.container(border=True, key="preview-control"):
+            st.markdown(document)
 
 with st.container(border=True, key="panel-effort"):
     st.markdown("#### :material/timer: Aufwand der Agenten")

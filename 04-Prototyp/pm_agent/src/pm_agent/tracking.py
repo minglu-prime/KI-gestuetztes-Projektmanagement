@@ -16,7 +16,15 @@ from typing import Any, Literal, get_args
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from pm_agent.agent import LOG_DIR
-from pm_agent.models import Member, Plan, Project, ScheduledTask, StatusSummary, Task
+from pm_agent.models import (
+    ControlReport,
+    Member,
+    Plan,
+    Project,
+    ScheduledTask,
+    StatusSummary,
+    Task,
+)
 from pm_agent.planning import check_plan, scheduling_order, workday_shift
 from pm_agent.workbench import DATA_DIR, InputError, _cell, _date, _md, _reason, bar_end
 
@@ -546,6 +554,86 @@ def status_report(
             for t in tasks
         ),
         risiken="\n".join(f"- {r}" for r in tracking.plan.risks) or "Keine Risiken erfasst.",
+    )
+
+
+NOT_COMPUTABLE = "Keine Umverteilung: nicht nachrechenbar"
+
+
+def measure_effect(tracking: Tracking, today: date, task_ids: list[str], member: str | None) -> str:
+    """What Python can say about a countermeasure: the effect of its reassignment on the
+    forecast, or that there is nothing to compute."""
+    if member is None:
+        return NOT_COMPUTABLE
+    return reassignment_effect(tracking, today, task_ids, member)
+
+
+def control_document(
+    tracking: Tracking,
+    evaluation: Evaluation,
+    report: ControlReport | None = None,
+    rate: float | None = None,
+) -> str:
+    """The control report. `report` is what the Kontrolle agent proposed, `rate` the hourly
+    rate for the cost lines; both can be missing."""
+    project, today = tracking.project, evaluation.today
+    outlook = forecast(tracking, today)
+    overdue = [
+        f"- {t.id} · {t.title} ({t.member}), geplant bis {_date(t.planned_end)}, Status: "
+        f"{t.status}; hält auf: {', '.join(outlook.blocked.get(t.id, [])) or 'nichts'}"
+        for t in evaluation.overdue
+    ]
+    if rate:
+        cost = (
+            f"- Plankosten gesamt: {evaluation.planned_hours * rate:,.2f} €\n"
+            f"- Ist-Kosten bisher: {evaluation.actual_hours * rate:,.2f} €"
+        )
+    else:
+        cost = "- Kosten: kein Stundensatz gesetzt"
+    if report is None:
+        judgement = (
+            "Noch nicht erstellt. Der Kontroll-Agent schlägt sie auf der Seite Kontrolle vor."
+        )
+    else:
+        findings = "\n".join(
+            "- "
+            + (f"**{', '.join(finding.task_ids)}:** " if finding.task_ids else "")
+            + finding.observation
+            for finding in report.findings
+        )
+        measures = "\n".join(
+            f"| {', '.join(m.task_ids)} | {_md(m.action)} | {_md(m.effect)} | "
+            f"{_md(measure_effect(tracking, today, m.task_ids, m.reassign_to))} |"
+            for m in report.measures
+        )
+        table = (
+            "| Aufgaben | Maßnahme | Erwartete Wirkung (Claude) | Nachgerechnet (Python) |\n"
+            f"|---|---|---|---|\n{measures}"
+            if report.measures
+            else "Keine Gegenmaßnahmen vorgeschlagen."
+        )
+        note = "*Vorschlag des Kontroll-Agenten (Claude), von der Projektleitung zu prüfen.*"
+        judgement = "\n\n".join([f"**Bewertung:** {report.assessment}", findings, table, note])
+    return _fill(
+        "kontrollbericht.md",
+        projekt=project.idea,
+        stand=_date(today),
+        start=_date(project.start_date),
+        deadline=_date(project.deadline),
+        planende=_date(max(t.planned_end for t in evaluation.tasks)),
+        prognose=forecast_text(outlook, project.deadline),
+        fortschritt=percent(evaluation.progress),
+        plan_h=f"{evaluation.planned_hours:g}",
+        ist_h=f"{evaluation.actual_hours:g}",
+        abweichung=f"{evaluation.finished_deviation:+g}",
+        kosten=cost,
+        verzug="\n".join(overdue) or "Keine Aufgabe im Verzug.",
+        personen="\n".join(
+            f"| {row['Person']} | {row['Plan (h)']:g} | {row['Ist (h)']:g} | "
+            f"{row['Fertig (Plan-h)']:g} |"
+            for row in evaluation.by_member
+        ),
+        bewertung=judgement,
     )
 
 

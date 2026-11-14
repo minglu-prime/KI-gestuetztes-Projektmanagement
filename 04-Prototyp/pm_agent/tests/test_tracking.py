@@ -4,13 +4,14 @@ from datetime import date
 import pytest
 from test_tools import PROJECT, TEAM, plan_input
 
-from pm_agent.models import Member, Plan, StatusSummary
+from pm_agent.models import ControlReport, Member, Plan, StatusSummary
 from pm_agent.planning import check_plan
 from pm_agent.tracking import (
     Progress,
     adopt,
     agent_runs,
     apply_rows,
+    control_document,
     evaluate,
     forecast,
     forecast_bars,
@@ -595,3 +596,54 @@ def test_a_started_task_shorter_than_an_hour_is_not_counted_as_an_hour(tmp_path)
     assert rest_plan(started).tasks[0].estimate_hours == 0.5
     overrun = apply_rows(adopted, [{"ID": "A", "Status": "in Arbeit", "Ist (h)": 2}])
     assert rest_plan(overrun).tasks[0].estimate_hours == 0.5
+
+
+def test_the_control_document_is_filled_from_plan_progress_and_forecast(tracking):
+    updated = apply_rows(tracking, ROWS)  # A finished with 10 h, B started with 4 of 16 h
+    text = control_document(updated, evaluate(updated, today=date(2026, 11, 12)))
+
+    assert "**Projekt:** Raumbuchung für Lerngruppen" in text
+    assert "**Stand:** 12.11.2026" in text
+    assert (
+        "**Prognose:** Voraussichtliches Ende 13.11.2026, 2 Arbeitstage später als geplant" in text
+    )
+    assert "- Fortschritt: 33 %" in text
+    assert "- Ist-Stunden bisher: 14 h" in text
+    assert "- Abweichung der fertigen Aufgaben: +2 h" in text
+    assert "- Kosten: kein Stundensatz gesetzt" in text
+    assert "- B · API (Anna), geplant bis 11.11.2026, Status: in Arbeit; hält auf: nichts" in text
+    assert "| Anna | 24 | 14 | 8 |" in text
+    assert "Noch nicht erstellt. Der Kontroll-Agent" in text
+    assert "$" not in text  # every placeholder is filled
+
+
+def test_the_control_document_takes_the_hourly_rate_and_the_agents_report(two_people):
+    monday = date(2026, 11, 16)  # a week after the start: X and Y are both overdue
+    report = ControlReport(
+        assessment="kritisch",
+        findings=[{"task_ids": ["X", "Y"], "observation": "Nichts wurde begonnen."}],
+        measures=[
+            {"task_ids": ["X"], "action": "Anna beginnt X.", "effect": "X wird fertig."},
+            {
+                "task_ids": ["Y"],
+                "action": "Ben übernimmt Y.",
+                "effect": "Zwei Tage gewonnen.",
+                "reassign_to": "Ben",
+            },
+        ],
+    )
+    text = control_document(two_people, evaluate(two_people, monday), report=report, rate=50)
+
+    assert "- Plankosten gesamt: 1,600.00 €" in text  # 32 h at 50 €
+    assert "- Ist-Kosten bisher: 0.00 €" in text
+    assert "**Bewertung:** kritisch" in text
+    assert "- **X, Y:** Nichts wurde begonnen." in text
+    assert (
+        "| X | Anna beginnt X. | X wird fertig. | Keine Umverteilung: nicht nachrechenbar |" in text
+    )
+    assert (
+        "| Y | Ben übernimmt Y. | Zwei Tage gewonnen. | Voraussichtliches Ende 17.11.2026 "
+        "statt 19.11.2026 (2 Arbeitstage früher) |" in text
+    )
+    assert "*Vorschlag des Kontroll-Agenten (Claude), von der Projektleitung zu prüfen.*" in text
+    assert "$" not in text
