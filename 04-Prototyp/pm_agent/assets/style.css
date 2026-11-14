@@ -346,6 +346,10 @@
   padding-left: 16px;
 }
 
+/* A wide table in a document (status report, exported plan) scrolls inside its own box. On a
+   narrow screen it used to push the whole page sideways. */
+[data-testid="stMarkdownContainer"]:has(table) { overflow-x: auto; }
+
 /* People who asked their system for less motion get none. */
 @media (prefers-reduced-motion: reduce) {
   .stApp *,
