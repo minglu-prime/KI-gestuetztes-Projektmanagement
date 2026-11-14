@@ -6,6 +6,7 @@ from test_tools import PROJECT, TEAM, plan_input
 
 from pm_agent.models import Plan, StatusSummary
 from pm_agent.tracking import (
+    Progress,
     adopt,
     agent_runs,
     apply_rows,
@@ -69,6 +70,7 @@ def test_recorded_progress_is_kept_and_saved(tracking, tmp_path):
     assert updated.progress["A"].model_dump() == {
         "status": "fertig",
         "actual_hours": 10,
+        "remaining_hours": None,
         "note": "Schema zweimal geändert",
     }
     assert updated.progress["B"].note == ""
@@ -323,3 +325,59 @@ def test_plan_and_forecast_are_two_bars_per_unfinished_task(tracking):
             "Zeitraum": "11.11. – 12.11.",
         },
     ]
+
+
+def test_a_remaining_estimate_replaces_plan_minus_actual_in_the_forecast(tracking):
+    # Wed 11.11.: B has 4 of its 16 h booked, but 20 h are still to do: Wed, Thu, half of Fri.
+    rows = [
+        {"ID": "A", "Status": "fertig", "Ist (h)": 8},
+        {"ID": "B", "Status": "in Arbeit", "Ist (h)": 4, "Rest (h)": 20},
+    ]
+    updated = apply_rows(tracking, rows)
+    assert updated.progress["B"].remaining_hours == 20
+    assert forecast(updated, date(2026, 11, 11)).end == date(2026, 11, 13)
+    # An open task can have one too: A is expected to take 16 h instead of 8 h.
+    bigger = apply_rows(tracking, [{"ID": "A", "Status": "offen", "Rest (h)": 16}])
+    assert forecast(bigger, date(2026, 11, 9)).end == date(2026, 11, 12)
+
+
+def test_the_remaining_estimate_is_shown_in_the_progress_table_and_kept(tracking, tmp_path):
+    updated = apply_rows(
+        tracking, [{"ID": "B", "Status": "in Arbeit", "Ist (h)": 4, "Rest (h)": 20}]
+    )
+    save(updated, tmp_path / "projekt.json")
+    assert load(tmp_path / "projekt.json") == updated
+    assert [(r["ID"], r["Rest (h)"]) for r in progress_rows(updated)] == [("A", None), ("B", 20)]
+    assert apply_rows(tracking, progress_rows(updated)) == updated
+
+
+def test_a_finished_task_has_nothing_left_and_an_empty_cell_means_unknown(tracking):
+    rows = [
+        {"ID": "A", "Status": "fertig", "Ist (h)": 8, "Rest (h)": 5},
+        {"ID": "B", "Status": "in Arbeit", "Ist (h)": 4, "Rest (h)": None},
+    ]
+    updated = apply_rows(tracking, rows)
+    assert updated.progress["A"].remaining_hours is None
+    assert updated.progress["B"].remaining_hours is None
+
+
+@pytest.mark.parametrize(
+    ("row", "message"),
+    [
+        ({"ID": "A", "Status": "offen", "Rest (h)": -1}, r"Zeile 1 \(A\): Rest-Stunden"),
+        ({"ID": "A", "Status": "offen", "Rest (h)": "wenig"}, r"Zeile 1 \(A\): Rest-Stunden"),
+        (
+            {"ID": "A", "Status": "in Arbeit", "Rest (h)": 0},
+            r"Zeile 1 \(A\): Rest 0 h, aber Status 'in Arbeit'. Setze den Status auf fertig",
+        ),
+    ],
+)
+def test_an_unreadable_remaining_estimate_names_the_row_and_the_problem(tracking, row, message):
+    with pytest.raises(InputError, match=message):
+        apply_rows(tracking, [row])
+
+
+def test_progress_saved_before_remaining_estimates_existed_still_loads():
+    assert (
+        Progress.model_validate({"status": "in Arbeit", "actual_hours": 3}).remaining_hours is None
+    )

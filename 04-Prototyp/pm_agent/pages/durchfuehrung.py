@@ -64,11 +64,17 @@ with st.container(border=True, key="panel-progress"):
         column_config={
             "Status": st.column_config.SelectboxColumn(options=STATUSES, required=True),
             "Ist (h)": st.column_config.NumberColumn(min_value=0.0, step=0.5),
+            "Rest (h)": st.column_config.NumberColumn(
+                min_value=0.0,
+                step=0.5,
+                help="Was noch zu tun ist, wenn es von Plan minus Ist abweicht. Leer lassen, "
+                "wenn unbekannt. Die Prognose auf der Seite Kontrolle rechnet damit.",
+            ),
         },
     )
     st.caption(
-        "Status, Ist-Stunden und Notiz lassen sich ändern. Änderungen gelten erst nach dem "
-        "Speichern."
+        "Status, Ist-Stunden, Rest und Notiz lassen sich ändern. Änderungen gelten erst nach "
+        "dem Speichern."
     )
     if st.button("Fortschritt speichern", type="primary", icon=":material/save:"):
         try:

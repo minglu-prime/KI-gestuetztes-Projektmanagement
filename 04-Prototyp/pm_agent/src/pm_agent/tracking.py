@@ -16,7 +16,7 @@ from typing import Any, Literal, get_args
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from pm_agent.agent import LOG_DIR
-from pm_agent.models import Member, Plan, Project, ScheduledTask, StatusSummary
+from pm_agent.models import Member, Plan, Project, ScheduledTask, StatusSummary, Task
 from pm_agent.planning import check_plan, workday_shift
 from pm_agent.workbench import DATA_DIR, InputError, _cell, _date, _md, _reason, bar_end
 
@@ -35,6 +35,7 @@ PROGRESS_COLUMNS = [
     "Geplantes Ende",
     "Status",
     "Ist (h)",
+    "Rest (h)",
     "Notiz",
 ]
 
@@ -44,6 +45,9 @@ class Progress(BaseModel):
 
     status: Status = "offen"
     actual_hours: float = Field(default=0, ge=0, allow_inf_nan=False)
+    # What the project lead expects is still to do. None: not said; the forecast then takes
+    # the estimate, less the booked hours for a started task.
+    remaining_hours: float | None = Field(default=None, gt=0, allow_inf_nan=False)
     note: str = ""
 
 
@@ -69,6 +73,7 @@ class TaskState:
     planned_end: date
     status: str
     actual_hours: float
+    remaining_hours: float | None  # the project lead's own estimate of what is left
     note: str
     overdue: bool  # planned end is past and the task is not finished
 
@@ -149,8 +154,22 @@ def apply_rows(tracking: Tracking, rows: list[dict[str, Any]]) -> Tracking:
             hours = math.nan
         if not 0 <= hours < math.inf:  # also false for NaN
             raise InputError(f"{where}: Ist-Stunden müssen eine Zahl ab 0 sein")
+        left = _cell(row.get("Rest (h)"))
+        try:
+            rest = float(left) if left else None
+        except ValueError:
+            rest = math.nan
+        if rest is not None and not 0 <= rest < math.inf:
+            raise InputError(f"{where}: Rest-Stunden müssen eine Zahl ab 0 sein")
+        if status == "fertig":
+            rest = None  # nothing is left of a finished task
+        elif rest == 0:
+            raise InputError(
+                f"{where}: Rest 0 h, aber Status '{status}'. Setze den Status auf fertig "
+                "oder trage ein, was noch zu tun ist"
+            )
         progress[task_id] = Progress(
-            status=status, actual_hours=hours, note=_cell(row.get("Notiz"))
+            status=status, actual_hours=hours, remaining_hours=rest, note=_cell(row.get("Notiz"))
         )
     return tracking.model_copy(update={"progress": progress})
 
@@ -171,6 +190,7 @@ def evaluate(tracking: Tracking, today: date) -> Evaluation:
                 planned_end=planned.end,
                 status=done.status,
                 actual_hours=done.actual_hours,
+                remaining_hours=done.remaining_hours,
                 note=done.note,
                 overdue=planned.end < today and done.status != "fertig",
             )
@@ -196,8 +216,9 @@ def evaluate(tracking: Tracking, today: date) -> Evaluation:
     )
 
 
-# ponytail: when the booked hours reach the estimate, nobody knows what is left. One hour keeps
-# the task in the forecast. Ask the project lead for a remaining estimate if that gets too rough.
+# When the booked hours reach the estimate and the project lead has entered no remaining
+# estimate (Progress.remaining_hours), nobody knows what is left. One hour keeps the task in
+# the forecast.
 MIN_REST_HOURS = 1.0
 
 
@@ -216,9 +237,19 @@ class Forecast:
 def forecast(tracking: Tracking, today: date) -> Forecast:
     """Schedule what is not finished from today on and compare it with the plan.
 
-    Finished tasks are done, whatever their planned dates. An open task counts with its full
-    estimate, a started one with the estimate minus the booked hours. The same scheduling as
-    for the plan itself (planning.check_plan), so both ends are comparable."""
+    Finished tasks are done, whatever their planned dates. An unfinished task counts with
+    what the project lead says is left of it. Without that, an open task counts with its
+    full estimate and a started one with the estimate minus the booked hours. The same
+    scheduling as for the plan itself (planning.check_plan), so both ends are comparable."""
+
+    def left(task: Task) -> float:
+        done = state[task.id]
+        if done.remaining_hours is not None:
+            return done.remaining_hours
+        if done.status == "in Arbeit":
+            return max(task.estimate_hours - done.actual_hours, MIN_REST_HOURS)
+        return task.estimate_hours
+
     project, plan = tracking.project, tracking.plan
     planned_end = check_plan(plan, tracking.team, project).end_date
     state = tracking.progress
@@ -232,11 +263,7 @@ def forecast(tracking: Tracking, today: date) -> Forecast:
         tasks=[
             task.model_copy(
                 update={
-                    "estimate_hours": max(
-                        task.estimate_hours - state[task.id].actual_hours, MIN_REST_HOURS
-                    )
-                    if state[task.id].status == "in Arbeit"
-                    else task.estimate_hours,
+                    "estimate_hours": left(task),
                     "depends_on": [dep for dep in task.depends_on if dep in open_ids],
                 }
             )
@@ -325,7 +352,8 @@ def forecast_bars(evaluation: Evaluation, outlook: Forecast) -> list[dict[str, A
 
 
 def progress_rows(tracking: Tracking) -> list[dict[str, Any]]:
-    """One row per task for the progress table. Only Status, Ist (h) and Notiz are edited."""
+    """One row per task for the progress table. Status, Ist (h), Rest (h) and Notiz are
+    edited."""
     return [
         dict(
             zip(
@@ -338,6 +366,7 @@ def progress_rows(tracking: Tracking) -> list[dict[str, Any]]:
                     _date(t.planned_end),
                     t.status,
                     t.actual_hours,
+                    t.remaining_hours,
                     t.note,
                 ],
                 strict=True,

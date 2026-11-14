@@ -118,7 +118,8 @@ if tracking is not None:
             st.caption(
                 "Annahme: Die restliche Arbeit beginnt heute, in der Reihenfolge des Plans. Eine "
                 "offene Aufgabe zählt mit ihrer Schätzung, eine begonnene mit Schätzung minus "
-                "Ist-Stunden, mindestens einer Stunde."
+                "Ist-Stunden, mindestens einer Stunde. Ein Rest, den du auf der Seite "
+                "Durchführung einträgst, geht vor."
             )
 
     with st.container(border=True, key="panel-tasks"):
