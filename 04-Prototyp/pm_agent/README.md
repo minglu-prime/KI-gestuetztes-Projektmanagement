@@ -24,7 +24,7 @@ Das Menü links:
 
 | Seite | Inhalt |
 |---|---|
-| Startseite | Überblick und Stand des übernommenen Projekts |
+| Startseite | Überblick, Stand des übernommenen Projekts und Prognose seines Endes |
 | Agenten · Planung | Plan mit Claude erstellen, prüfen, anpassen, exportieren, als Projekt übernehmen |
 | Agenten · Durchführung | Status und Ist-Stunden je Aufgabe erfassen; Claude schlägt Zusammenfassung und nächste Schritte vor; Statusbericht und Arbeitspaketbeschreibungen aus Vorlagen (`src/pm_agent/templates`) |
 | Agenten · Kontrolle | Plan/Ist-Vergleich, Verzug, Prognose des Endes (restliche Arbeit ab heute, mit den Aufgaben, die auf verspätete warten), Kosten bei gesetztem Stundensatz; Claude bewertet den Stand und schlägt Gegenmaßnahmen vor; Zeit und Token aller Agentenläufe |

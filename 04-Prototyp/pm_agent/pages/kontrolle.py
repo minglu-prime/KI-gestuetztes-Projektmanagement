@@ -7,7 +7,7 @@ import pandas as pd
 import streamlit as st
 
 from pm_agent import followup, workbench
-from pm_agent.tracking import agent_runs, evaluate, forecast, has_progress, percent
+from pm_agent.tracking import agent_runs, evaluate, forecast, forecast_bars, has_progress, percent
 from pm_agent.ui import adopted_project, consent, run_with_progress
 
 state = st.session_state
@@ -79,6 +79,42 @@ if tracking is not None:
             for late, waiting in outlook.blocked.items():
                 held = ", ".join(waiting) if waiting else "keine weitere Aufgabe"
                 st.markdown(f"- **{late} · {titles[late]}** hält auf: {held}")
+
+            kinds = ["Plan", "Prognose"]
+            bars = (
+                alt.Chart(pd.DataFrame(forecast_bars(result, outlook)))
+                .mark_bar(cornerRadius=3)
+                .encode(
+                    x=alt.X("Start:T", title=None, axis=alt.Axis(format="%d.%m.")),
+                    x2="Ende:T",
+                    y=alt.Y("Aufgabe:N", sort=None, title=None, axis=alt.Axis(labelLimit=260)),
+                    yOffset=alt.YOffset("Art:N", sort=kinds),
+                    color=alt.Color(
+                        "Art:N",
+                        sort=kinds,
+                        title=None,
+                        scale=alt.Scale(domain=kinds, range=["#b9cdbd", "#23654c"]),
+                    ),
+                    tooltip=["Aufgabe", "Art", "Zeitraum"],
+                )
+            )
+            # The forecast starts today; the deadline line sits at the end of its day.
+            marks = alt.Chart(
+                pd.DataFrame(
+                    {
+                        "Tag": [date.today(), workbench.bar_end(tracking.project.deadline)],
+                        "Linie": ["Heute", "Deadline"],
+                    }
+                )
+            )
+            lines = marks.mark_rule(strokeDash=[4, 4]).encode(x="Tag:T")
+            names = marks.mark_text(align="left", baseline="top", dx=4, fontSize=11).encode(
+                x="Tag:T", y=alt.value(0), text="Linie:N"
+            )
+            # White like the panel around it; the theme would paint the page colour.
+            st.altair_chart(
+                (bars + lines + names).properties(background="#ffffff"), width="stretch"
+            )
             st.caption(
                 "Annahme: Die restliche Arbeit beginnt heute, in der Reihenfolge des Plans. Eine "
                 "offene Aufgabe zählt mit ihrer Schätzung, eine begonnene mit Schätzung minus "

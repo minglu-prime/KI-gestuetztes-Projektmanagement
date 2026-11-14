@@ -16,9 +16,9 @@ from typing import Any, Literal, get_args
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from pm_agent.agent import LOG_DIR
-from pm_agent.models import Member, Plan, Project, StatusSummary
+from pm_agent.models import Member, Plan, Project, ScheduledTask, StatusSummary
 from pm_agent.planning import check_plan, workday_shift
-from pm_agent.workbench import DATA_DIR, InputError, _cell, _date, _md, _reason
+from pm_agent.workbench import DATA_DIR, InputError, _cell, _date, _md, _reason, bar_end
 
 PROJECT_FILE = DATA_DIR / "projekt.json"
 TEMPLATES = Path(__file__).parent / "templates"
@@ -210,6 +210,7 @@ class Forecast:
     shift: int  # workdays the end lies behind the planned end; negative: ahead of it
     deadline_gap: int  # workdays the end lies behind the deadline; negative: buffer left
     blocked: dict[str, list[str]]  # overdue task -> unfinished tasks that wait for it
+    schedule: list[ScheduledTask]  # the forecast dates of the unfinished tasks
 
 
 def forecast(tracking: Tracking, today: date) -> Forecast:
@@ -223,7 +224,9 @@ def forecast(tracking: Tracking, today: date) -> Forecast:
     state = tracking.progress
     open_ids = {task.id for task in plan.tasks if state[task.id].status != "fertig"}
     if not open_ids:
-        return Forecast(planned_end=planned_end, end=None, shift=0, deadline_gap=0, blocked={})
+        return Forecast(
+            planned_end=planned_end, end=None, shift=0, deadline_gap=0, blocked={}, schedule=[]
+        )
 
     rest = Plan(
         tasks=[
@@ -247,7 +250,8 @@ def forecast(tracking: Tracking, today: date) -> Forecast:
     open_end = Project(
         idea=project.idea, start_date=max(today, project.start_date), deadline=date.max
     )
-    end = check_plan(rest, tracking.team, open_end).end_date
+    expected = check_plan(rest, tracking.team, open_end)
+    end = expected.end_date
 
     waiting: dict[str, list[str]] = {}
     for late in evaluate(tracking, today).overdue:
@@ -265,7 +269,59 @@ def forecast(tracking: Tracking, today: date) -> Forecast:
         shift=workday_shift(planned_end, end),
         deadline_gap=workday_shift(project.deadline, end),
         blocked=waiting,
+        schedule=expected.schedule,
     )
+
+
+def forecast_text(outlook: Forecast, deadline: date) -> str:
+    """The forecast as one sentence, for the status report and the Startseite."""
+    if outlook.end is None:
+        return "Alle Aufgaben sind fertig."
+
+    def days(count: int) -> str:
+        return f"{abs(count)} Arbeitstag{'' if abs(count) == 1 else 'e'}"
+
+    if outlook.shift:
+        against_plan = (
+            f"{days(outlook.shift)} {'später' if outlook.shift > 0 else 'früher'} als geplant"
+        )
+    else:
+        against_plan = "wie geplant"
+    if outlook.deadline_gap > 0:
+        against_deadline = (
+            f"die Deadline ({_date(deadline)}) wird um {days(outlook.deadline_gap)} verpasst"
+        )
+    elif outlook.deadline_gap < 0:
+        left = "bleibt" if outlook.deadline_gap == -1 else "bleiben"
+        against_deadline = (
+            f"bis zur Deadline ({_date(deadline)}) {left} {days(outlook.deadline_gap)} Puffer"
+        )
+    else:
+        against_deadline = f"bis zur Deadline ({_date(deadline)}) bleibt kein Puffer"
+    return f"Voraussichtliches Ende {_date(outlook.end)}, {against_plan}; {against_deadline}"
+
+
+def forecast_bars(evaluation: Evaluation, outlook: Forecast) -> list[dict[str, Any]]:
+    """Two bars per unfinished task for a chart: where the plan had it and where the forecast
+    puts it."""
+    planned = {t.id: t for t in evaluation.tasks}
+    bars = []
+    for expected in outlook.schedule:
+        task = planned[expected.task_id]
+        for kind, first, last in [
+            ("Plan", task.planned_start, task.planned_end),
+            ("Prognose", expected.start, expected.end),
+        ]:
+            bars.append(
+                {
+                    "Aufgabe": f"{task.id} · {task.title}",
+                    "Art": kind,
+                    "Start": first,
+                    "Ende": bar_end(last),
+                    "Zeitraum": f"{first:%d.%m.} – {last:%d.%m.}",
+                }
+            )
+    return bars
 
 
 def progress_rows(tracking: Tracking) -> list[dict[str, Any]]:
@@ -317,6 +373,7 @@ def status_report(
         start=_date(project.start_date),
         deadline=_date(project.deadline),
         planende=_date(max(t.planned_end for t in tasks)),
+        prognose=forecast_text(forecast(tracking, evaluation.today), project.deadline),
         fortschritt=percent(evaluation.progress),
         fertig=count["fertig"],
         in_arbeit=count["in Arbeit"],

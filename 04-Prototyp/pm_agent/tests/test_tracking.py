@@ -11,6 +11,8 @@ from pm_agent.tracking import (
     apply_rows,
     evaluate,
     forecast,
+    forecast_bars,
+    forecast_text,
     has_progress,
     load,
     progress_rows,
@@ -254,3 +256,70 @@ def test_a_started_task_counts_with_what_is_left_of_its_estimate(tracking):
 def test_a_finished_project_has_no_forecast(tracking):
     outlook = forecast(progressed(tracking, A="fertig", B="fertig"), date(2026, 11, 12))
     assert outlook.end is None and outlook.shift == 0 and outlook.blocked == {}
+
+
+def test_the_forecast_has_dates_for_every_unfinished_task(tracking):
+    outlook = forecast(tracking, date(2026, 11, 10))  # Tue: A is overdue, nothing is done
+    assert [(s.task_id, s.member, s.start, s.end) for s in outlook.schedule] == [
+        ("A", "Anna", date(2026, 11, 10), date(2026, 11, 10)),
+        ("B", "Anna", date(2026, 11, 11), date(2026, 11, 12)),
+    ]
+    done = forecast(progressed(tracking, A="fertig", B="fertig"), date(2026, 11, 12))
+    assert done.schedule == []
+
+
+def test_the_forecast_reads_as_one_sentence(tracking):
+    def said(today, **status):
+        project = progressed(tracking, **status) if status else tracking
+        return forecast_text(forecast(project, today), PROJECT.deadline)
+
+    assert said(date(2026, 11, 10), A="fertig") == (
+        "Voraussichtliches Ende 11.11.2026, wie geplant; bis zur Deadline (18.12.2026) bleiben "
+        "27 Arbeitstage Puffer"
+    )
+    assert said(date(2026, 11, 10)) == (
+        "Voraussichtliches Ende 12.11.2026, 1 Arbeitstag später als geplant; bis zur Deadline "
+        "(18.12.2026) bleiben 26 Arbeitstage Puffer"
+    )
+    assert said(date(2026, 12, 16)) == (
+        "Voraussichtliches Ende 18.12.2026, 27 Arbeitstage später als geplant; bis zur Deadline "
+        "(18.12.2026) bleibt kein Puffer"
+    )
+    assert said(date(2026, 12, 21)) == (
+        "Voraussichtliches Ende 23.12.2026, 30 Arbeitstage später als geplant; die Deadline "
+        "(18.12.2026) wird um 3 Arbeitstage verpasst"
+    )
+    assert said(date(2026, 11, 12), A="fertig", B="fertig") == "Alle Aufgaben sind fertig."
+
+
+def test_the_status_report_carries_the_forecast(tracking):
+    updated = apply_rows(tracking, ROWS)  # A finished, B started with 4 of 16 h
+    report = status_report(updated, evaluate(updated, today=date(2026, 11, 12)))
+    assert (
+        "**Prognose:** Voraussichtliches Ende 13.11.2026, 2 Arbeitstage später als geplant; bis "
+        "zur Deadline (18.12.2026) bleiben 25 Arbeitstage Puffer" in report
+    )
+    assert "$" not in report
+
+
+def test_plan_and_forecast_are_two_bars_per_unfinished_task(tracking):
+    started = progressed(tracking, A="fertig")
+    today = date(2026, 11, 11)  # Wed: B should have started on Tuesday
+    bars = forecast_bars(evaluate(started, today), forecast(started, today))
+    # A bar ends at the start of the day after its last day, like in the Gantt chart.
+    assert bars == [
+        {
+            "Aufgabe": "B · API",
+            "Art": "Plan",
+            "Start": date(2026, 11, 10),
+            "Ende": date(2026, 11, 12),
+            "Zeitraum": "10.11. – 11.11.",
+        },
+        {
+            "Aufgabe": "B · API",
+            "Art": "Prognose",
+            "Start": date(2026, 11, 11),
+            "Ende": date(2026, 11, 13),
+            "Zeitraum": "11.11. – 12.11.",
+        },
+    ]

@@ -378,26 +378,31 @@ def describe_round(number: int, record: dict[str, Any], previous: Plan | None) -
     }
 
 
-def gantt(plan: Plan, result: CheckResult, deadline: date) -> tuple[list[dict[str, Any]], date]:
-    """The bars of the Gantt chart and where the deadline line is drawn.
+def bar_end(last_day: date) -> date:
+    """Where a bar that covers `last_day` ends on a time axis, and where the line of a
+    deadline on that day is drawn.
 
-    The time axis marks the start of each day. A bar covers whole days, so it runs to the
-    start of the day after the task's last day. The deadline day is a working day too, so
-    the line sits at its end the same way. Drawn at its start, a task finishing on the
-    deadline looked late."""
-    day = timedelta(days=1)
+    The axis marks the start of each day. A bar covers whole days, so it runs to the start
+    of the day after its last day. The deadline day is a working day too, so its line sits
+    at the end of the day the same way. Drawn at its start, a task finishing on the deadline
+    looked late."""
+    return last_day + timedelta(days=1)
+
+
+def gantt(plan: Plan, result: CheckResult, deadline: date) -> tuple[list[dict[str, Any]], date]:
+    """The bars of the Gantt chart and where the deadline line is drawn (see bar_end)."""
     titles = {t.id: t.title for t in plan.tasks}
     bars = [
         {
             "Aufgabe": f"{s.task_id} · {titles[s.task_id]}",
             "Person": s.member,
             "Start": s.start,
-            "Ende": s.end + day,
+            "Ende": bar_end(s.end),
             "Zeitraum": f"{s.start:%d.%m.} – {s.end:%d.%m.}",
         }
         for s in result.schedule
     ]
-    return bars, deadline + day
+    return bars, bar_end(deadline)
 
 
 def to_markdown(project: Project, plan: Plan, result: CheckResult) -> str:

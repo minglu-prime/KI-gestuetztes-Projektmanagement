@@ -398,6 +398,13 @@ def test_durchfuehrung_says_where_the_project_stands(tracked):
         assert text in chips(at)
 
 
+def test_the_startseite_says_where_the_project_is_heading(tracked):
+    at = tracked.run()
+    assert not at.exception
+    said = [c.value for c in at.caption] + [w.value for w in at.warning]
+    assert any(text.startswith("Prognose: Voraussichtliches Ende") for text in said)
+
+
 def test_kontrolle_forecasts_the_end_from_the_recorded_progress(tracked):
     # Whatever today is: with every task finished there is nothing left to forecast.
     done = [{"ID": "A", "Status": "fertig", "Ist (h)": 8}, {"ID": "B", "Status": "fertig"}]

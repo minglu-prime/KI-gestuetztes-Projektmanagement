@@ -3,7 +3,8 @@
 **Projekt:** $projekt  
 **Stand:** $stand  
 **Zeitraum:** $start bis $deadline  
-**Geplantes Ende laut Plan:** $planende
+**Geplantes Ende laut Plan:** $planende  
+**Prognose:** $prognose
 
 ## Überblick
 

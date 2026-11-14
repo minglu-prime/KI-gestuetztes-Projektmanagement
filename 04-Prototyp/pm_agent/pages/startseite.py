@@ -4,7 +4,7 @@ from datetime import date
 
 import streamlit as st
 
-from pm_agent.tracking import evaluate, load, percent
+from pm_agent.tracking import evaluate, forecast, forecast_text, load, percent
 from pm_agent.workbench import InputError
 
 # How every agent works, as the diagram next to the headline (styled in assets/style.css).
@@ -112,6 +112,12 @@ with st.container(key="project"):
             a.metric("Aufgaben", len(result.tasks))
             b.metric("Fortschritt", percent(result.progress))
             c.metric("Im Verzug", len(result.overdue))
+            outlook = forecast(tracking, date.today())
+            heading = forecast_text(outlook, tracking.project.deadline).rstrip(".")
+            if outlook.deadline_gap > 0:
+                st.warning(f"Prognose: {heading}.")
+            else:
+                st.caption(f"Prognose: {heading}.")
             with st.container(horizontal=True):
                 if st.button("Fortschritt erfassen", icon=":material/task_alt:"):
                     st.switch_page("pages/durchfuehrung.py")
