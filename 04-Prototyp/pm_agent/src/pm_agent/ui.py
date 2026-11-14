@@ -1,6 +1,7 @@
 """Streamlit pieces that several pages share."""
 
 from collections.abc import Callable
+from html import escape
 from typing import Any, TypeVar
 
 import streamlit as st
@@ -25,7 +26,23 @@ def adopted_project() -> Tracking | None:
             "Noch kein Projekt übernommen. Erstelle oder öffne einen Plan auf der Seite Planung "
             "und wähle dort im Schritt Export „Plan als Projekt übernehmen“."
         )
+        if st.button("Zur Planung", type="primary", icon=":material/arrow_forward:"):
+            st.switch_page("pages/planung.py")
     return tracking
+
+
+MARKS = {"on": "✓", "warn": "!", "": "○"}
+
+
+def chip(text: str, state: str = "") -> str:
+    """One entry of a status strip as HTML (styled in assets/style.css). `state` is "on" for
+    done, "warn" for something that needs attention, and empty for open."""
+    return f'<span class="chip {state}">{MARKS[state]} {escape(text)}</span>'
+
+
+def strip(*chips: str) -> str:
+    """Chips in a row, for st.html."""
+    return f'<div class="chips">{"".join(chips)}</div>'
 
 
 def consent(key: str) -> bool:

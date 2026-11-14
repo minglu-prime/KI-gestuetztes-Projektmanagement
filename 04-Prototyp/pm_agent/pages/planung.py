@@ -21,6 +21,7 @@ from pm_agent.models import Project
 from pm_agent.planning import check_plan
 from pm_agent.tracking import adopt, has_progress
 from pm_agent.tracking import load as load_tracking
+from pm_agent.ui import chip, strip
 from pm_agent.workbench import (
     PLAN_COLUMNS,
     RUNS_CSV,
@@ -124,11 +125,6 @@ def next_step(label: str, step: str, ready: bool, key: str) -> None:
         on_click=go,
         args=(step,),
     )
-
-
-def chip(done: bool, text: str) -> str:
-    mark = "✓" if done else "○"
-    return f'<span class="chip{" on" if done else ""}">{mark} {escape(text)}</span>'
 
 
 init()
@@ -515,21 +511,21 @@ with tabs[5]:
 
 # Where the planning stands, above the steps.
 if state.plan is None:
-    plan_chip = chip(False, "Plan offen")
+    plan_chip = chip("Plan offen")
 elif result is None:
-    plan_chip = chip(False, "Plan nicht prüfbar")
+    plan_chip = chip("Plan nicht prüfbar", "warn")
 elif result.errors:
-    plan_chip = chip(False, f"Plan: {len(result.errors)} Fehler")
+    plan_chip = chip(f"Plan: {len(result.errors)} Fehler", "warn")
 else:
     count = len(result.warnings)
     notes = f", {count} Warnung{'' if count == 1 else 'en'}" if count else ""
-    plan_chip = chip(True, f"Plan geprüft{notes}")
+    plan_chip = chip(f"Plan geprüft{notes}", "on")
 people = f"Team: {len(team)} Person{'' if len(team) == 1 else 'en'}" if team else "Team fehlt"
 status_strip.html(
-    '<div class="chips">'
-    + chip(bool(team), people)
-    + chip(consent, "Zustimmung")
-    + chip(project is not None, "Projekt")
-    + plan_chip
-    + "</div>"
+    strip(
+        chip(people, "on" if team else ""),
+        chip("Zustimmung", "on" if consent else ""),
+        chip("Projekt", "on" if project is not None else ""),
+        plan_chip,
+    )
 )

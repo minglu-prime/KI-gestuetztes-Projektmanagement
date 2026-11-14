@@ -272,6 +272,20 @@ def tracked(site):
     return site
 
 
+def test_without_a_project_durchfuehrung_and_kontrolle_lead_to_the_planung(site):
+    for path in ["pages/durchfuehrung.py", "pages/kontrolle.py"]:
+        at = site.switch_page(path).run()
+        assert not button(at, "Zur Planung").disabled, path
+
+
+def test_durchfuehrung_says_where_the_project_stands(tracked):
+    # Only what does not depend on today's date: nothing is finished or started yet.
+    at = tracked.switch_page("pages/durchfuehrung.py").run()
+    assert not at.exception
+    for text in ["○ 0 von 2 Aufgaben fertig<", "○ 0 in Arbeit<"]:
+        assert text in chips(at)
+
+
 def test_the_execution_agent_needs_consent_and_its_proposal_goes_into_the_report(
     tracked, monkeypatch
 ):

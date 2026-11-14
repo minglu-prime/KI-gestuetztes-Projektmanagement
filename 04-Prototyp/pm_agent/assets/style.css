@@ -324,7 +324,14 @@
   background: var(--mint);
   color: #244e38;
 }
+.chip.warn {
+  border-color: #d4a256;
+  background: #fbf2df;
+  color: #77501e;
+}
 .chip-arrow { color: var(--muted); }
+/* A document preview: a sheet of the page colour inside its white panel. */
+[class*="st-key-preview-"] { background: var(--paper); }
 
 /* People who asked their system for less motion get none. */
 @media (prefers-reduced-motion: reduce) {
