@@ -91,7 +91,8 @@ KI-Lab, Über uns und Impressum. Sie läuft nur auf dem eigenen Rechner.
 ### Planung
 
 Sechs Schritte: Team, Projekt, Planung, Ergebnis, Anpassen, Export. Eine Leiste zeigt, was noch
-fehlt, und jeder Schritt führt in den nächsten.
+fehlt, und jeder Schritt führt in den nächsten. Zum Team gehören Skills, Wochenstunden und
+Abwesenheiten: An Tagen, an denen jemand fehlt, wird für die Person keine Arbeit eingeplant.
 
 <div align="center">
 <img src="04-Prototyp/pm_agent/assets/screenshots/planung-ergebnis.jpg" width="820" alt="Schritt Ergebnis: Planende, Fehler und Warnungen als Kennzahlen, darunter der Terminplan als Gantt-Diagramm mit Deadline-Linie">
@@ -100,6 +101,15 @@ fehlt, und jeder Schritt führt in den nächsten.
 Das Ergebnis zeigt Terminplan mit kritischem Pfad, Auslastung je Person, Risiken und die
 Begründung jeder Zuweisung. Der Plan lässt sich als Markdown oder CSV exportieren und als
 Projekt übernehmen.
+
+Zu jeder Aufgabe gibt es die Antwort auf „Warum diese Person, und was hängt daran?“: Claudes
+Begründung, die Stufe der Person in jedem verlangten Skill, was vorher fertig sein muss und was
+darauf wartet, wie viele Arbeitstage Puffer die Aufgabe hat, und wer im Team sie sonst
+übernehmen könnte. Nur die Begründung stammt von Claude, alles andere rechnet Python.
+
+<div align="center">
+<img src="04-Prototyp/pm_agent/assets/screenshots/planung-aufgabe.jpg" width="820" alt="Aufgabe im Detail: Person, Stunden, Zeitraum und kritischer Pfad als Marken, Claudes Begründung, Skills, Vorgänger und Nachfolger, darunter wer die Aufgabe sonst übernehmen könnte">
+</div>
 
 ### Den Plan im Gespräch ändern
 
@@ -122,14 +132,20 @@ von Hand; dann läuft nur die Prüfung.
 
 ### Durchführung und Kontrolle
 
-Beide Seiten rechnen mit dem übernommenen Plan und dem erfassten Fortschritt. Die Durchführung
-füllt Statusbericht und Arbeitspaketbeschreibungen aus Vorlagen. Die Kontrolle stellt Plan und
-Ist gegenüber, nennt Aufgaben im Verzug und rechnet Kosten, sobald ein Stundensatz gesetzt ist.
-Auf beiden Seiten macht ein Agent einen Vorschlag, den Python nur annimmt, wenn er jede Aufgabe
-im Verzug behandelt.
+Beide Seiten rechnen mit dem übernommenen Plan und dem erfassten Fortschritt (Status,
+Ist-Stunden und, wo bekannt, der geschätzte Rest je Aufgabe). Die Durchführung füllt
+Statusbericht und Arbeitspaketbeschreibungen aus Vorlagen. Die Kontrolle stellt Plan und Ist
+gegenüber, nennt Aufgaben im Verzug und rechnet Kosten, sobald ein Stundensatz gesetzt ist. Auf
+beiden Seiten macht ein Agent einen Vorschlag, den Python nur annimmt, wenn er jede Aufgabe im
+Verzug behandelt.
+
+Die Kontrolle sagt auch, was ein Verzug bedeutet. Die **Prognose** plant alles, was noch nicht
+fertig ist, ab heute neu ein und vergleicht das Ende mit Plan und Deadline. Im Beispiel unten
+sind zwei Aufgaben ein bis zwei Tage im Verzug; die Folge ist ein Ende vier Arbeitstage nach
+Plan und einen Tag nach der Deadline.
 
 <div align="center">
-<img src="04-Prototyp/pm_agent/assets/screenshots/kontrolle.jpg" width="820" alt="Seite Kontrolle: Fortschritt, Planstunden, Ist-Stunden und Abweichung als Kennzahlen, Hinweis auf zwei Aufgaben im Verzug, Diagramm Plan und Ist je Aufgabe">
+<img src="04-Prototyp/pm_agent/assets/screenshots/kontrolle.jpg" width="820" alt="Prognose auf der Seite Kontrolle: voraussichtliches Ende 21.12.2026, vier Arbeitstage nach Plan, Deadline um einen Arbeitstag verpasst; welche Aufgaben die beiden verspäteten aufhalten; Diagramm mit Plan und Prognose je Aufgabe und Linien für heute und die Deadline">
 </div>
 
 ### KI-Lab
@@ -200,6 +216,8 @@ Was der Prototyp bewusst vereinfacht:
   Person.
 - **Terminierung:** Aufgaben werden in der Reihenfolge ihrer Abhängigkeiten eingeplant, nicht
   optimiert. Ein Plan kann deshalb länger ausfallen als nötig.
+- **Prognose:** Die restliche Arbeit beginnt heute und läuft in der Reihenfolge des Plans.
+  Ohne eingetragenen Rest zählt eine begonnene Aufgabe mit Schätzung minus Ist-Stunden.
 - **Kosten:** Stunden mal Stundensatz. Token-Kosten der Agenten werden gezählt, aber nicht in
   Euro umgerechnet.
 

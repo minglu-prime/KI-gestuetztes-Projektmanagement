@@ -6,6 +6,7 @@ use persist_state="session"; the two table editors cannot, so their content is k
 session state and restored when the user comes back (see restore_editors).
 """
 
+import math
 import time
 from datetime import date, datetime
 from html import escape
@@ -139,6 +140,12 @@ def decide(accept: bool) -> None:
             proposal["seconds"],
             rounds_start=proposal["basis"],
         )
+
+
+def whole_percent(share: float | None) -> float | None:
+    """A share for a table column, rounded up to whole per cent like the overload warning:
+    100.2 % must not read as 100 %. None (away until the deadline) stays empty."""
+    return None if share is None else math.ceil(round(share * 100, 9)) / 100
 
 
 def go(step: str) -> None:
@@ -394,7 +401,7 @@ with tabs[3]:
                             "Person": item.member,
                             "Zugewiesen (h)": round(item.assigned_hours, 1),
                             "Verfügbar (h)": round(item.capacity_hours, 1),
-                            "Auslastung": item.utilization,
+                            "Auslastung": whole_percent(item.utilization),
                         }
                         for item in result.load
                     ]
@@ -480,7 +487,7 @@ with tabs[3]:
                                         f"{skill} {level}"
                                         for skill, level in other["skills"].items()
                                     ),
-                                    "Auslastung": other["utilization"],
+                                    "Auslastung": whole_percent(other["utilization"]),
                                 }
                                 for other in view["alternatives"]
                             ]
