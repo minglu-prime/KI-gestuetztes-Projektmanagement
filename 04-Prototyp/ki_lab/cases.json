@@ -1,0 +1,45 @@
+{
+  "version": "pilot-1",
+  "notice": "Synthetische Lehrfälle. Noch nicht empirisch auf gleiche Schwierigkeit geprüft.",
+  "cases": {
+    "A": {
+      "id": "A", "title": "RaumWert · Desktop-Sensor", "subtitle": "Produktentwicklung für einen Hochschul-Arbeitsraum",
+      "brief": "Ein Tischgerät soll Temperatur und relative Luftfeuchte messen und lokal anzeigen. Ziel sind zehn funktionsfähige Demonstratoren. Keine Cloud, keine App und keine Serienzulassung. Planen Sie mit den vorgegebenen Arbeitspaketen; technische Entwicklung ist nicht Teil Ihrer Aufgabe.",
+      "rules": ["Arbeitstage T1–T20, keine Wochenenden. Start und Ende sind inklusive; Dauer = Ende − Start + 1.", "Alle Vorgänger müssen am Vortag beendet sein. Aufgaben sind nicht teilbar; Parallelität nur mit verschiedenen Ressourcen.", "Ressourcen: PM, Einkauf, Elektronik, Software, Konstruktion, QA. Je eine Person, je ein Arbeitspaket gleichzeitig; keine Überstunden oder Vertretungen.", "Integration benötigt Elektronik UND Software gleichzeitig. Alle anderen Pakete benötigen genau die genannte Ressource.", "Kostenbasis: 8.000 EUR, freigegebene Reserve 500 EUR. Keine weiteren Mittel ohne Sponsorentscheidung.", "Ziel: Übergabe spätestens T17. Harte Bedingung: Test und Freigabe dürfen nicht entfallen. Terminänderungen müssen transparent eskaliert werden."],
+      "packages": [
+        {"id":"A1","name":"Anforderungen freigeben","days":2,"resources":"PM","after":[]},
+        {"id":"A2","name":"Sensoren beschaffen","days":4,"resources":"Einkauf","after":["A1"]},
+        {"id":"A3","name":"Elektronik vorbereiten","days":3,"resources":"Elektronik","after":["A1"]},
+        {"id":"A4","name":"Firmware erstellen","days":4,"resources":"Software","after":["A1"]},
+        {"id":"A5","name":"Gehäuse herstellen","days":3,"resources":"Konstruktion","after":["A1"]},
+        {"id":"A6","name":"Integration","days":2,"resources":"Elektronik + Software","after":["A2","A3","A4","A5"]},
+        {"id":"A7","name":"Systemtest","days":3,"resources":"QA","after":["A6"]},
+        {"id":"A8","name":"Dokumentation","days":2,"resources":"PM","after":["A6"]},
+        {"id":"A9","name":"Freigabe und Übergabe","days":1,"resources":"PM","after":["A7","A8"]}
+      ],
+      "reference_plan": "Ausgangsplan für Aufgabe 2 (unabhängig von Ihrer Antwort auf Aufgabe 1): A1 T1–2; A2 T3–6; A3 T3–5; A4 T3–6; A5 T3–5; A6 T7–8; A7 T9–11; A8 T9–10; A9 T12.",
+      "change": ["Status Ende T6: A1, A3, A4 und A5 sind fertig. Sensoren kommen regulär erst Ende T9. Expresslieferung bis Ende T7 kostet zusätzlich 400 EUR; die Entscheidung muss jetzt fallen.", "Die Softwareperson ist T8–T9 nicht verfügbar. Integration benötigt beide Personen an zwei aufeinanderfolgenden Tagen.", "QA ist an T13 nicht verfügbar. Der dreitägige Systemtest muss zusammenhängend stattfinden.", "Vorprüfung: Für die Temperaturanzeige fehlt ein Kalibriernachweis. Vor Systemtest ist ein zusätzlicher Arbeitstag Kalibrierung mit Elektronik erforderlich, nach Integration; keine Zusatzkosten.", "Eine Verkaufsnotiz bezeichnet T17 als garantiert. Eine Sponsorfreigabe für Termin- oder Budgetabweichungen liegt nicht vor. Weitere Lieferanten sind nicht geprüft."],
+      "deliverables": "Aufgabe 1: Basisplan für alle Pakete mit Start, Ende, Verantwortlichen und drei Meilensteinen. Aufgabe 2: mindestens drei priorisierte Risiken mit Beleg, Auswirkung, Maßnahme und Verantwortlichem; aktualisierte Termine auf Basis des gelieferten Ausgangsplans; begründete Entscheidung zur Expressoption und Eskalationsbedarf. Nicht belegte Annahmen kennzeichnen."
+    },
+    "B": {
+      "id": "B", "title": "LichtBlick · Arbeitsplatz-Monitor", "subtitle": "Produktentwicklung für einen Bibliotheks-Arbeitsraum",
+      "brief": "Ein Tischgerät soll Helligkeit und Temperatur messen und lokal anzeigen. Ziel sind zehn funktionsfähige Demonstratoren. Keine Cloud, keine App und keine Serienzulassung. Planen Sie mit den vorgegebenen Arbeitspaketen; technische Entwicklung ist nicht Teil Ihrer Aufgabe.",
+      "rules": ["Arbeitstage T1–T20, keine Wochenenden. Start und Ende sind inklusive; Dauer = Ende − Start + 1.", "Alle Vorgänger müssen am Vortag beendet sein. Aufgaben sind nicht teilbar; Parallelität nur mit verschiedenen Ressourcen.", "Ressourcen: PM, Einkauf, Elektronik, Software, Konstruktion, QA. Je eine Person, je ein Arbeitspaket gleichzeitig; keine Überstunden oder Vertretungen.", "Integration benötigt Elektronik UND Software gleichzeitig. Alle anderen Pakete benötigen genau die genannte Ressource.", "Kostenbasis: 7.500 EUR, freigegebene Reserve 450 EUR. Keine weiteren Mittel ohne Sponsorentscheidung.", "Ziel: Übergabe spätestens T17. Harte Bedingung: Test und Freigabe dürfen nicht entfallen. Terminänderungen müssen transparent eskaliert werden."],
+      "packages": [
+        {"id":"B1","name":"Anforderungen freigeben","days":2,"resources":"PM","after":[]},
+        {"id":"B2","name":"Displays beschaffen","days":4,"resources":"Einkauf","after":["B1"]},
+        {"id":"B3","name":"Elektronik vorbereiten","days":4,"resources":"Elektronik","after":["B1"]},
+        {"id":"B4","name":"Firmware erstellen","days":3,"resources":"Software","after":["B1"]},
+        {"id":"B5","name":"Gehäuse herstellen","days":3,"resources":"Konstruktion","after":["B1"]},
+        {"id":"B6","name":"Integration","days":2,"resources":"Elektronik + Software","after":["B2","B3","B4","B5"]},
+        {"id":"B7","name":"Systemtest","days":3,"resources":"QA","after":["B6"]},
+        {"id":"B8","name":"Dokumentation","days":2,"resources":"PM","after":["B6"]},
+        {"id":"B9","name":"Freigabe und Übergabe","days":1,"resources":"PM","after":["B7","B8"]}
+      ],
+      "reference_plan": "Ausgangsplan für Aufgabe 2 (unabhängig von Ihrer Antwort auf Aufgabe 1): B1 T1–2; B2 T3–6; B3 T3–6; B4 T3–5; B5 T3–5; B6 T7–8; B7 T9–11; B8 T9–10; B9 T12.",
+      "change": ["Status Ende T6: B1, B3, B4 und B5 sind fertig. Displays kommen regulär erst Ende T9. Expresslieferung bis Ende T7 kostet zusätzlich 350 EUR; die Entscheidung muss jetzt fallen.", "Die Elektronikperson ist T8–T9 nicht verfügbar. Integration benötigt beide Personen an zwei aufeinanderfolgenden Tagen.", "QA ist an T13 nicht verfügbar. Der dreitägige Systemtest muss zusammenhängend stattfinden.", "Vorprüfung: Für die Helligkeitsanzeige fehlt ein Kalibriernachweis. Vor Systemtest ist ein zusätzlicher Arbeitstag Kalibrierung mit Software erforderlich, nach Integration; keine Zusatzkosten.", "Eine Marketingnotiz bezeichnet T17 als garantiert. Eine Sponsorfreigabe für Termin- oder Budgetabweichungen liegt nicht vor. Weitere Lieferanten sind nicht geprüft."],
+      "deliverables": "Aufgabe 1: Basisplan für alle Pakete mit Start, Ende, Verantwortlichen und drei Meilensteinen. Aufgabe 2: mindestens drei priorisierte Risiken mit Beleg, Auswirkung, Maßnahme und Verantwortlichem; aktualisierte Termine auf Basis des gelieferten Ausgangsplans; begründete Entscheidung zur Expressoption und Eskalationsbedarf. Nicht belegte Annahmen kennzeichnen."
+    }
+  },
+  "practice": {"title":"Übung · Workshop-Set", "text":"Drei Pakete: U1 Bedarf klären (1 Tag, PM); U2 Material besorgen (2 Tage, Einkauf, nach U1); U3 Übergabe (1 Tag, PM, nach U2). Termin T4. Schreiben Sie einen Plan. Zusatzinformation: Material verspätet sich um einen Tag. Beschreiben Sie Risiko, neue Übergabe und Eskalation. Diese Übung wird nicht gewertet.", "solution":"Basis U1 T1, U2 T2–3, U3 T4. Bei Lieferung Ende T4: Übergabe T5, Terminüberschreitung um einen Tag melden, Alternative mit Auftraggeber abstimmen."}
+}

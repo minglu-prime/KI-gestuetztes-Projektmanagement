@@ -2,9 +2,7 @@
 
 import json
 
-import httpx2 as httpx  # the HTTP client the anthropic SDK is built on
 import pytest
-from anthropic import Anthropic
 from test_tools import PROJECT, TEAM, plan_input
 
 from pm_agent import agent
@@ -29,24 +27,8 @@ def submit(plan, call_id):
     return {"type": "tool_use", "id": call_id, "name": "submit_plan", "input": plan}
 
 
-@pytest.fixture
-def api(monkeypatch):
-    """Answers the agent's requests with the scripted replies and keeps the request bodies."""
-    replies, requests = [], []
-
-    def handle(request):
-        requests.append(json.loads(request.content))
-        return httpx.Response(200, json=replies.pop(0))
-
-    client = Anthropic(
-        api_key="test", http_client=httpx.Client(transport=httpx.MockTransport(handle))
-    )
-    monkeypatch.setattr(agent, "Anthropic", lambda: client)
-    return replies, requests
-
-
-def read_log(log_dir):
-    (path,) = log_dir.glob("run-*.json")
+def read_log(log_dir, prefix="run"):
+    (path,) = log_dir.glob(f"{prefix}-*.json")
     return json.loads(path.read_text(encoding="utf-8"))
 
 

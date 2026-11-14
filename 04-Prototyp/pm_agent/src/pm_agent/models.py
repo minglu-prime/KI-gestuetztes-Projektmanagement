@@ -1,5 +1,5 @@
 """Data model: team and project (entered by the project lead), plan (proposed by the agent),
-and the result of checking a plan.
+the result of checking a plan, and what the agents for Durchführung and Kontrolle propose.
 
 Field-level rules live here. Rules that need several objects at once (unknown dependency,
 member not in team, cycles) live in `planning.check_plan`, so a broken plan is reported,
@@ -7,7 +7,7 @@ not rejected on parse.
 """
 
 from datetime import date
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -88,3 +88,34 @@ class CheckResult(_Model):
     @property
     def ok(self) -> bool:
         return not self.errors
+
+
+class NextStep(_Model):
+    task_id: NonEmpty
+    action: NonEmpty
+
+
+class StatusSummary(_Model):
+    """What the Durchführung agent proposes for the status report."""
+
+    summary: NonEmpty
+    next_steps: list[NextStep] = Field(default_factory=list)
+
+
+class Finding(_Model):
+    task_ids: list[NonEmpty] = Field(default_factory=list)  # empty: about the whole project
+    observation: NonEmpty
+
+
+class Measure(_Model):
+    task_ids: list[NonEmpty] = Field(min_length=1)
+    action: NonEmpty
+    effect: NonEmpty  # what the measure is expected to change
+
+
+class ControlReport(_Model):
+    """What the Kontrolle agent proposes: where the project stands and what to do about it."""
+
+    assessment: Literal["im Plan", "gefährdet", "kritisch"]
+    findings: list[Finding] = Field(min_length=1)
+    measures: list[Measure] = Field(default_factory=list)

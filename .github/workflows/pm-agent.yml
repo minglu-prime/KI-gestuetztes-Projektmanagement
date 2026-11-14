@@ -1,13 +1,14 @@
-# Lint and offline tests of the planning agent in 04-Prototyp/pm_agent.
+# Lint and offline tests of the PM-Agent site in 04-Prototyp/pm_agent, and the tests of the
+# KI-Lab study server in 04-Prototyp/ki_lab that the site embeds.
 # The live API test skips itself: no ANTHROPIC_API_KEY is configured here.
 name: pm-agent
 
 on:
   push:
     branches: [main]
-    paths: ["04-Prototyp/pm_agent/**", ".github/workflows/pm-agent.yml"]
+    paths: ["04-Prototyp/pm_agent/**", "04-Prototyp/ki_lab/**", ".github/workflows/pm-agent.yml"]
   pull_request:
-    paths: ["04-Prototyp/pm_agent/**", ".github/workflows/pm-agent.yml"]
+    paths: ["04-Prototyp/pm_agent/**", "04-Prototyp/ki_lab/**", ".github/workflows/pm-agent.yml"]
 
 permissions:
   contents: read
@@ -27,3 +28,8 @@ jobs:
       - run: uv run ruff check .
       - run: uv run ruff format --check .
       - run: uv run pytest
+      # The KI-Lab needs only the standard library; its own tests use unittest.
+      - run: uv run --no-project --python 3.11 python -m unittest discover -s tests -v
+        working-directory: 04-Prototyp/ki_lab
+      - run: node --check web/app.js
+        working-directory: 04-Prototyp/ki_lab

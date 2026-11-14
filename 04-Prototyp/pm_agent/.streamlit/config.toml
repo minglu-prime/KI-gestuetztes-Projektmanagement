@@ -6,3 +6,34 @@ address = "localhost"
 
 [browser]
 gatherUsageStats = false
+
+# Colours, fonts and shapes of the KI-Lab (../ki_lab/web/style.css), so that the embedded lab
+# and the site look like one product.
+[theme]
+base = "light"
+primaryColor = "#23654c"
+backgroundColor = "#f5f6f0"
+secondaryBackgroundColor = "#ffffff"
+textColor = "#18352d"
+linkColor = "#23654c"
+borderColor = "#dbe0d6"
+showWidgetBorder = true
+showSidebarBorder = true
+baseRadius = "8px"
+font = "'Segoe UI', system-ui, sans-serif"
+baseFontSize = 15
+headingFontWeights = [550, 600, 600, 600, 600, 600]
+# st.success, st.info and st.warning in the lab's mint and sand tones. Errors keep the default red.
+greenBackgroundColor = "#dceadf"
+greenTextColor = "#23654c"
+blueBackgroundColor = "#e7eddf"
+blueTextColor = "#18352d"
+yellowBackgroundColor = "#fbf2df"
+yellowTextColor = "#77501e"
+dataframeHeaderBackgroundColor = "#ecf0e7"
+dataframeBorderColor = "#dbe0d6"
+chartCategoricalColors = ["#23654c", "#9c5b22", "#5f906f", "#d4a256", "#64736c", "#18352d"]
+
+[theme.sidebar]
+backgroundColor = "#ecf0e7"
+secondaryBackgroundColor = "#dbe6d8"

@@ -1,5 +1,6 @@
-"""The planning agent. Claude drafts a plan, checks it with the deterministic tools and
-corrects it until submit_plan accepts it. The project lead reviews the result.
+"""The agent loop and the planning agent. Claude drafts a result, a deterministic tool checks
+it, and Claude corrects it until the submit tool accepts it. The project lead reviews the
+result. The agents for Durchführung and Kontrolle (followup.py) use the same loop.
 """
 
 import json
@@ -8,7 +9,7 @@ from collections.abc import Callable
 from contextlib import closing
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeVar
 
 from anthropic import Anthropic
 
@@ -17,13 +18,14 @@ from pm_agent.tools import PlanningTools
 
 DEFAULT_MODEL = "claude-opus-5-5"
 # One round is one reply from Claude. Drafting, a few checks and the submission take about
-# five; ten without an accepted plan means Claude is stuck.
+# five; ten without an accepted result means Claude is stuck.
 MAX_ROUNDS = 10
-SYSTEM_PROMPT = (Path(__file__).parent / "prompts" / "planning.md").read_text(encoding="utf-8")
+PROMPTS = Path(__file__).parent / "prompts"
+SYSTEM_PROMPT = (PROMPTS / "planning.md").read_text(encoding="utf-8")
 # 04-Prototyp/pm_agent/logs, next to the package and git-ignored: logs hold team data.
 LOG_DIR = Path(__file__).resolve().parents[2] / "logs"
 
-# The SDK's tool runner ends quietly on these replies. None of them can lead to a plan.
+# The SDK's tool runner ends quietly on these replies. None of them can lead to a result.
 _STOP_ERRORS = {
     "max_tokens": (
         "Die Antwort von Claude wurde abgeschnitten, weil sie zu lang war. "
@@ -34,9 +36,14 @@ _STOP_ERRORS = {
     ),
 }
 
+T = TypeVar("T")
 
-class PlanningError(RuntimeError):
-    """The agent produced no plan. The message is German and meant for the project lead."""
+
+class AgentError(RuntimeError):
+    """An agent produced no result. The message is German and meant for the project lead."""
+
+
+PlanningError = AgentError  # the name the planning page and its tests use
 
 
 def run_planning(
@@ -49,41 +56,88 @@ def run_planning(
     errors, warnings possible. Raises PlanningError; errors of the API itself propagate.
     Each run, successful or not, is written to `log_dir` as one JSON file (None: no log).
     `on_round` gets each round as soon as its tools have run, for live progress."""
+    tools = PlanningTools(project, team)
+    return run_agent(
+        log_prefix="run",
+        noun="Plan",
+        system=SYSTEM_PROMPT,
+        request=_request(project, team),
+        tools=[tools.check_plan, tools.submit_plan],
+        result=lambda: tools.plan,
+        # Project and team are kept so that a run can be reopened in the UI.
+        record=lambda plan: {
+            "project": project.model_dump(mode="json"),
+            "team": [member.model_dump(mode="json") for member in team],
+            "plan": plan.model_dump(mode="json") if plan is not None else None,
+        },
+        log_dir=log_dir,
+        on_round=on_round,
+    )
+
+
+def run_agent(
+    *,
+    log_prefix: str,
+    noun: str,
+    system: str,
+    request: str,
+    tools: list[Any],
+    result: Callable[[], T | None],
+    record: Callable[[T | None], dict[str, Any]],
+    log_dir: Path | None = LOG_DIR,
+    on_round: Callable[[dict[str, Any]], None] | None = None,
+) -> T:
+    """One agent run. `result` returns what the submit tool accepted, or None until then.
+    `noun` names the result in messages ("Plan", "Statusbericht"; a masculine German noun).
+    `record` adds the agent's own fields to the log file `<log_prefix>-<time>.json`."""
     rounds: list[dict[str, Any]] = []
-    plan: Plan | None = None
+    accepted: T | None = None
     error = None
     started = datetime.now().astimezone()
     try:
-        plan = _run(project, team, rounds, on_round or (lambda _: None))
-        return plan
+        accepted = _run(noun, system, request, tools, result, rounds, on_round or (lambda _: None))
+        return accepted
     except Exception as err:
         error = f"{type(err).__name__}: {err}"
         raise
     finally:
         if log_dir is not None:
-            _write_log(log_dir, started, project, team, rounds, plan, error)
+            log_dir.mkdir(parents=True, exist_ok=True)
+            entry = {
+                "started": started.isoformat(timespec="seconds"),
+                "seconds": round((datetime.now().astimezone() - started).total_seconds(), 1),
+                "requested_model": _model(),
+                "outcome": noun.lower() if accepted is not None else "error",
+                "error": error,
+                "rounds": [{"round": n, **item} for n, item in enumerate(rounds, start=1)],
+                **record(accepted),
+            }
+            path = log_dir / f"{log_prefix}-{started:%Y%m%d-%H%M%S}.json"
+            path.write_text(json.dumps(entry, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def _run(
-    project: Project,
-    team: list[Member],
+    noun: str,
+    system: str,
+    request: str,
+    tools: list[Any],
+    result: Callable[[], T | None],
     rounds: list[dict[str, Any]],
     on_round: Callable[[dict[str, Any]], None],
-) -> Plan:
-    tools = PlanningTools(project, team)
+) -> T:
     client = Anthropic()
     # The SDK checks credentials only when it sends, and then raises a bare TypeError.
     if client.api_key is None and client.auth_token is None and client.credentials is None:
-        raise PlanningError(
+        raise AgentError(
             "Kein Zugang zur Claude API: ANTHROPIC_API_KEY ist nicht gesetzt. Trage den "
             "Schlüssel in 04-Prototyp/pm_agent/.env ein und starte mit --env-file .env."
         )
     runner = client.beta.messages.tool_runner(
         model=_model(),
         max_tokens=16_000,
-        system=SYSTEM_PROMPT,
-        messages=[{"role": "user", "content": _request(project, team)}],
-        tools=[tools.check_plan, tools.submit_plan],
+        system=system,
+        messages=[{"role": "user", "content": request}],
+        tools=tools,
         output_config={"effort": "high"},
         cache_control={"type": "ephemeral"},  # every round resends the history
         # On a refusal the API reruns the request on a fallback model it picks, in the same call.
@@ -103,22 +157,23 @@ def _run(
             response = runner.generate_tool_call_response()
             rounds[-1]["tool_results"] = _tool_results(message, response)
             on_round(rounds[-1])
-            if tools.plan is not None:
-                return tools.plan
+            accepted = result()
+            if accepted is not None:
+                return accepted
     if message is not None and message.stop_reason == "end_turn":
         said = " ".join(block.text for block in message.content if block.type == "text")
-        raise PlanningError(f"Claude hat aufgehört, ohne einen Plan einzureichen. {said}".rstrip())
-    raise PlanningError(f"Claude hat nach {MAX_ROUNDS} Runden noch keinen gültigen Plan.")
+        raise AgentError(f"Claude hat aufgehört, ohne einen {noun} einzureichen. {said}".rstrip())
+    raise AgentError(f"Claude hat nach {MAX_ROUNDS} Runden noch keinen gültigen {noun}.")
 
 
 def raise_for_stop_reason(stop_reason: str | None, refusal_category: str | None) -> None:
     if stop_reason == "refusal":
         category = f" (Kategorie: {refusal_category})" if refusal_category else ""
-        raise PlanningError(
+        raise AgentError(
             f"Claude hat die Anfrage abgelehnt{category}. Formuliere die Projektidee um."
         )
     if stop_reason in _STOP_ERRORS:
-        raise PlanningError(_STOP_ERRORS[stop_reason])
+        raise AgentError(_STOP_ERRORS[stop_reason])
 
 
 def _model() -> str:
@@ -156,31 +211,6 @@ def _text(content: Any) -> str:
     if isinstance(content, str):
         return content
     return "\n".join(block.get("text", "") for block in content or [])
-
-
-def _write_log(
-    log_dir: Path,
-    started: datetime,
-    project: Project,
-    team: list[Member],
-    rounds: list[dict[str, Any]],
-    plan: Plan | None,
-    error: str | None,
-) -> None:
-    log_dir.mkdir(parents=True, exist_ok=True)
-    path = log_dir / f"run-{started:%Y%m%d-%H%M%S}.json"
-    record = {
-        "started": started.isoformat(timespec="seconds"),
-        "seconds": round((datetime.now().astimezone() - started).total_seconds(), 1),
-        "requested_model": _model(),
-        "outcome": "plan" if plan is not None else "error",
-        "error": error,
-        "project": project.model_dump(mode="json"),
-        "team": [member.model_dump(mode="json") for member in team],
-        "rounds": [{"round": n, **item} for n, item in enumerate(rounds, start=1)],
-        "plan": plan.model_dump(mode="json") if plan is not None else None,
-    }
-    path.write_text(json.dumps(record, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def _request(project: Project, team: list[Member]) -> str:

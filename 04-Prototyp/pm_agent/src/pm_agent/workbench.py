@@ -173,7 +173,8 @@ def round_summary(number: int, record: dict[str, Any]) -> tuple[str, list[str]]:
     for result in record.get("tool_results", []):
         tool, content = result["tool"], result["content"]
         if result["is_error"]:
-            parts.append(f"{tool}: abgelehnt" if tool == "submit_plan" else f"{tool}: Fehler")
+            rejected = (tool or "").startswith("submit_")
+            parts.append(f"{tool}: abgelehnt" if rejected else f"{tool}: Fehler")
             messages.append(content)
         elif tool == "check_plan":
             report = json.loads(content)
