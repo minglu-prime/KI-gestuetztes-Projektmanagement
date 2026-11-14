@@ -398,11 +398,20 @@ def test_durchfuehrung_says_where_the_project_stands(tracked):
         assert text in chips(at)
 
 
+WAYS_ON = ["Fortschritt erfassen", "Stand prüfen"]
+
+
 def test_the_startseite_says_where_the_project_is_heading(tracked):
     at = tracked.run()
     assert not at.exception
     said = [c.value for c in at.caption] + [w.value for w in at.warning]
     assert any(text.startswith("Prognose: Voraussichtliches Ende") for text in said)
+    # And what to do about it: one of the two buttons is the recommended one.
+    assert any(m.value.startswith("**Als Nächstes:** ") for m in at.markdown)
+    assert sorted(b.proto.type for b in at.button if b.label in WAYS_ON) == [
+        "primary",
+        "secondary",
+    ]
 
 
 def test_kontrolle_forecasts_the_end_from_the_recorded_progress(tracked):

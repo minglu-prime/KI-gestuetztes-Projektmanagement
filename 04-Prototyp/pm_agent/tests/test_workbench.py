@@ -271,3 +271,19 @@ def test_a_task_without_required_skills_lists_the_least_loaded_people_first():
     assert view["depends_on"] == [("A", "Datenmodell")]
     assert [a["member"] for a in view["alternatives"]] == ["Clara", "Ben"]
     assert view["alternatives"][1]["utilization"] == pytest.approx(10 / 120)
+
+
+def test_the_bars_of_the_gantt_chart_carry_slack_and_the_critical_path():
+    ben = Member(name="Ben", skills={"SQL": 3}, hours_per_week=40)
+    data = plan_input()
+    data["tasks"].append({"id": "C", "title": "Doku", "estimate_hours": 8})
+    data["assignments"].append({"task_id": "C", "member": "Ben", "reason": "hat Zeit"})
+    plan = Plan.model_validate(data)
+    team = [*TEAM, ben]
+    bars, _ = gantt(plan, check_plan(plan, team, PROJECT), PROJECT.deadline)
+    # Anna needs Mon-Wed for A and B. Ben's C takes one day and could slip two.
+    assert [(b["Aufgabe"], b["Kritisch"], b["Puffer"]) for b in bars] == [
+        ("A · Datenmodell", True, 0),
+        ("B · API", True, 0),
+        ("C · Doku", False, 2),
+    ]

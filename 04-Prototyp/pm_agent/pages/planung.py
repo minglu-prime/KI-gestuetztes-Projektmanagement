@@ -200,7 +200,8 @@ with tabs[0]:
             ),
             "Stunden/Woche": st.column_config.NumberColumn(min_value=1, max_value=168),
             "Abwesend": st.column_config.TextColumn(
-                help="Tage ohne Arbeit, z. B. 01.12.2026–05.12.2026, 23.12.2026"
+                help="Tage ohne Arbeit, z. B. 01.12.2026–05.12.2026, 23.12.2026. Feiertage "
+                "kennt der Kalender nicht: bei allen Personen eintragen."
             ),
             "Notiz": st.column_config.TextColumn(help="z. B. Urlaub, Prüfungsphase"),
         },
@@ -372,7 +373,17 @@ with tabs[3]:
                         x2="Ende:T",
                         y=alt.Y("Aufgabe:N", sort=None, title=None, axis=alt.Axis(labelLimit=260)),
                         color="Person:N",
-                        tooltip=["Aufgabe", "Person", "Zeitraum"],
+                        # A dark outline for the tasks that set the end of the plan.
+                        stroke=alt.condition(
+                            "datum.Kritisch", alt.value("#18352d"), alt.value("transparent")
+                        ),
+                        strokeWidth=alt.value(2),
+                        tooltip=[
+                            "Aufgabe",
+                            "Person",
+                            "Zeitraum",
+                            alt.Tooltip("Puffer:Q", title="Puffer (Arbeitstage)"),
+                        ],
                     )
                 )
                 deadline_data = alt.Chart(pd.DataFrame({"Deadline": [deadline_line]}))
@@ -389,6 +400,10 @@ with tabs[3]:
                     for task_id in result.critical_path
                 )
                 st.html(f'<p class="path"><strong>Kritischer Pfad</strong>{path}</p>')
+                st.caption(
+                    "Dunkel umrandet: der kritische Pfad. Wie viele Arbeitstage Puffer eine "
+                    "Aufgabe hat, steht im Tooltip und in der Tabelle der Zuweisungen."
+                )
             else:
                 st.info("Ohne fehlerfreien Plan gibt es keinen Terminplan.")
 

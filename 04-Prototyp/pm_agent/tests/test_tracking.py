@@ -16,6 +16,7 @@ from pm_agent.tracking import (
     forecast_text,
     has_progress,
     load,
+    next_step,
     progress_rows,
     reassignment_effect,
     save,
@@ -440,4 +441,41 @@ def test_a_finished_task_is_left_out_of_a_reassignment(two_people):
     done = apply_rows(two_people, [{"ID": "Y", "Status": "fertig", "Ist (h)": 16}])
     assert reassignment_effect(done, date(2026, 11, 9), ["Y"], "Ben") == (
         "Das voraussichtliche Ende bleibt der 10.11.2026"
+    )
+
+
+def test_the_next_step_follows_from_the_state_of_the_project(tracking):
+    def advice(today, **status):
+        project = progressed(tracking, **status) if status else tracking
+        return next_step(project, today)
+
+    # Before anything is recorded, and nothing is late yet.
+    assert advice(date(2026, 11, 9)) == (
+        "Noch kein Fortschritt erfasst. Trage Status und Ist-Stunden auf der Seite "
+        "Durchführung ein.",
+        "durchfuehrung",
+    )
+    assert advice(date(2026, 11, 10), A="fertig") == (
+        "Das Projekt liegt im Plan. Halte den Fortschritt auf der Seite Durchführung aktuell.",
+        "durchfuehrung",
+    )
+    assert advice(date(2026, 11, 10)) == (
+        "1 Aufgabe ist im Verzug. Die Seite Kontrolle zeigt, was daran hängt und wohin das "
+        "Ende rückt.",
+        "kontrolle",
+    )
+    assert advice(date(2026, 11, 12)) == (
+        "2 Aufgaben sind im Verzug. Die Seite Kontrolle zeigt, was daran hängt und wohin das "
+        "Ende rückt.",
+        "kontrolle",
+    )
+    assert advice(date(2026, 12, 21)) == (
+        "Nach heutigem Stand wird die Deadline verpasst. Die Seite Kontrolle zeigt, welche "
+        "Aufgaben das Ende verschieben.",
+        "kontrolle",
+    )
+    assert advice(date(2026, 11, 12), A="fertig", B="fertig") == (
+        "Alle Aufgaben sind fertig. Der Statusbericht auf der Seite Durchführung hält den "
+        "Abschluss fest.",
+        "durchfuehrung",
     )

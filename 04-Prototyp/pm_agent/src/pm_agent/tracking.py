@@ -336,6 +336,42 @@ def reassignment_effect(tracking: Tracking, today: date, task_ids: list[str], me
     return text
 
 
+def next_step(tracking: Tracking, today: date) -> tuple[str, str]:
+    """What the project lead should look at next, and on which page ("durchfuehrung" or
+    "kontrolle"). The most urgent reason wins."""
+    outlook = forecast(tracking, today)
+    late = len(evaluate(tracking, today).overdue)
+    if outlook.end is None:
+        return (
+            "Alle Aufgaben sind fertig. Der Statusbericht auf der Seite Durchführung hält den "
+            "Abschluss fest.",
+            "durchfuehrung",
+        )
+    if outlook.deadline_gap > 0:
+        return (
+            "Nach heutigem Stand wird die Deadline verpasst. Die Seite Kontrolle zeigt, welche "
+            "Aufgaben das Ende verschieben.",
+            "kontrolle",
+        )
+    if late:
+        count = "1 Aufgabe ist" if late == 1 else f"{late} Aufgaben sind"
+        return (
+            f"{count} im Verzug. Die Seite Kontrolle zeigt, was daran hängt und wohin das "
+            "Ende rückt.",
+            "kontrolle",
+        )
+    if not has_progress(tracking):
+        return (
+            "Noch kein Fortschritt erfasst. Trage Status und Ist-Stunden auf der Seite "
+            "Durchführung ein.",
+            "durchfuehrung",
+        )
+    return (
+        "Das Projekt liegt im Plan. Halte den Fortschritt auf der Seite Durchführung aktuell.",
+        "durchfuehrung",
+    )
+
+
 def forecast_text(outlook: Forecast, deadline: date) -> str:
     """The forecast as one sentence, for the status report and the Startseite."""
     if outlook.end is None:

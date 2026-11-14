@@ -399,6 +399,8 @@ def gantt(plan: Plan, result: CheckResult, deadline: date) -> tuple[list[dict[st
             "Start": s.start,
             "Ende": bar_end(s.end),
             "Zeitraum": f"{s.start:%d.%m.} – {s.end:%d.%m.}",
+            "Kritisch": s.task_id in result.critical_path,
+            "Puffer": result.slack[s.task_id],
         }
         for s in result.schedule
     ]

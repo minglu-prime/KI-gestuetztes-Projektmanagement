@@ -4,7 +4,7 @@ from datetime import date
 
 import streamlit as st
 
-from pm_agent.tracking import evaluate, forecast, forecast_text, load, percent
+from pm_agent.tracking import evaluate, forecast, forecast_text, load, next_step, percent
 from pm_agent.workbench import InputError
 
 # How every agent works, as the diagram next to the headline (styled in assets/style.css).
@@ -118,8 +118,19 @@ with st.container(key="project"):
                 st.warning(f"Prognose: {heading}.")
             else:
                 st.caption(f"Prognose: {heading}.")
+            advice, where = next_step(tracking, date.today())
+            st.markdown(f"**Als Nächstes:** {advice}")
+            # The button for the page the advice points to is the primary one.
             with st.container(horizontal=True):
-                if st.button("Fortschritt erfassen", icon=":material/task_alt:"):
+                if st.button(
+                    "Fortschritt erfassen",
+                    icon=":material/task_alt:",
+                    type="primary" if where == "durchfuehrung" else "secondary",
+                ):
                     st.switch_page("pages/durchfuehrung.py")
-                if st.button("Stand prüfen", icon=":material/monitoring:"):
+                if st.button(
+                    "Stand prüfen",
+                    icon=":material/monitoring:",
+                    type="primary" if where == "kontrolle" else "secondary",
+                ):
                     st.switch_page("pages/kontrolle.py")
