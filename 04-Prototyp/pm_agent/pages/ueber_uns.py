@@ -2,30 +2,68 @@
 
 import streamlit as st
 
+PRINCIPLES = [
+    (
+        "vorschlag",
+        ":material/smart_toy:",
+        "Die KI schlägt vor",
+        "Claude zerlegt, schätzt, verteilt und begründet. Jedes Ergebnis kommt über ein Werkzeug "
+        "mit festem Format, nie als freier Text.",
+    ),
+    (
+        "pruefung",
+        ":material/fact_check:",
+        "Python rechnet und prüft",
+        "Termine, Auslastung, Puffer, Verzug und Prognose rechnet Python. Was die Prüfung "
+        "ablehnt, geht mit den Gründen zurück an Claude.",
+    ),
+    (
+        "entscheidung",
+        ":material/how_to_reg:",
+        "Der Mensch entscheidet",
+        "Ein Plan gilt erst, wenn die Projektleitung ihn übernimmt. Warnungen bleiben stehen, "
+        "bis sie jemand gesehen hat.",
+    ),
+]
+
 st.header("Über uns")
 st.markdown(
+    "Diese Website ist der Prototyp der **Projektgruppe 4** im Modul IPM an der Hochschule "
+    "Bielefeld (HSBI), Thema 4: **KI im Projektmanagement**."
+)
+with st.container(border=True, key="panel-frage"):
+    st.html('<p class="card-number">FRAGESTELLUNG</p>')
+    st.markdown(
+        "#### Welche Aufgaben des klassischen Projektmanagements kann ein KI-Agent "
+        "übernehmen, und was ändert sich dadurch?"
+    )
+    st.markdown(
+        "Chancen und Risiken zeigen wir an einem konkreten Beispiel: einem Softwareprojekt."
+    )
+
+st.subheader("Grundsätze")
+for column, (slug, icon, title, text) in zip(st.columns(3), PRINCIPLES, strict=True):
+    with column.container(border=True, key=f"panel-{slug}", height="stretch"):
+        st.markdown(f"#### {icon} {title}")
+        st.write(text)
+
+st.subheader("Was die Website enthält")
+st.markdown(
     """
-Diese Website ist der Prototyp der **Projektgruppe 4** im Modul IPM an der Hochschule
-Bielefeld (HSBI), Thema 4: **KI im Projektmanagement**.
-
-**Fragestellung:** Welche Aufgaben des klassischen Projektmanagements kann ein KI-Agent
-übernehmen, und was ändert sich dadurch? Chancen und Risiken zeigen wir an einem konkreten
-Beispiel.
-
-**Was die Website enthält**
-
-- **Agenten:** Planung, Durchführung und Kontrolle. Claude schlägt vor, Python prüft
-  deterministisch. Die Agenten für Durchführung und Kontrolle sind ein erstes Gerüst.
+- **Planung:** Claude erstellt einen Plan und ändert ihn im Gespräch. Jede Runde ist sichtbar,
+  und zu jeder Aufgabe steht, warum sie bei dieser Person liegt.
+- **Durchführung:** Fortschritt erfassen; Statusbericht und Arbeitspaketbeschreibungen entstehen
+  aus Vorlagen. Der Agent dafür ist ein erstes Gerüst.
+- **Kontrolle:** Plan gegen Ist, Prognose des Endes und der Weg zurück in die Planung. Der Agent
+  dafür ist ein erstes Gerüst.
 - **KI-Lab:** kontrollierter Vergleich derselben Art von Planungsaufgabe ohne und mit KI-Hilfe.
 
-**Grundsätze**
-
-- Die KI schlägt vor, die Projektleitung entscheidet.
-- Rechnen und Prüfen übernimmt Python, nicht das Sprachmodell.
-- Teamdaten und Protokolle bleiben lokal und stehen nicht im Repository.
+Teamdaten und Protokolle bleiben lokal und stehen nicht im Repository.
 """
 )
 st.link_button(
-    "Quellcode auf GitHub", "https://github.com/minglu-prime/KI-gestuetztes-Projektmanagement"
+    "Quellcode auf GitHub",
+    "https://github.com/minglu-prime/KI-gestuetztes-Projektmanagement",
+    icon=":material/code:",
 )
 st.caption("Die Namen der Teammitglieder stehen hier erst, wenn alle zugestimmt haben.")
