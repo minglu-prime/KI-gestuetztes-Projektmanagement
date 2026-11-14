@@ -126,8 +126,13 @@ Termine von 2 Aufgaben verschieben sich
 Erst „Übernehmen“ macht ihn gültig. Wer Claude nicht fragen will, ändert die Tabelle darunter
 von Hand; dann läuft nur die Prüfung.
 
+Was sich zu fragen lohnt, leitet Python aus der Prüfung ab und bietet es als Schaltfläche an:
+den Plan bis zur Deadline enden lassen, eine überlastete Person entlasten, eine Aufgabe jemandem
+geben, der den verlangten Skill hat, oder durchspielen, was passiert, wenn die längste Aufgabe
+auf dem kritischen Pfad doppelt so lange dauert.
+
 <div align="center">
-<img src="04-Prototyp/pm_agent/assets/screenshots/planung-gespraech.jpg" width="820" alt="Schritt Anpassen: oben das Feld „Mit Claude ändern“ mit Eingabezeile, darunter die Tabelle zum Ändern von Hand">
+<img src="04-Prototyp/pm_agent/assets/screenshots/planung-gespraech.jpg" width="820" alt="Schritt Anpassen: oben das Feld „Mit Claude ändern“ mit einem vorgeschlagenen Wunsch und der Eingabezeile, darunter die Tabelle zum Ändern von Hand">
 </div>
 
 ### Durchführung und Kontrolle
@@ -143,6 +148,22 @@ Die Kontrolle sagt auch, was ein Verzug bedeutet. Die **Prognose** plant alles, 
 fertig ist, ab heute neu ein und vergleicht das Ende mit Plan und Deadline. Im Beispiel unten
 sind zwei Aufgaben ein bis zwei Tage im Verzug; die Folge ist ein Ende vier Arbeitstage nach
 Plan und einen Tag nach der Deadline.
+
+Von dort geht es zurück in die Planung: „Rest mit Claude umplanen“ lädt die unfertigen Aufgaben
+als Plan ab heute, und das Gespräch mit Claude beginnt mit genau dem Problem, das die Prognose
+gezeigt hat.
+
+```mermaid
+flowchart LR
+    P[Planung] -- Plan übernehmen --> D[Durchführung]
+    D -- Fortschritt --> K[Kontrolle]
+    K -- Prognose: Deadline in Gefahr --> R[Rest umplanen]
+    R --> P
+```
+
+Schlägt der Kontroll-Agent vor, Aufgaben einer anderen Person zu geben, rechnet Python nach, was
+das für das voraussichtliche Ende bedeutet. Das Ergebnis steht neben der Wirkung, die Claude
+erwartet. Maßnahmen ohne Umverteilung sind als nicht nachrechenbar markiert.
 
 <div align="center">
 <img src="04-Prototyp/pm_agent/assets/screenshots/kontrolle.jpg" width="820" alt="Prognose auf der Seite Kontrolle: voraussichtliches Ende 21.12.2026, vier Arbeitstage nach Plan, Deadline um einen Arbeitstag verpasst; welche Aufgaben die beiden verspäteten aufhalten; Diagramm mit Plan und Prognose je Aufgabe und Linien für heute und die Deadline">
