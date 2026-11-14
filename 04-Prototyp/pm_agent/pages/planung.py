@@ -110,6 +110,39 @@ def show_plan(plan, rounds, source, agent_seconds, rounds_start=None) -> None:
     )
 
 
+def forget_conversation() -> None:
+    """A new plan is on the table: the conversation, an open proposal and a wish that was
+    not answered yet were about another one."""
+    state.update(chat=[], proposal=None)
+    state.pop("asked", None)
+
+
+def table_matches_plan() -> bool:
+    """Whether the table of step 5, as the editor last returned it, says what the current
+    plan says. False while hand edits wait for "Erneut prüfen"."""
+    if state.get("plan_current") is None:  # not shown since the plan changed
+        return True
+    try:
+        typed = rows_to_plan(
+            state.plan_current.to_dict("records"),
+            state.original,
+            state.get("risks_text", "").splitlines(),
+        )
+    except InputError:  # unreadable as it stands: certainly not the current plan
+        return False
+    return typed == state.plan
+
+
+def reset_table() -> None:
+    """Callback: the table of step 5 shows the current plan again, hand edits are dropped."""
+    state.update(
+        plan_df=pd.DataFrame(plan_rows(state.plan), columns=PLAN_COLUMNS),
+        plan_current=None,
+        risks_text="\n".join(state.plan.risks),
+        editor_version=state.editor_version + 1,
+    )
+
+
 def open_run(path) -> None:
     """Callback: runs before the widgets, so it may fill their keys."""
     project, team, plan, record = load_run(path)
@@ -118,7 +151,7 @@ def open_run(path) -> None:
     state.team_version += 1
     state.update(idea=project.idea, start=project.start_date, deadline=project.deadline)
     show_plan(plan, record["rounds"], f"Protokoll {path.name}", record.get("seconds"))
-    state.update(chat=[], proposal=None)  # the conversation was about another plan
+    forget_conversation()
     state.step = STEPS[3]  # straight to the result
 
 
@@ -135,7 +168,7 @@ def load_rest() -> None:
     state.team_version += 1
     state.update(idea=project.idea, start=project.start_date, deadline=project.deadline)
     show_plan(plan, [], "Rest des übernommenen Projekts", None)
-    state.update(chat=[], proposal=None)  # the conversation was about another plan
+    forget_conversation()
     state.step = STEPS[4]  # straight to the step with the conversation
 
 
@@ -148,6 +181,10 @@ def ask(wish: str | None = None) -> None:
 def decide(accept: bool) -> None:
     """Callback: the project lead takes or drops the change Claude proposed."""
     proposal = state.proposal
+    if proposal is None:
+        # The second click of a double click: Streamlit calls the callback again although
+        # the first click has already decided. Nothing is left to decide.
+        return
     state.proposal = None
     state.chat.append(
         {"wish": proposal["wish"], "changes": proposal["changes"], "accepted": accept}
@@ -326,7 +363,7 @@ with tabs[2]:
                     failure = f"Die Claude API meldet einen Fehler: {err}"
                 else:
                     show_plan(plan, rounds, "Agent", round(time.monotonic() - started, 1))
-                    state.update(chat=[], proposal=None)  # the conversation was about another plan
+                    forget_conversation()
                 # The message goes below the box: a collapsed status would hide it.
                 label = f"Kein Plan nach {len(rounds)} Runden" if failure else "Plan angenommen"
                 status.update(label=label, state="error" if failure else "complete", expanded=True)
@@ -589,9 +626,12 @@ with tabs[4]:
                 ]
                 if not ok
             ]
+            # Claude gets the current plan, and taking its proposal replaces the table. Hand
+            # edits that were not checked would be ignored first and overwritten then.
+            unchecked = not table_matches_plan()
             wish = state.pop("asked", None)  # set by the chat input at the end of the panel
             # A second wish must not replace a proposal that is still open.
-            if wish and proposal is None and not blocked:
+            if wish and proposal is None and not blocked and not unchecked:
                 with st.chat_message("user"):
                     st.text(wish)
                 change_rounds = []
@@ -679,6 +719,14 @@ with tabs[4]:
                 st.caption("Für eine Änderung mit Claude fehlt noch: " + ", ".join(blocked) + ".")
             elif proposal is not None:
                 st.caption("Entscheide erst über den offenen Vorschlag.")
+            elif unchecked:
+                st.warning(
+                    "In der Tabelle unten stehen Änderungen, die noch nicht geprüft sind. Claude "
+                    "bekäme den Plan ohne sie, und sein Vorschlag würde sie überschreiben. "
+                    "Übernimm sie mit „Erneut prüfen“ oder setz die Tabelle zurück."
+                    + (" Dein Wunsch wurde nicht gestellt." if wish else "")
+                )
+                st.button("Tabelle zurücksetzen", icon=":material/undo:", on_click=reset_table)
             else:
                 suggestions = suggested_wishes(state.plan, team, result, project)
                 if suggestions:
@@ -695,7 +743,7 @@ with tabs[4]:
                 "Was soll sich ändern?",
                 key="wish",
                 on_submit=ask,
-                disabled=bool(blocked) or proposal is not None,
+                disabled=bool(blocked) or proposal is not None or unchecked,
             )
 
         st.markdown("#### :material/edit: Von Hand ändern")

@@ -1,5 +1,6 @@
 """The Streamlit site headless, with the agent replaced: no network, no files in data/ or logs/."""
 
+import json
 import socket
 import tomllib
 from datetime import date
@@ -169,6 +170,30 @@ def test_a_task_is_explained_in_the_result(with_plan):
     assert "- A · Datenmodell" in [m.value for m in at.markdown]
 
 
+def test_a_wish_left_over_from_another_plan_is_not_asked_for_a_reopened_run(
+    with_plan, monkeypatch, tmp_path
+):
+    # A wish is waiting, then the project lead opens a logged run instead.
+    log = tmp_path / "run-20261109-120000.json"
+    record = {
+        "project": PROJECT.model_dump(mode="json"),
+        "team": [m.model_dump(mode="json") for m in TEAM],
+        "plan": PLAN.model_dump(mode="json"),
+        "rounds": [],
+    }
+    log.write_text(json.dumps(record), encoding="utf-8")
+    monkeypatch.setattr(workbench, "saved_runs", lambda: [log])
+    at = with_plan.run()
+    at.session_state["asked"] = WISH
+    button(at, "Lauf öffnen").click()
+    at.run()
+
+    assert not at.exception
+    assert at.session_state["source"] == f"Protokoll {log.name}"
+    assert "asked" not in at.session_state
+    assert at.session_state["proposal"] is None  # Claude was not asked
+
+
 def test_a_change_asked_from_claude_is_shown_as_differences_before_it_counts(with_plan):
     at = with_plan.chat_input(key="wish").set_value(WISH).run()
 
@@ -206,6 +231,25 @@ def test_a_suggested_wish_is_asked_with_one_click(with_plan, monkeypatch):
     assert asked == [suggestion]
     assert at.session_state["proposal"]["wish"] == suggestion
     assert suggestion not in [b.label for b in at.button]  # decide on the proposal first
+
+
+def test_claude_is_not_asked_while_the_table_holds_edits_that_were_not_checked(with_plan):
+    # What the table editor returned after the project lead changed the hours of A by hand,
+    # without "Erneut prüfen": the current plan still says 8 h.
+    rows = workbench.plan_rows(PLAN)
+    rows[0]["Stunden"] = 40
+    with_plan.session_state["plan_current"] = pd.DataFrame(rows, columns=workbench.PLAN_COLUMNS)
+    with_plan.session_state["asked"] = WISH  # a wish typed in the same moment
+    at = with_plan.run()
+
+    assert not at.exception
+    assert at.chat_input(key="wish").disabled
+    assert any("noch nicht geprüft" in w.value for w in at.warning)
+    # Claude was not called: it would have got the plan without the edit, and taking its
+    # proposal would have overwritten the table.
+    assert at.session_state["proposal"] is None
+    assert at.session_state["plan"] == PLAN
+    assert "Tabelle zurücksetzen" in [b.label for b in at.button]
 
 
 def test_a_dropped_proposal_leaves_the_plan_as_it_was(with_plan):
