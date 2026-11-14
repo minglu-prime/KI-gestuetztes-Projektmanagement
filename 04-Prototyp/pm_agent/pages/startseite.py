@@ -114,7 +114,9 @@ with st.container(key="project"):
             c.metric("Im Verzug", len(result.overdue))
             outlook = forecast(tracking, date.today())
             heading = forecast_text(outlook, tracking.project.deadline).rstrip(".")
-            if outlook.deadline_gap > 0:
+            if outlook.problem:
+                st.error(f"Prognose: {heading}.")
+            elif outlook.deadline_gap > 0:
                 st.warning(f"Prognose: {heading}.")
             else:
                 st.caption(f"Prognose: {heading}.")

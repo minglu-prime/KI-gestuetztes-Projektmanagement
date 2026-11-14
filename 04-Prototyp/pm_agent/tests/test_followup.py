@@ -101,6 +101,7 @@ def test_the_agents_get_the_computed_numbers_not_raw_material_to_compute(trackin
         "arbeitstage_spaeter_als_geplant": 2,
         "arbeitstage_nach_der_deadline": -25,
         "haelt_auf": {"B": []},
+        "nicht_berechenbar": None,
     }
     b = data["aufgaben"][1]
     assert (b["id"], b["overdue"], b["planned_end"], b["depends_on"]) == (

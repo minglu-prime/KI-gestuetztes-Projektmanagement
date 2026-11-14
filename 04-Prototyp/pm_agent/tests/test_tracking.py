@@ -5,6 +5,7 @@ import pytest
 from test_tools import PROJECT, TEAM, plan_input
 
 from pm_agent.models import Member, Plan, StatusSummary
+from pm_agent.planning import check_plan
 from pm_agent.tracking import (
     Progress,
     adopt,
@@ -19,6 +20,7 @@ from pm_agent.tracking import (
     next_step,
     progress_rows,
     reassignment_effect,
+    rest_plan,
     rest_project,
     save,
     status_report,
@@ -512,3 +514,84 @@ def test_there_is_no_rest_of_a_finished_project_or_after_the_deadline(tracking):
         rest_project(done, date(2026, 11, 12))
     with pytest.raises(InputError, match=r"Die Deadline \(18.12.2026\) liegt in der Vergangenheit"):
         rest_project(tracking, date(2026, 12, 21))
+
+
+def test_a_rest_that_does_not_fit_the_calendar_is_a_problem_not_a_crash(tracking):
+    # A typo-sized remaining estimate: 20 million hours end after the year 9999.
+    absurd = apply_rows(tracking, [{"ID": "B", "Status": "in Arbeit", "Rest (h)": 20_000_000}])
+    today = date(2026, 11, 10)
+    outlook = forecast(absurd, today)
+
+    assert outlook.problem == (
+        "Task 'B' würde erst nach dem 31.12.9999 enden, so weit reicht der Kalender nicht"
+    )
+    assert (outlook.end, outlook.schedule) == (None, [])
+    assert forecast_text(outlook, PROJECT.deadline) == f"Nicht berechenbar: {outlook.problem}"
+    assert forecast_bars(evaluate(absurd, today), outlook) == []
+    advice, page = next_step(absurd, today)
+    assert advice.startswith("Die Prognose lässt sich nicht berechnen") and page == "durchfuehrung"
+    # The status report and the facts for the agents are still written.
+    assert "**Prognose:** Nicht berechenbar" in status_report(absurd, evaluate(absurd, today))
+
+
+def test_a_reassignment_that_cannot_be_scheduled_is_not_checkable(two_people):
+    gone = Member(
+        name="Cem",
+        hours_per_week=40,
+        absences=[{"first": date(2026, 11, 1), "last": date.max}],
+    )
+    with_cem = two_people.model_copy(update={"team": [*two_people.team, gone]})
+    monday = date(2026, 11, 9)
+    assert reassignment_effect(with_cem, monday, ["Y"], "Cem") == (
+        "Nicht prüfbar: Task 'Y' würde erst nach dem 31.12.9999 enden, so weit reicht der "
+        "Kalender nicht"
+    )
+    # Names outside the team are not scheduled either.
+    assert forecast(two_people, monday, reassign={"Y": "Zoe"}).problem == (
+        "Task 'Y' ist 'Zoe' zugewiesen, diese Person ist nicht im Team"
+    )
+
+
+def test_the_forecast_keeps_the_order_of_the_plan_when_a_finished_task_drops_out(tmp_path):
+    # Anna: T1, then T2 (after T1) and T3. Ben: T4 after T3. The plan puts T3 before T2.
+    ben = Member(name="Ben", hours_per_week=40)
+    plan = Plan.model_validate(
+        {
+            "tasks": [
+                {"id": "T1", "title": "a", "estimate_hours": 8},
+                {"id": "T2", "title": "b", "estimate_hours": 16, "depends_on": ["T1"]},
+                {"id": "T3", "title": "c", "estimate_hours": 8},
+                {"id": "T4", "title": "d", "estimate_hours": 24, "depends_on": ["T3"]},
+            ],
+            "assignments": [
+                {"task_id": tid, "member": member, "reason": "r"}
+                for tid, member in [("T1", "Anna"), ("T2", "Anna"), ("T3", "Anna"), ("T4", "Ben")]
+            ],
+        }
+    )
+    team = [*TEAM, ben]
+    planned = {s.task_id: (s.start, s.end) for s in check_plan(plan, team, PROJECT).schedule}
+    assert planned["T3"][0] < planned["T2"][0]  # the case this test is about
+    adopted = adopt(PROJECT, team, plan, path=tmp_path / "projekt.json")
+    on_plan = apply_rows(adopted, [{"ID": "T1", "Status": "fertig", "Ist (h)": 8}])
+
+    outlook = forecast(on_plan, date(2026, 11, 10))  # Tuesday: T1 was done on Monday
+
+    assert outlook.shift == 0
+    assert {s.task_id: (s.start, s.end) for s in outlook.schedule} == {
+        tid: dates for tid, dates in planned.items() if tid != "T1"
+    }
+
+
+def test_a_started_task_shorter_than_an_hour_is_not_counted_as_an_hour(tmp_path):
+    short = Plan.model_validate(
+        {
+            "tasks": [{"id": "A", "title": "Mail", "estimate_hours": 0.5}],
+            "assignments": [{"task_id": "A", "member": "Anna", "reason": "r"}],
+        }
+    )
+    adopted = adopt(PROJECT, TEAM, short, path=tmp_path / "projekt.json")
+    started = apply_rows(adopted, [{"ID": "A", "Status": "in Arbeit", "Ist (h)": 0}])
+    assert rest_plan(started).tasks[0].estimate_hours == 0.5
+    overrun = apply_rows(adopted, [{"ID": "A", "Status": "in Arbeit", "Ist (h)": 2}])
+    assert rest_plan(overrun).tasks[0].estimate_hours == 0.5

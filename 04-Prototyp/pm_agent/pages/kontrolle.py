@@ -60,7 +60,12 @@ if tracking is not None:
     with st.container(border=True, key="panel-forecast"):
         st.markdown("#### :material/trending_up: Prognose")
         outlook = forecast(tracking, date.today())
-        if outlook.end is None:
+        if outlook.problem:
+            st.error(
+                f"Die Prognose lässt sich nicht berechnen: {outlook.problem}. Prüfe Status und "
+                "Rest-Stunden auf der Seite Durchführung."
+            )
+        elif outlook.end is None:
             st.success("Alle Aufgaben sind fertig.")
         else:
             end, deadline = st.columns(2)

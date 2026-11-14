@@ -141,6 +141,7 @@ def facts(tracking: Tracking, evaluation: Evaluation) -> str:
             "arbeitstage_spaeter_als_geplant": outlook.shift,
             "arbeitstage_nach_der_deadline": outlook.deadline_gap,
             "haelt_auf": outlook.blocked,
+            "nicht_berechenbar": outlook.problem,
         },
         "aufgaben": [
             {

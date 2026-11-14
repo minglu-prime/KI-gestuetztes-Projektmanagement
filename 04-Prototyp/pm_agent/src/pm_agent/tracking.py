@@ -17,7 +17,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from pm_agent.agent import LOG_DIR
 from pm_agent.models import Member, Plan, Project, ScheduledTask, StatusSummary, Task
-from pm_agent.planning import check_plan, workday_shift
+from pm_agent.planning import check_plan, scheduling_order, workday_shift
 from pm_agent.workbench import DATA_DIR, InputError, _cell, _date, _md, _reason, bar_end
 
 PROJECT_FILE = DATA_DIR / "projekt.json"
@@ -232,6 +232,9 @@ class Forecast:
     deadline_gap: int  # workdays the end lies behind the deadline; negative: buffer left
     blocked: dict[str, list[str]]  # overdue task -> unfinished tasks that wait for it
     schedule: list[ScheduledTask]  # the forecast dates of the unfinished tasks
+    # Why there is no forecast although tasks are unfinished: what is left does not fit
+    # the calendar, or cannot be scheduled as asked. `end` is None then as well.
+    problem: str | None = None
 
 
 def rest_plan(tracking: Tracking, reassign: dict[str, str] | None = None) -> Plan | None:
@@ -248,7 +251,9 @@ def rest_plan(tracking: Tracking, reassign: dict[str, str] | None = None) -> Pla
         if done.remaining_hours is not None:
             return done.remaining_hours
         if done.status == "in Arbeit":
-            return max(task.estimate_hours - done.actual_hours, MIN_REST_HOURS)
+            # Never more than the task itself: one under an hour stays under an hour.
+            floor = min(MIN_REST_HOURS, task.estimate_hours)
+            return max(task.estimate_hours - done.actual_hours, floor)
         return task.estimate_hours
 
     open_ids = {task.id for task in tracking.plan.tasks if state[task.id].status != "fertig"}
@@ -309,7 +314,21 @@ def forecast(tracking: Tracking, today: date, reassign: dict[str, str] | None = 
     open_end = Project(
         idea=project.idea, start_date=max(today, project.start_date), deadline=date.max
     )
-    expected = check_plan(rest, tracking.team, open_end)
+    # In the order of the plan. On its own the rest can sort differently, because the
+    # dependencies on finished tasks are gone, and a project on plan would look late.
+    left = {task.id for task in rest.tasks}
+    order = [tid for tid in scheduling_order(plan) if tid in left]
+    expected = check_plan(rest, tracking.team, open_end, order=order)
+    if expected.errors:
+        return Forecast(
+            planned_end=planned_end,
+            end=None,
+            shift=0,
+            deadline_gap=0,
+            blocked={},
+            schedule=[],
+            problem="; ".join(expected.errors),
+        )
     end = expected.end_date
 
     waiting: dict[str, list[str]] = {}
@@ -341,9 +360,13 @@ def reassignment_effect(tracking: Tracking, today: date, task_ids: list[str], me
     tasks = {task.id: task for task in tracking.plan.tasks}
     moved = [tid for tid in task_ids if tracking.progress[tid].status != "fertig"]
     before = forecast(tracking, today)
+    if before.problem:
+        return f"Nicht prüfbar: {before.problem}"
     if before.end is None:
         return "Alle Aufgaben sind fertig."
     after = forecast(tracking, today, reassign=dict.fromkeys(moved, member))
+    if after.problem:
+        return f"Nicht prüfbar: {after.problem}"
     shift = workday_shift(before.end, after.end)
     if shift:
         days = f"{abs(shift)} Arbeitstag{'' if abs(shift) == 1 else 'e'}"
@@ -366,6 +389,12 @@ def next_step(tracking: Tracking, today: date) -> tuple[str, str]:
     "kontrolle"). The most urgent reason wins."""
     outlook = forecast(tracking, today)
     late = len(evaluate(tracking, today).overdue)
+    if outlook.problem:
+        return (
+            f"Die Prognose lässt sich nicht berechnen: {outlook.problem}. Prüfe Status und "
+            "Rest-Stunden auf der Seite Durchführung.",
+            "durchfuehrung",
+        )
     if outlook.end is None:
         return (
             "Alle Aufgaben sind fertig. Der Statusbericht auf der Seite Durchführung hält den "
@@ -399,6 +428,8 @@ def next_step(tracking: Tracking, today: date) -> tuple[str, str]:
 
 def forecast_text(outlook: Forecast, deadline: date) -> str:
     """The forecast as one sentence, for the status report and the Startseite."""
+    if outlook.problem:
+        return f"Nicht berechenbar: {outlook.problem}"
     if outlook.end is None:
         return "Alle Aufgaben sind fertig."
 

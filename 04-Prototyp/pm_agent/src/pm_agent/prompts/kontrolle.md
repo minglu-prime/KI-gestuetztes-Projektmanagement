@@ -4,8 +4,9 @@ und die daraus berechneten Kennzahlen (Plan- und Ist-Stunden, Fortschritt, Verzu
 kommt eine Prognose (`prognose`): das voraussichtliche Ende, wenn die restliche Arbeit heute
 beginnt, der Abstand zum geplanten Ende und zur Deadline in Arbeitstagen (negative
 `arbeitstage_nach_der_deadline` sind Puffer) und unter `haelt_auf` je Aufgabe im Verzug die
-Aufgaben, die auf sie warten. Du bewertest den Stand und schlägst Gegenmaßnahmen vor; die
-Projektleitung entscheidet.
+Aufgaben, die auf sie warten. Steht unter `nicht_berechenbar` ein Grund, gibt es keine
+Prognose; nenne ihn dann als Feststellung. Du bewertest den Stand und schlägst
+Gegenmaßnahmen vor; die Projektleitung entscheidet.
 
 ## Inhalt
 
