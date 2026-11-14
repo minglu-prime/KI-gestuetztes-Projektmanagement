@@ -11,6 +11,7 @@ from pm_agent.planning import check_plan
 from pm_agent.workbench import (
     InputError,
     append_run,
+    explain_task,
     gantt,
     load_run,
     load_team,
@@ -231,3 +232,42 @@ def test_an_unreadable_absence_names_the_row_and_shows_the_expected_form():
     rows[0]["Abwesend"] = "05.12.2026–01.12.2026"
     with pytest.raises(InputError, match="Ende der Abwesenheit liegt vor ihrem Beginn"):
         rows_to_team(rows)
+
+
+BEN = Member(name="Ben", skills={"SQL": 3}, hours_per_week=20)
+CLARA = Member(name="Clara", skills={"sql": 4, "Python": 2}, hours_per_week=10)
+
+
+def test_a_task_is_explained_with_its_reason_skills_neighbours_and_slack():
+    team = [*TEAM, BEN, CLARA]
+    result = check_plan(PLAN, team, PROJECT)
+    view = explain_task(PLAN, team, result, "A")
+
+    assert (view["title"], view["member"], view["hours"]) == ("Datenmodell", "Anna", 8)
+    assert view["reason"] == "kennt die Raumdaten"
+    assert (view["start"], view["end"]) == (date(2026, 11, 9), date(2026, 11, 9))
+    assert view["skills"] == [("SQL", None)]  # Anna has not named SQL
+    assert view["depends_on"] == [] and view["needed_by"] == [("B", "API")]
+    assert view["critical"] is True and view["slack"] == 0
+    # Who else could do it: best fit first. Skill names match without regard to case.
+    assert view["alternatives"] == [
+        {"member": "Clara", "skills": {"SQL": 4}, "utilization": 0},
+        {"member": "Ben", "skills": {"SQL": 3}, "utilization": 0},
+    ]
+
+
+def test_a_task_without_required_skills_lists_the_least_loaded_people_first():
+    busy_ben = Plan.model_validate(
+        {
+            **plan_input(),
+            "tasks": plan_input()["tasks"] + [{"id": "C", "title": "Doku", "estimate_hours": 10}],
+            "assignments": plan_input()["assignments"]
+            + [{"task_id": "C", "member": "Ben", "reason": "hat Zeit"}],
+        }
+    )
+    team = [*TEAM, BEN, CLARA]
+    view = explain_task(busy_ben, team, check_plan(busy_ben, team, PROJECT), "B")
+    assert view["skills"] == []
+    assert view["depends_on"] == [("A", "Datenmodell")]
+    assert [a["member"] for a in view["alternatives"]] == ["Clara", "Ben"]
+    assert view["alternatives"][1]["utilization"] == pytest.approx(10 / 120)

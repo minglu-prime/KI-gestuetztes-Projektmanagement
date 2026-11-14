@@ -30,6 +30,7 @@ from pm_agent.workbench import (
     InputError,
     append_run,
     check_changes,
+    explain_task,
     gantt,
     load_run,
     load_team,
@@ -415,10 +416,88 @@ with tabs[3]:
 
         with st.container(border=True, key="panel-reasons"):
             st.markdown("#### :material/assignment_ind: Zuweisungen und Begründungen")
-            st.dataframe(
-                pd.DataFrame(plan_rows(state.plan))[["ID", "Aufgabe", "Person", "Begründung"]],
-                hide_index=True,
-            )
+            reasons = pd.DataFrame(plan_rows(state.plan))[["ID", "Aufgabe", "Person", "Begründung"]]
+            if result.slack:
+                reasons.insert(3, "Puffer (Tage)", reasons["ID"].map(result.slack))
+            st.dataframe(reasons, hide_index=True)
+
+        if result.schedule:
+            with st.container(border=True, key="panel-task"):
+                st.markdown("#### :material/search: Aufgabe im Detail")
+                st.caption(
+                    "Warum diese Person, was hängt an der Aufgabe, und wer könnte sie sonst "
+                    "übernehmen? Die Begründung stammt von Claude, alles andere rechnet Python."
+                )
+                names = {task.id: f"{task.id} · {task.title}" for task in state.plan.tasks}
+                chosen = st.selectbox("Aufgabe", list(names), format_func=names.get)
+                view = explain_task(state.plan, team, result, chosen)
+                room = (
+                    chip("Auf dem kritischen Pfad", "warn")
+                    if view["critical"]
+                    else chip(
+                        f"{view['slack']} Arbeitstag{'' if view['slack'] == 1 else 'e'} Puffer",
+                        "on" if view["slack"] else "",
+                    )
+                )
+                st.html(
+                    strip(
+                        chip(view["member"], "plain"),
+                        chip(f"{view['hours']:g} h", "plain"),
+                        chip(f"{view['start']:%d.%m.} – {view['end']:%d.%m.%Y}", "plain"),
+                        room,
+                    )
+                )
+                if view["description"]:
+                    st.markdown(view["description"])
+                why, around = st.columns(2, gap="medium")
+                with why:
+                    st.markdown(f"**Warum {view['member']}?**")
+                    st.markdown(view["reason"])
+                    for skill, level in view["skills"]:
+                        have = (
+                            f"Stufe {level}" if level else f"bei {view['member']} nicht angegeben"
+                        )
+                        st.markdown(f"- {skill}: {have}")
+                with around:
+                    st.markdown("**Braucht vorher**")
+                    st.markdown(
+                        "\n".join(f"- {tid} · {title}" for tid, title in view["depends_on"])
+                        or "Nichts: Die Aufgabe kann sofort beginnen."
+                    )
+                    st.markdown("**Darauf warten**")
+                    st.markdown(
+                        "\n".join(f"- {tid} · {title}" for tid, title in view["needed_by"])
+                        or "Keine andere Aufgabe."
+                    )
+                st.markdown("**Wer könnte es sonst?**")
+                if view["alternatives"]:
+                    st.dataframe(
+                        pd.DataFrame(
+                            [
+                                {
+                                    "Person": other["member"],
+                                    "Passende Skills": ", ".join(
+                                        f"{skill} {level}"
+                                        for skill, level in other["skills"].items()
+                                    ),
+                                    "Auslastung": other["utilization"],
+                                }
+                                for other in view["alternatives"]
+                            ]
+                        ),
+                        hide_index=True,
+                        column_config={
+                            "Auslastung": st.column_config.ProgressColumn(
+                                format="percent", min_value=0, max_value=1
+                            )
+                        },
+                    )
+                    st.caption(
+                        "Auslastung bis zur Deadline im aktuellen Plan. Eine Umverteilung "
+                        "lässt sich im Schritt Anpassen durchspielen."
+                    )
+                else:
+                    st.caption("Niemand sonst im Team hat einen der verlangten Skills angegeben.")
 
         with st.container(horizontal=True):
             st.button("Plan anpassen", icon=":material/edit:", on_click=go, args=(STEPS[4],))

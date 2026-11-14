@@ -54,6 +54,9 @@ Sechs Schritte als Reiter:
 3. **Planung**: Claude plant, jede Runde erscheint sofort. Alternativ einen protokollierten Lauf
    aus `logs/` öffnen, ohne Claude erneut aufzurufen (z. B. für Vorführungen).
 4. **Ergebnis**: Planende, Fehler, Warnungen, Gantt-Diagramm, Auslastung, Begründungen, Risiken.
+   „Aufgabe im Detail“ erklärt eine Aufgabe: warum diese Person, welche Skills sie dafür hat,
+   was vorher fertig sein muss und was darauf wartet, wie viele Arbeitstage Puffer sie hat
+   und wer im Team sie sonst übernehmen könnte.
 5. **Anpassen**: zwei Wege. Mit Claude: einen Wunsch oder eine Annahme eintippen („Clara
    übernimmt die Tests“, „Was, wenn das Backend doppelt so lange dauert?“); Claude ändert
    den Plan, Python prüft ihn und zeigt die Unterschiede zum bisherigen Plan, erst

@@ -32,13 +32,15 @@ def adopted_project() -> Tracking | None:
     return tracking
 
 
-MARKS = {"on": "✓", "warn": "!", "": "○"}
+MARKS = {"on": "✓", "warn": "!", "": "○", "plain": ""}
 
 
 def chip(text: str, state: str = "") -> str:
     """One entry of a status strip as HTML (styled in assets/style.css). `state` is "on" for
-    done, "warn" for something that needs attention, and empty for open."""
-    return f'<span class="chip {state}">{MARKS[state]} {escape(text)}</span>'
+    done, "warn" for something that needs attention, empty for open, and "plain" for a fact
+    that is none of these and gets no mark."""
+    label = f"{MARKS[state]} {escape(text)}".strip()
+    return f'<span class="chip {state}">{label}</span>'
 
 
 def strip(*chips: str) -> str:

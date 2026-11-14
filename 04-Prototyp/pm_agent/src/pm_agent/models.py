@@ -98,6 +98,8 @@ class CheckResult(_Model):
     schedule: list[ScheduledTask] = Field(default_factory=list)
     end_date: date | None = None
     critical_path: list[str] = Field(default_factory=list)
+    # Task ID -> whole workdays the task can start later without moving the end of the plan.
+    slack: dict[str, int] = Field(default_factory=dict)
     load: list[MemberLoad] = Field(default_factory=list)
 
     @property

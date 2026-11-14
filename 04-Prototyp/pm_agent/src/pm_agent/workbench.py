@@ -8,6 +8,7 @@ directory, and both folders are git-ignored: they hold personal data.
 import csv
 import io
 import json
+import math
 import re
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -204,6 +205,63 @@ def round_summary(number: int, record: dict[str, Any]) -> tuple[str, list[str]]:
             parts.append(f"{tool}: {content}")
     headline = "; ".join(parts) or record.get("text") or f"beendet ({record.get('stop_reason')})"
     return f"Runde {number} · {headline}", messages
+
+
+def explain_task(
+    plan: Plan, team: list[Member], result: CheckResult, task_id: str
+) -> dict[str, Any]:
+    """Everything about one task of a checked plan, for the project lead who asks "why this
+    person, and what hangs on it?". `skills` pairs each required skill with the level the
+    assigned person has (None: not named). `alternatives` are the other team members who
+    have at least one of the required skills, best fit first; for a task without required
+    skills, everyone else, least loaded first."""
+    tasks = {task.id: task for task in plan.tasks}
+    task = tasks[task_id]
+    assignment = next(a for a in plan.assignments if a.task_id == task_id)
+    dates = next(s for s in result.schedule if s.task_id == task_id)
+    load = {item.member: item.utilization for item in result.load}
+
+    def levels(member: Member) -> dict[str, int]:
+        """The member's level for each required skill they have, in the task's spelling."""
+        known = {skill.casefold(): level for skill, level in member.skills.items()}
+        return {
+            skill: known[skill.casefold()]
+            for skill in task.required_skills
+            if skill.casefold() in known
+        }
+
+    assigned = next(m for m in team if m.name == assignment.member)
+    has = levels(assigned)
+    others = [(m, levels(m)) for m in team if m.name != assigned.name]
+    if task.required_skills:
+        others = [(m, fit) for m, fit in others if fit]
+    others.sort(
+        key=lambda pair: (
+            -len(pair[1]),
+            -sum(pair[1].values()),
+            # No utilisation: away until the deadline. Such a person comes last.
+            math.inf if load[pair[0].name] is None else load[pair[0].name],
+            pair[0].name,
+        )
+    )
+    return {
+        "id": task.id,
+        "title": task.title,
+        "description": task.description,
+        "member": assignment.member,
+        "reason": assignment.reason,
+        "hours": task.estimate_hours,
+        "start": dates.start,
+        "end": dates.end,
+        "skills": [(skill, has.get(skill)) for skill in task.required_skills],
+        "depends_on": [(dep, tasks[dep].title) for dep in task.depends_on],
+        "needed_by": [(t.id, t.title) for t in plan.tasks if task_id in t.depends_on],
+        "critical": task_id in result.critical_path,
+        "slack": result.slack[task_id],
+        "alternatives": [
+            {"member": m.name, "skills": fit, "utilization": load[m.name]} for m, fit in others
+        ],
+    }
 
 
 def plan_changes(before: Plan, after: Plan) -> list[str]:

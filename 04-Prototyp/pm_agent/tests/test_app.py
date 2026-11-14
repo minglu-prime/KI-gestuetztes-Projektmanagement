@@ -101,7 +101,7 @@ def test_a_plan_from_the_agent_is_checked_shown_and_exported(app, monkeypatch):
 
 def chips(at):
     """The status strip above the steps, as plain text."""
-    (strip,) = [h.value for h in at.html if 'class="chips"' in h.value]
+    strip = next(h.value for h in at.html if 'class="chips"' in h.value)  # first of the page
     return strip
 
 
@@ -151,6 +151,22 @@ def with_plan(app, monkeypatch):
 
     monkeypatch.setattr(agent, "run_replanning", replanned)
     return at
+
+
+def test_a_task_is_explained_in_the_result(with_plan):
+    # Opens on the first task: Anna does A although she has not named SQL.
+    texts = [m.value for m in with_plan.markdown]
+    assert "**Warum Anna?**" in texts and "kennt die Raumdaten" in texts
+    assert "- SQL: bei Anna nicht angegeben" in texts
+    assert "- B · API" in texts  # B waits for it
+    (details,) = [h.value for h in with_plan.html if "kritischen Pfad" in h.value]
+    assert "8 h" in details and "09.11. – 09.11.2026" in details
+    # Anna is the only person in the team: nobody else could take it.
+    assert any("Niemand sonst im Team" in c.value for c in with_plan.caption)
+
+    at = with_plan.selectbox[0].select("B").run()
+    assert not at.exception
+    assert "- A · Datenmodell" in [m.value for m in at.markdown]
 
 
 def test_a_change_asked_from_claude_is_shown_as_differences_before_it_counts(with_plan):

@@ -42,8 +42,7 @@ def check_plan(plan: Plan, team: list[Member], project: Project) -> CheckResult:
 
     schedule = []
     for task in plan.tasks:
-        first_day = math.floor(round(start[task.id], _DIGITS))
-        last_day = max(math.ceil(round(end[task.id], _DIGITS)) - 1, first_day)
+        first_day, last_day = _days(start[task.id], end[task.id])
         schedule.append(
             ScheduledTask(
                 task_id=task.id,
@@ -53,6 +52,9 @@ def check_plan(plan: Plan, team: list[Member], project: Project) -> CheckResult:
             )
         )
     end_date = max(s.end for s in schedule)
+    slack = {
+        task.id: _slack(task.id, plan, members, owner, away, start, end) for task in plan.tasks
+    }
 
     # Critical path: walk back from the task that finishes last along whatever set each start.
     node = last
@@ -123,6 +125,7 @@ def check_plan(plan: Plan, team: list[Member], project: Project) -> CheckResult:
         schedule=schedule,
         end_date=end_date,
         critical_path=critical_path,
+        slack=slack,
         load=load,
     )
 
@@ -200,6 +203,41 @@ def _structural_errors(plan: Plan, team: list[Member], project: Project) -> list
     return errors
 
 
+def _days(start: float, end: float) -> tuple[int, int]:
+    """The first and the last workday a task with these offsets touches."""
+    first = math.floor(round(start, _DIGITS))
+    return first, max(math.ceil(round(end, _DIGITS)) - 1, first)
+
+
+def _slack(
+    tid: str,
+    plan: Plan,
+    members: dict[str, Member],
+    owner: dict[str, str],
+    away: dict[str, list[tuple[int, int]]],
+    start: dict[str, float],
+    end: dict[str, float],
+) -> int:
+    """Whole workdays task `tid` can start later before the last day of the plan moves.
+    Found by scheduling again with the task held back: a later start never ends the plan
+    earlier, so the largest harmless delay can be searched by halving."""
+
+    def final(first: dict[str, float], last: dict[str, float]) -> int:
+        return max(_days(first[t], last[t])[1] for t in last)
+
+    planned = final(start, end)
+    # Held back by one day more than the room behind the task, the task itself ends late.
+    harmless, harmful = 0, planned - _days(start[tid], end[tid])[1] + 1
+    while harmful - harmless > 1:
+        middle = (harmless + harmful) // 2
+        first, last, _ = _schedule(plan, members, owner, away, held_back=(tid, middle))
+        if final(first, last) == planned:
+            harmless = middle
+        else:
+            harmful = middle
+    return harmless
+
+
 def _away(member: Member, start: date) -> list[tuple[int, int]]:
     """The member's absences as ranges of workday offsets (first, last), sorted and merged.
     Ranges, not single days: an absence can be as long as the calendar."""
@@ -248,9 +286,11 @@ def _schedule(
     members: dict[str, Member],
     owner: dict[str, str],
     away: dict[str, list[tuple[int, int]]],
+    held_back: tuple[str, int] | None = None,
 ) -> tuple[dict[str, float], dict[str, float], dict[str, str | None]]:
     """Start and end of each task in workday offsets, plus the task that set each start
-    (a dependency, or the member's previous task; None if it starts at 0)."""
+    (a dependency, or the member's previous task; None if it starts at 0). `held_back` makes
+    one task start that many workdays later than it could, to see what that does."""
     # ponytail: greedy list scheduling in dependency order, not an optimal schedule. A member
     # can sit idle waiting for a dependency while another of their tasks could already run.
     # Upgrade to priority by remaining critical path if plans come out visibly too long.
@@ -265,6 +305,8 @@ def _schedule(
         if member in free_at:
             candidates.append(free_at[member])
         earliest, driver[tid] = max(candidates, default=(0.0, None))
+        if held_back and held_back[0] == tid:
+            earliest += held_back[1]
         daily_hours = members[member].hours_per_week / WORKDAYS_PER_WEEK
         start[tid], end[tid] = _work(earliest, task.estimate_hours, daily_hours, away[member])
         free_at[member] = (end[tid], tid)

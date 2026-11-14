@@ -356,3 +356,43 @@ def test_overlapping_and_unsorted_absences_count_once():
     s = by_id(result)
     assert (s["A"].start, s["A"].end) == (MON, date(2026, 11, 13))  # Mon, then Fri
     assert result.load[0].capacity_hours == 16  # five days, three of them away
+
+
+def test_slack_is_how_many_workdays_a_task_can_slip_without_moving_the_end():
+    # Anna works Mon-Wed on A and C. Ben's B (one day) could also be done on Tue or Wed.
+    p = plan(
+        task("A", 8),
+        task("B", 8),
+        task("C", 16, deps=["A"]),
+        owners={"A": "Anna", "B": "Ben", "C": "Anna"},
+    )
+    result = check_plan(p, [ANNA, BEN], project())
+    assert result.end_date == date(2026, 11, 11)
+    assert result.slack == {"A": 0, "B": 2, "C": 0}
+
+
+def test_slack_is_shared_along_a_chain():
+    # Ben: B then D, Mon and Tue. Either may slip one day, but not both.
+    p = plan(
+        task("A", 24),
+        task("B", 8),
+        task("D", 8, deps=["B"]),
+        owners={"A": "Anna", "B": "Ben", "D": "Ben"},
+    )
+    assert check_plan(p, [ANNA, BEN], project()).slack == {"A": 0, "B": 1, "D": 1}
+
+
+def test_slack_counts_whole_workdays_and_skips_absences():
+    # Ben needs Mon-Wed. Anna's A takes Monday; she is away on Tuesday. Slipping one day
+    # lands on Wednesday, slipping two days as well: only the third day moves the end.
+    p = plan(task("A", 8), task("B", 24), owners={"A": "Anna", "B": "Ben"})
+    result = check_plan(p, [away(date(2026, 11, 10)), BEN], project())
+    assert result.slack == {"A": 2, "B": 0}
+    # Half a day of room is no whole workday.
+    half = plan(task("A", 4), task("B", 8), owners={"A": "Anna", "B": "Ben"})
+    assert check_plan(half, [ANNA, BEN], project()).slack == {"A": 0, "B": 0}
+
+
+def test_a_plan_with_errors_has_no_slack():
+    p = plan(task("A", 8), owners={"A": "Zoe"})
+    assert check_plan(p, [ANNA], project()).slack == {}
