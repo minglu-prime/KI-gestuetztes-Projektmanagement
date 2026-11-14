@@ -17,6 +17,7 @@ from pydantic import ValidationError
 
 from pm_agent.agent import LOG_DIR
 from pm_agent.models import Assignment, CheckResult, Member, Plan, Project, Task
+from pm_agent.planning import count_workdays
 
 DATA_DIR = LOG_DIR.parent / "data"
 TEAM_FILE = DATA_DIR / "team.json"
@@ -187,6 +188,121 @@ def round_summary(number: int, record: dict[str, Any]) -> tuple[str, list[str]]:
             parts.append(f"{tool}: {content}")
     headline = "; ".join(parts) or record.get("text") or f"beendet ({record.get('stop_reason')})"
     return f"Runde {number} · {headline}", messages
+
+
+def plan_changes(before: Plan, after: Plan) -> list[str]:
+    """What differs between two plans, one line per change, for the project lead. Reasons of
+    assignments and descriptions are left out: they do not change what is planned.
+
+    Tasks are paired by ID and title, then by title alone, then by ID alone. Claude sometimes
+    renumbers a draft; paired by ID only, every task after an inserted one would count as
+    renamed and reassigned."""
+    old = {task.id: task for task in before.tasks}
+    new = {task.id: task for task in after.tasks}
+    by_title = {task.title: task.id for task in after.tasks}
+    twin: dict[str, str] = {}  # ID in `before` -> ID of the same task in `after`
+    for tid, task in old.items():
+        if tid in new and new[tid].title == task.title:
+            twin[tid] = tid
+    for tid, task in old.items():  # renumbered
+        other = by_title.get(task.title)
+        if tid not in twin and other is not None and other not in twin.values():
+            twin[tid] = other
+    for tid in old:  # renamed
+        if tid not in twin and tid in new and tid not in twin.values():
+            twin[tid] = tid
+    origin = {new_id: old_id for old_id, new_id in twin.items()}
+
+    old_owner = {a.task_id: a.member for a in before.assignments}
+    new_owner = {a.task_id: a.member for a in after.assignments}
+    lines = [
+        f"Neu: {tid} · {task.title} ({new_owner.get(tid, 'niemand')}, {task.estimate_hours:g} h)"
+        for tid, task in new.items()
+        if tid not in origin
+    ]
+    lines += [f"Entfernt: {tid} · {task.title}" for tid, task in old.items() if tid not in twin]
+    for tid, task in new.items():
+        if tid not in origin:
+            continue
+        old_id = origin[tid]
+        was, parts = old[old_id], []
+        # The dependencies of before, in the IDs of after.
+        needed = [twin.get(dep, dep) for dep in was.depends_on]
+        if task.title != was.title:
+            parts.append(f"heißt jetzt „{task.title}“")
+        if old_owner.get(old_id) != new_owner.get(tid):
+            parts.append(f"{old_owner.get(old_id, 'niemand')} → {new_owner.get(tid, 'niemand')}")
+        if task.estimate_hours != was.estimate_hours:
+            parts.append(f"{was.estimate_hours:g} h → {task.estimate_hours:g} h")
+        if set(task.depends_on) != set(needed):
+            parts.append(
+                f"hängt ab von {', '.join(task.depends_on) or 'nichts'} "
+                f"(vorher {', '.join(needed) or 'nichts'})"
+            )
+        if set(task.required_skills) != set(was.required_skills):
+            parts.append(
+                f"braucht {', '.join(task.required_skills) or 'keine Skills'} "
+                f"(vorher {', '.join(was.required_skills) or 'keine Skills'})"
+            )
+        if parts:
+            label = tid if tid == old_id else f"{tid} (vorher {old_id})"
+            lines.append(f"{label} · {was.title}: " + "; ".join(parts))
+    renumbered = sum(old_id != new_id for old_id, new_id in twin.items())
+    if renumbered:
+        subject = "Eine Aufgabe hat" if renumbered == 1 else f"{renumbered} Aufgaben haben"
+        lines.append(f"{subject} eine neue ID")
+    lines += [f"Neues Risiko: {risk}" for risk in after.risks if risk not in before.risks]
+    lines += [f"Risiko entfällt: {risk}" for risk in before.risks if risk not in after.risks]
+    return lines
+
+
+def check_changes(before: CheckResult, after: CheckResult) -> list[str]:
+    """What a change of the plan does to its check: end date, warnings, moved dates."""
+    lines = []
+    if before.end_date and after.end_date and before.end_date != after.end_date:
+        first, last = sorted([before.end_date, after.end_date])
+        days = count_workdays(first + timedelta(days=1), last)
+        direction = "später" if after.end_date > before.end_date else "früher"
+        lines.append(
+            f"Planende: {_date(before.end_date)} → {_date(after.end_date)} "
+            f"({days} Arbeitstag{'' if days == 1 else 'e'} {direction})"
+        )
+    lines += [f"Fehler: {error}" for error in after.errors if error not in before.errors]
+    lines += [f"Neue Warnung: {w}" for w in after.warnings if w not in before.warnings]
+    lines += [f"Behoben: {w}" for w in before.warnings if w not in after.warnings]
+    dates = {s.task_id: (s.start, s.end) for s in before.schedule}
+    moved = sum(s.task_id in dates and dates[s.task_id] != (s.start, s.end) for s in after.schedule)
+    if moved:
+        subject = "einer Aufgabe verschieben" if moved == 1 else f"{moved} Aufgaben verschieben"
+        lines.append(f"Termine von {subject} sich")
+    return lines
+
+
+def describe_round(number: int, record: dict[str, Any], previous: Plan | None) -> dict[str, Any]:
+    """One agent round for the progress view: the headline and tool messages of
+    round_summary, what Claude wrote, the size of the draft it checked or submitted, and what
+    it changed since `previous` (the draft of the round before, or the plan it started from).
+    `draft` is None if the round had no readable plan; the caller then keeps `previous`."""
+    headline, messages = round_summary(number, record)
+    draft = None
+    for call in reversed(record.get("tool_calls", [])):
+        try:
+            draft = Plan.model_validate(call["input"])
+        except ValidationError:
+            continue  # not hidden: the tool rejected this input, its message is in `messages`
+        break
+    return {
+        "headline": headline,
+        "said": record.get("text", ""),
+        "draft": draft,
+        "size": (
+            f"{len(draft.tasks)} Aufgaben, {sum(t.estimate_hours for t in draft.tasks):g} h"
+            if draft
+            else ""
+        ),
+        "changes": plan_changes(previous, draft) if previous and draft else [],
+        "messages": messages,
+    }
 
 
 def gantt(plan: Plan, result: CheckResult, deadline: date) -> tuple[list[dict[str, Any]], date]:

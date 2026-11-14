@@ -52,7 +52,10 @@ Sechs Schritte als Reiter:
 3. **Planung**: Claude plant, jede Runde erscheint sofort. Alternativ einen protokollierten Lauf
    aus `logs/` öffnen, ohne Claude erneut aufzurufen (z. B. für Vorführungen).
 4. **Ergebnis**: Planende, Fehler, Warnungen, Gantt-Diagramm, Auslastung, Begründungen, Risiken.
-5. **Anpassen**: Tabelle ändern und erneut prüfen; nur die deterministische Prüfung, kein LLM.
+5. **Anpassen**: zwei Wege. Mit Claude: einen Wunsch oder eine Annahme eintippen („Clara
+   übernimmt die Tests“, „Was, wenn das Backend doppelt so lange dauert?“); Claude ändert
+   den Plan, Python prüft ihn und zeigt die Unterschiede zum bisherigen Plan, erst
+   „Übernehmen“ macht ihn gültig. Von Hand: Tabelle ändern und erneut prüfen, ohne LLM.
 6. **Export**: Markdown oder CSV. Jeder Export wird mit Dauer und Änderungen in `logs/runs.csv`
    vermerkt, als Datengrundlage für den Vorher-nachher-Vergleich. Ein Plan ohne Fehler lässt
    sich hier als Projekt übernehmen.
@@ -67,7 +70,7 @@ einer `AgentError` ab. Jeder Lauf wird in `logs/` protokolliert.
 
 | Agent | Aufruf | Werkzeuge | Die Prüfung verlangt |
 |---|---|---|---|
-| Planung | `run_planning(project, team)` | `check_plan`, `submit_plan` | einen Plan ohne Fehler; Warnungen (Überlastung, Deadline, kein Puffer, fehlende Skills) bleiben für die Projektleitung stehen |
+| Planung | `run_planning(project, team)`; für Änderungen `run_replanning(project, team, plan, wish)` | `check_plan`, `submit_plan` | einen Plan ohne Fehler; Warnungen (Überlastung, Deadline, kein Puffer, fehlende Skills) bleiben für die Projektleitung stehen |
 | Durchführung | `run_status_summary(tracking, today)` in `followup.py` | `submit_status` | einen nächsten Schritt für jede Aufgabe im Verzug, keinen für fertige Aufgaben |
 | Kontrolle | `run_control_report(tracking, today)` in `followup.py` | `submit_control` | eine Gegenmaßnahme für jede Aufgabe im Verzug; bei Verzug nicht die Bewertung „im Plan“ |
 

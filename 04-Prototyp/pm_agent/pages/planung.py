@@ -16,12 +16,12 @@ import streamlit as st
 from anthropic import APIError
 from pydantic import ValidationError
 
-from pm_agent.agent import PlanningError, run_planning
+from pm_agent.agent import PlanningError, run_planning, run_replanning
 from pm_agent.models import Project
 from pm_agent.planning import check_plan
 from pm_agent.tracking import adopt, has_progress
 from pm_agent.tracking import load as load_tracking
-from pm_agent.ui import chip, strip
+from pm_agent.ui import chip, round_printer, strip
 from pm_agent.workbench import (
     PLAN_COLUMNS,
     RUNS_CSV,
@@ -29,11 +29,12 @@ from pm_agent.workbench import (
     TEAM_FILE,
     InputError,
     append_run,
+    check_changes,
     gantt,
     load_run,
     load_team,
+    plan_changes,
     plan_rows,
-    round_summary,
     rows_to_plan,
     rows_to_team,
     save_team,
@@ -68,6 +69,10 @@ def init() -> None:
         plan_df=None,
         editor_version=0,
         team_version=0,
+        # The conversation that changes the plan (step 5) and its open proposal.
+        chat=[],
+        proposal=None,
+        rounds_start=None,
     )
 
 
@@ -82,12 +87,14 @@ def restore_editors() -> None:
         state.editor_version += 1
 
 
-def show_plan(plan, rounds, source, agent_seconds) -> None:
-    """A new plan from the agent or from a log becomes the current plan."""
+def show_plan(plan, rounds, source, agent_seconds, rounds_start=None) -> None:
+    """A new plan from the agent or from a log becomes the current plan. `rounds_start` is
+    the plan the rounds started from, if they changed a plan instead of drafting one."""
     state.update(
         plan=plan,
         original=plan,
         rounds=rounds,
+        rounds_start=rounds_start,
         source=source,
         agent_seconds=agent_seconds,
         shown_at=time.monotonic(),
@@ -107,7 +114,30 @@ def open_run(path) -> None:
     state.team_version += 1
     state.update(idea=project.idea, start=project.start_date, deadline=project.deadline)
     show_plan(plan, record["rounds"], f"Protokoll {path.name}", record.get("seconds"))
+    state.update(chat=[], proposal=None)  # the conversation was about another plan
     state.step = STEPS[3]  # straight to the result
+
+
+def ask() -> None:
+    """Callback of the chat input: keep the wish for the run that follows."""
+    state.asked = state.wish
+
+
+def decide(accept: bool) -> None:
+    """Callback: the project lead takes or drops the change Claude proposed."""
+    proposal = state.proposal
+    state.proposal = None
+    state.chat.append(
+        {"wish": proposal["wish"], "changes": proposal["changes"], "accepted": accept}
+    )
+    if accept:
+        show_plan(
+            proposal["plan"],
+            proposal["rounds"],
+            "Agent, auf Wunsch geändert",
+            proposal["seconds"],
+            rounds_start=proposal["basis"],
+        )
 
 
 def go(step: str) -> None:
@@ -239,13 +269,11 @@ with tabs[2]:
         ):
             rounds = []
             with st.status("Claude plant …", expanded=True) as status:
+                show_round = round_printer()
 
                 def on_round(record):
                     rounds.append(record)
-                    headline, messages = round_summary(len(rounds), record)
-                    st.write(headline)
-                    for message in messages:
-                        st.caption(message)
+                    show_round(record)
 
                 started = time.monotonic()
                 failure = None
@@ -257,6 +285,7 @@ with tabs[2]:
                     failure = f"Die Claude API meldet einen Fehler: {err}"
                 else:
                     show_plan(plan, rounds, "Agent", round(time.monotonic() - started, 1))
+                    state.update(chat=[], proposal=None)  # the conversation was about another plan
                 # The message goes below the box: a collapsed status would hide it.
                 label = f"Kein Plan nach {len(rounds)} Runden" if failure else "Plan angenommen"
                 status.update(label=label, state="error" if failure else "complete", expanded=True)
@@ -284,12 +313,12 @@ with tabs[2]:
             )
 
     if state.rounds:
-        with st.expander(f"Verlauf ({state.source}, {len(state.rounds)} Runden)", expanded=False):
-            for number, record in enumerate(state.rounds, start=1):
-                headline, messages = round_summary(number, record)
-                st.write(headline)
-                for message in messages:
-                    st.caption(message)
+        # Open by default: how the plan came about is part of the result, not a detail.
+        title = f"So ist der Plan entstanden ({state.source}, {len(state.rounds)} Runden)"
+        with st.expander(title, expanded=True), st.container(key="rounds-log"):
+            show_logged_round = round_printer(state.rounds_start)
+            for record in state.rounds:
+                show_logged_round(record)
     if state.plan is not None:
         next_step("Ergebnis ansehen", STEPS[3], False, "to_result")
 
@@ -397,6 +426,131 @@ with tabs[4]:
     if state.plan is None:
         st.info("Noch kein Plan zum Anpassen.")
     else:
+        with st.container(border=True, key="panel-chat"):
+            st.markdown("#### :material/forum: Mit Claude ändern")
+            st.caption(
+                "Sag, was sich ändern soll, oder spiel eine Annahme durch: „Clara übernimmt die "
+                "Tests“, „Was, wenn das Backend doppelt so lange dauert?“. Claude ändert den "
+                "Plan, Python prüft ihn, du siehst die Unterschiede und entscheidest."
+            )
+            for turn in state.chat:
+                with st.chat_message("user"):
+                    st.text(turn["wish"])
+                with st.chat_message("assistant"):
+                    st.markdown("**Übernommen**" if turn["accepted"] else "**Verworfen**")
+                    st.markdown("\n".join(f"- {c}" for c in turn["changes"]) or "Keine Änderung.")
+
+            proposal = state.proposal
+            if proposal is not None and proposal["basis"] != state.plan:
+                state.proposal = proposal = None
+                st.info(
+                    "Der Plan wurde seit dem Vorschlag von Hand geändert. Der Vorschlag passt "
+                    "nicht mehr dazu und ist verworfen."
+                )
+            blocked = [
+                text
+                for ok, text in [
+                    (consent, "die Zustimmung des Teams (Schritt 1)"),
+                    (result is not None, "ein gültiges Team und Projekt (Schritt 1 und 2)"),
+                ]
+                if not ok
+            ]
+            wish = state.pop("asked", None)  # set by the chat input at the end of the panel
+            # A second wish must not replace a proposal that is still open.
+            if wish and proposal is None and not blocked:
+                with st.chat_message("user"):
+                    st.text(wish)
+                change_rounds = []
+                with st.status("Claude ändert den Plan …", expanded=True) as status:
+                    with st.container(key="rounds-change"):
+                        show_change_round = round_printer(state.plan)
+
+                        def on_change_round(record):
+                            change_rounds.append(record)
+                            show_change_round(record)
+
+                        started = time.monotonic()
+                        failure = None
+                        try:
+                            changed_plan = run_replanning(
+                                project, team, state.plan, wish, on_round=on_change_round
+                            )
+                        except PlanningError as err:
+                            failure = str(err)
+                        except APIError as err:
+                            failure = f"Die Claude API meldet einen Fehler: {err}"
+                        else:
+                            state.proposal = proposal = {
+                                "wish": wish,
+                                "basis": state.plan,
+                                "plan": changed_plan,
+                                "rounds": change_rounds,
+                                "seconds": round(time.monotonic() - started, 1),
+                            }
+                    label = (
+                        f"Kein Vorschlag nach {len(change_rounds)} Runden"
+                        if failure
+                        else f"Vorschlag nach {len(change_rounds)} Runden"
+                    )
+                    status.update(
+                        label=label, state="error" if failure else "complete", expanded=True
+                    )
+                # The message goes below the box: a collapsed status would hide it.
+                if failure:
+                    st.error(failure)
+                else:
+                    # Again from the top: the input is locked while the proposal is open.
+                    st.rerun()
+
+            if proposal is not None:
+                proposed = check_plan(proposal["plan"], team, project) if result else None
+                with st.chat_message("assistant"):
+                    st.markdown("**Vorschlag von Claude, von Python geprüft**")
+                    st.text(proposal["wish"])
+                    proposal["changes"] = plan_changes(state.plan, proposal["plan"])
+                    if proposed is not None:
+                        proposal["changes"] += check_changes(result, proposed)
+                    if proposal["changes"]:
+                        st.markdown("\n".join(f"- {c}" for c in proposal["changes"]))
+                    else:
+                        st.info("Claude schlägt keine Änderung am Plan vor.")
+                    with st.container(horizontal=True):
+                        st.button(
+                            "Übernehmen",
+                            type="primary",
+                            icon=":material/check:",
+                            on_click=decide,
+                            args=(True,),
+                            disabled=proposed is None or not proposal["changes"],
+                        )
+                        st.button(
+                            "Verwerfen", icon=":material/close:", on_click=decide, args=(False,)
+                        )
+                    if proposal["rounds"]:
+                        title = f"So ist Claude vorgegangen ({len(proposal['rounds'])} Runden)"
+                        # Open: how Claude got there belongs to the proposal.
+                        with (
+                            st.expander(title, expanded=True),
+                            st.container(key="rounds-proposal"),
+                        ):
+                            show_proposal_round = round_printer(proposal["basis"])
+                            for record in proposal["rounds"]:
+                                show_proposal_round(record)
+
+            # The input comes last, below the conversation. Its callback hands the wish to
+            # the run that follows, which answers it above.
+            if blocked:
+                st.caption("Für eine Änderung mit Claude fehlt noch: " + ", ".join(blocked) + ".")
+            elif proposal is not None:
+                st.caption("Entscheide erst über den offenen Vorschlag.")
+            st.chat_input(
+                "Was soll sich ändern?",
+                key="wish",
+                on_submit=ask,
+                disabled=bool(blocked) or proposal is not None,
+            )
+
+        st.markdown("#### :material/edit: Von Hand ändern")
         st.caption(
             "Ändere Personen, Stunden oder Abhängigkeiten. „Erneut prüfen“ rechnet nur "
             "deterministisch nach, Claude wird nicht aufgerufen."

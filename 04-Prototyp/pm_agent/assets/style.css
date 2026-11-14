@@ -333,6 +333,12 @@
 /* A document preview: a sheet of the page colour inside its white panel. */
 [class*="st-key-preview-"] { background: var(--paper); }
 
+/* The rounds of an agent run as a timeline: one line down the left side. */
+[class*="st-key-rounds-"] {
+  border-left: 2px solid var(--line);
+  padding-left: 16px;
+}
+
 /* People who asked their system for less motion get none. */
 @media (prefers-reduced-motion: reduce) {
   .stApp *,

@@ -22,6 +22,8 @@ DEFAULT_MODEL = "claude-opus-5-5"
 MAX_ROUNDS = 10
 PROMPTS = Path(__file__).parent / "prompts"
 SYSTEM_PROMPT = (PROMPTS / "planning.md").read_text(encoding="utf-8")
+# Changing a plan follows the same rules for a plan, plus how to treat the existing one.
+REPLANNING_PROMPT = SYSTEM_PROMPT + "\n\n" + (PROMPTS / "replanning.md").read_text(encoding="utf-8")
 # 04-Prototyp/pm_agent/logs, next to the package and git-ignored: logs hold team data.
 LOG_DIR = Path(__file__).resolve().parents[2] / "logs"
 
@@ -56,12 +58,45 @@ def run_planning(
     errors, warnings possible. Raises PlanningError; errors of the API itself propagate.
     Each run, successful or not, is written to `log_dir` as one JSON file (None: no log).
     `on_round` gets each round as soon as its tools have run, for live progress."""
+    return _plan_run(SYSTEM_PROMPT, _request(project, team), project, team, {}, log_dir, on_round)
+
+
+def run_replanning(
+    project: Project,
+    team: list[Member],
+    plan: Plan,
+    wish: str,
+    log_dir: Path | None = LOG_DIR,
+    on_round: Callable[[dict[str, Any]], None] | None = None,
+) -> Plan:
+    """Let Claude change `plan` the way the project lead asks in `wish`. Same tools, same
+    check and same kind of log as run_planning; the log also keeps the wish."""
+    wish = wish.strip()
+    if not wish:
+        raise AgentError("Beschreibe, was sich ändern soll.")
+    request = (
+        f"{_inputs(project, team)}\n\nAktueller Plan:\n{plan.model_dump_json(indent=2)}\n\n"
+        f"Wunsch der Projektleitung:\n{wish}\n\n"
+        "Passe den Plan an, prüfe ihn mit check_plan und reiche ihn mit submit_plan ein."
+    )
+    return _plan_run(REPLANNING_PROMPT, request, project, team, {"wish": wish}, log_dir, on_round)
+
+
+def _plan_run(
+    system: str,
+    request: str,
+    project: Project,
+    team: list[Member],
+    extra: dict[str, Any],
+    log_dir: Path | None,
+    on_round: Callable[[dict[str, Any]], None] | None,
+) -> Plan:
     tools = PlanningTools(project, team)
     return run_agent(
         log_prefix="run",
         noun="Plan",
-        system=SYSTEM_PROMPT,
-        request=_request(project, team),
+        system=system,
+        request=request,
         tools=[tools.check_plan, tools.submit_plan],
         result=lambda: tools.plan,
         # Project and team are kept so that a run can be reopened in the UI.
@@ -69,6 +104,7 @@ def run_planning(
             "project": project.model_dump(mode="json"),
             "team": [member.model_dump(mode="json") for member in team],
             "plan": plan.model_dump(mode="json") if plan is not None else None,
+            **extra,
         },
         log_dir=log_dir,
         on_round=on_round,
@@ -213,9 +249,13 @@ def _text(content: Any) -> str:
     return "\n".join(block.get("text", "") for block in content or [])
 
 
-def _request(project: Project, team: list[Member]) -> str:
+def _inputs(project: Project, team: list[Member]) -> str:
     members = json.dumps([m.model_dump() for m in team], ensure_ascii=False, indent=2)
+    return f"Projekt:\n{project.model_dump_json(indent=2)}\n\nTeam:\n{members}"
+
+
+def _request(project: Project, team: list[Member]) -> str:
     return (
-        f"Projekt:\n{project.model_dump_json(indent=2)}\n\nTeam:\n{members}\n\n"
+        f"{_inputs(project, team)}\n\n"
         "Erstelle den Plan, prüfe ihn mit check_plan und reiche ihn mit submit_plan ein."
     )

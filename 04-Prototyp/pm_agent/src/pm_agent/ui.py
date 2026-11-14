@@ -8,8 +8,9 @@ import streamlit as st
 from anthropic import APIError
 
 from pm_agent.agent import AgentError
+from pm_agent.models import Plan
 from pm_agent.tracking import Tracking, load
-from pm_agent.workbench import InputError, round_summary
+from pm_agent.workbench import InputError, describe_round, round_summary
 
 T = TypeVar("T")
 
@@ -52,6 +53,41 @@ def consent(key: str) -> bool:
         "Aufgaben, Notizen) an die Anthropic API gesendet werden.",
         key=key,
     )
+
+
+# A first redraft can touch every task. The view names the first changes and counts the rest;
+# the proposal the project lead decides on always lists all of them.
+SHOWN_CHANGES = 8
+
+
+def round_printer(start: Plan | None = None) -> Callable[[dict[str, Any]], None]:
+    """Returns a function that writes one agent round after the other: what Claude wrote, the
+    draft it checked, what it changed since the round before, and what the check answered.
+    The first round is compared with `start`, the plan a change started from."""
+    number, previous = 0, start
+
+    def show(record: dict[str, Any]) -> None:
+        nonlocal number, previous
+        number += 1
+        view = describe_round(number, record, previous)
+        st.markdown(f"**{view['headline']}**")
+        if view["said"] and view["said"] not in view["headline"]:
+            st.caption(f"Claude: {view['said']}")
+        if view["size"]:
+            st.caption(f"Entwurf: {view['size']}")
+        if view["changes"]:
+            shown, rest = view["changes"][:SHOWN_CHANGES], view["changes"][SHOWN_CHANGES:]
+            more = f"\n- … und {len(rest)} weitere Änderungen" if rest else ""
+            st.markdown(
+                "Geändert seit dem Stand davor:\n\n"
+                + "\n".join(f"- {change}" for change in shown)
+                + more
+            )
+        for message in view["messages"]:
+            st.caption(message)
+        previous = view["draft"] or previous
+
+    return show
 
 
 def run_with_progress(label: str, run: Callable[[Callable[[dict[str, Any]], None]], T]) -> T | None:
