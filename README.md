@@ -108,7 +108,7 @@ darauf wartet, wie viele Arbeitstage Puffer die Aufgabe hat, und wer im Team sie
 übernehmen könnte. Nur die Begründung stammt von Claude, alles andere rechnet Python.
 
 <div align="center">
-<img src="04-Prototyp/pm_agent/assets/screenshots/planung-aufgabe.jpg" width="820" alt="Aufgabe im Detail: Person, Stunden, Zeitraum und kritischer Pfad als Marken, Claudes Begründung, Skills, Vorgänger und Nachfolger, darunter wer die Aufgabe sonst übernehmen könnte">
+<img src="04-Prototyp/pm_agent/assets/screenshots/planung-aufgabe.jpg" width="820" alt="Aufgabe im Detail: Person, Stunden, Zeitraum und Puffer als Marken, Claudes Begründung, Skills, Vorgänger und Nachfolger, darunter wer die Aufgabe sonst übernehmen könnte">
 </div>
 
 ### Den Plan im Gespräch ändern
