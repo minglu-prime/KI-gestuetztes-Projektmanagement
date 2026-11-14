@@ -366,6 +366,24 @@ def test_durchfuehrung_says_where_the_project_stands(tracked):
         assert text in chips(at)
 
 
+def test_kontrolle_forecasts_the_end_from_the_recorded_progress(tracked):
+    # Whatever today is: with every task finished there is nothing left to forecast.
+    done = [{"ID": "A", "Status": "fertig", "Ist (h)": 8}, {"ID": "B", "Status": "fertig"}]
+    tracking.save(tracking.apply_rows(tracking.load(), done))
+    at = tracked.switch_page("pages/kontrolle.py").run()
+    assert not at.exception
+    assert "Alle Aufgaben sind fertig." in [s.value for s in at.success]
+    assert "Voraussichtliches Ende" not in {m.label for m in at.metric}
+
+    # Nothing done yet: the forecast names an end, and a buffer or a missed deadline.
+    tracking.adopt(PROJECT, TEAM, PLAN)
+    at = at.run()
+    assert not at.exception
+    labels = {m.label for m in at.metric}
+    assert "Voraussichtliches Ende" in labels
+    assert labels & {"Puffer bis zur Deadline", "Deadline verpasst um"}
+
+
 def test_the_execution_agent_needs_consent_and_its_proposal_goes_into_the_report(
     tracked, monkeypatch
 ):

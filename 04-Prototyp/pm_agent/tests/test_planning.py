@@ -4,7 +4,7 @@ from datetime import date, timedelta
 import pytest
 
 from pm_agent.models import Assignment, Member, Plan, Project, Task
-from pm_agent.planning import add_workdays, check_plan, count_workdays
+from pm_agent.planning import add_workdays, check_plan, count_workdays, workday_shift
 
 MON = date(2026, 11, 9)
 ANNA = Member(name="Anna", skills={"Python": 4}, hours_per_week=40)  # 8 h per workday
@@ -249,3 +249,10 @@ def test_no_workday_between_start_and_deadline_is_an_error():
 def test_empty_team_is_an_error():
     result = check_plan(plan(task("A", 8), owners={"A": "Anna"}), [], project())
     assert "Das Team ist leer" in result.errors
+
+
+def test_workday_shift_counts_workdays_between_two_dates_with_a_sign():
+    assert workday_shift(date(2026, 11, 11), date(2026, 11, 12)) == 1
+    assert workday_shift(date(2026, 11, 12), date(2026, 11, 11)) == -1
+    assert workday_shift(date(2026, 11, 13), date(2026, 11, 16)) == 1  # Friday to Monday
+    assert workday_shift(MON, MON) == 0

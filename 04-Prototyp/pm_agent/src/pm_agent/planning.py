@@ -130,6 +130,13 @@ def count_workdays(first: date, last: date) -> int:
     return weeks * WORKDAYS_PER_WEEK + sum((first.weekday() + i) % 7 < 5 for i in range(rest))
 
 
+def workday_shift(before: date, after: date) -> int:
+    """How many workdays `after` lies behind `before`; negative if it lies ahead of it."""
+    if after >= before:
+        return count_workdays(before + timedelta(days=1), after)
+    return -count_workdays(after + timedelta(days=1), before)
+
+
 def _next_workday(day: date) -> date:
     while day.weekday() >= 5:
         day += timedelta(days=1)

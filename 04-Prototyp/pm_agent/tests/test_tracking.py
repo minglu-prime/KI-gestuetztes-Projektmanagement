@@ -10,6 +10,7 @@ from pm_agent.tracking import (
     agent_runs,
     apply_rows,
     evaluate,
+    forecast,
     has_progress,
     load,
     progress_rows,
@@ -204,3 +205,52 @@ def test_agent_runs_list_time_rounds_and_tokens_of_every_agent(tmp_path):
             "Ausgabe-Token": 0,
         },
     ]
+
+
+def progressed(tracking, **status):
+    """The project with the given status per task, e.g. A="fertig" or B=("in Arbeit", 4)."""
+    rows = []
+    for task_id, state in status.items():
+        name, hours = state if isinstance(state, tuple) else (state, 0)
+        rows.append({"ID": task_id, "Status": name, "Ist (h)": hours})
+    return apply_rows(tracking, rows)
+
+
+def test_on_schedule_the_forecast_is_the_plan(tracking):
+    # Tue 10.11.: A is finished as planned, B starts today.
+    outlook = forecast(progressed(tracking, A="fertig"), date(2026, 11, 10))
+    assert (outlook.planned_end, outlook.end, outlook.shift) == (
+        date(2026, 11, 11),
+        date(2026, 11, 11),
+        0,
+    )
+    assert outlook.blocked == {}
+
+
+def test_an_overdue_task_moves_the_end_and_names_what_waits_for_it(tracking):
+    # Tue 10.11.: A should have been finished on Monday and is still open.
+    outlook = forecast(tracking, date(2026, 11, 10))
+    assert (outlook.end, outlook.shift) == (date(2026, 11, 12), 1)  # A today, B Wed and Thu
+    assert outlook.blocked == {"A": ["B"]}
+    assert outlook.deadline_gap == -26  # still 26 workdays before the deadline on 18.12.
+
+
+def test_past_the_deadline_the_forecast_says_by_how_much(tracking):
+    # Mon 21.12., nothing done. The deadline was Fri 18.12.
+    outlook = forecast(tracking, date(2026, 12, 21))
+    assert outlook.end == date(2026, 12, 23)
+    assert outlook.deadline_gap == 3
+
+
+def test_a_started_task_counts_with_what_is_left_of_its_estimate(tracking):
+    # Wed 11.11.: B (16 h) has 4 h booked, 12 h are left: today and half of Thursday.
+    started = progressed(tracking, A="fertig", B=("in Arbeit", 4))
+    assert forecast(started, date(2026, 11, 11)).end == date(2026, 11, 12)
+    # More hours booked than estimated and still not finished: it stays in the schedule.
+    over = progressed(tracking, A="fertig", B=("in Arbeit", 20))
+    assert forecast(over, date(2026, 11, 11)).end == date(2026, 11, 11)
+
+
+def test_a_finished_project_has_no_forecast(tracking):
+    outlook = forecast(progressed(tracking, A="fertig", B="fertig"), date(2026, 11, 12))
+    assert outlook.end is None and outlook.shift == 0 and outlook.blocked == {}

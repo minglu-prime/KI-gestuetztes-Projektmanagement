@@ -17,7 +17,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from pm_agent.agent import LOG_DIR
 from pm_agent.models import Member, Plan, Project, StatusSummary
-from pm_agent.planning import check_plan
+from pm_agent.planning import check_plan, workday_shift
 from pm_agent.workbench import DATA_DIR, InputError, _cell, _date, _md, _reason
 
 PROJECT_FILE = DATA_DIR / "projekt.json"
@@ -193,6 +193,78 @@ def evaluate(tracking: Tracking, today: date) -> Evaluation:
             }
             for member in dict.fromkeys(t.member for t in tasks)
         ],
+    )
+
+
+# ponytail: when the booked hours reach the estimate, nobody knows what is left. One hour keeps
+# the task in the forecast. Ask the project lead for a remaining estimate if that gets too rough.
+MIN_REST_HOURS = 1.0
+
+
+@dataclass(frozen=True)
+class Forecast:
+    """Where the project ends if the remaining work starts today, in the order of the plan."""
+
+    planned_end: date
+    end: date | None  # None: every task is finished
+    shift: int  # workdays the end lies behind the planned end; negative: ahead of it
+    deadline_gap: int  # workdays the end lies behind the deadline; negative: buffer left
+    blocked: dict[str, list[str]]  # overdue task -> unfinished tasks that wait for it
+
+
+def forecast(tracking: Tracking, today: date) -> Forecast:
+    """Schedule what is not finished from today on and compare it with the plan.
+
+    Finished tasks are done, whatever their planned dates. An open task counts with its full
+    estimate, a started one with the estimate minus the booked hours. The same scheduling as
+    for the plan itself (planning.check_plan), so both ends are comparable."""
+    project, plan = tracking.project, tracking.plan
+    planned_end = check_plan(plan, tracking.team, project).end_date
+    state = tracking.progress
+    open_ids = {task.id for task in plan.tasks if state[task.id].status != "fertig"}
+    if not open_ids:
+        return Forecast(planned_end=planned_end, end=None, shift=0, deadline_gap=0, blocked={})
+
+    rest = Plan(
+        tasks=[
+            task.model_copy(
+                update={
+                    "estimate_hours": max(
+                        task.estimate_hours - state[task.id].actual_hours, MIN_REST_HOURS
+                    )
+                    if state[task.id].status == "in Arbeit"
+                    else task.estimate_hours,
+                    "depends_on": [dep for dep in task.depends_on if dep in open_ids],
+                }
+            )
+            for task in plan.tasks
+            if task.id in open_ids
+        ],
+        assignments=[a for a in plan.assignments if a.task_id in open_ids],
+    )
+    # The last possible date as deadline: only the dates are wanted here. Today can lie
+    # behind the real deadline, and check_plan would then find no workday to plan in.
+    open_end = Project(
+        idea=project.idea, start_date=max(today, project.start_date), deadline=date.max
+    )
+    end = check_plan(rest, tracking.team, open_end).end_date
+
+    waiting: dict[str, list[str]] = {}
+    for late in evaluate(tracking, today).overdue:
+        reached, queue = [], [late.id]
+        while queue:
+            current = queue.pop(0)
+            for task in rest.tasks:
+                if current in task.depends_on and task.id not in reached:
+                    reached.append(task.id)
+                    queue.append(task.id)
+        waiting[late.id] = [task.id for task in rest.tasks if task.id in reached]  # plan order
+    return Forecast(
+        planned_end=planned_end,
+        end=end,
+        shift=workday_shift(planned_end, end),
+        deadline_gap=workday_shift(project.deadline, end),
+        blocked=waiting,
     )
 
 

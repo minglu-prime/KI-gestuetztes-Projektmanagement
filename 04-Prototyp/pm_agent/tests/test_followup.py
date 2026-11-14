@@ -94,6 +94,14 @@ def test_the_agents_get_the_computed_numbers_not_raw_material_to_compute(trackin
         "abweichung_fertiger_aufgaben": 2,
         "im_verzug": ["B"],
     }
+    # B has 12 of its 16 h left on Thu 12.11.: it ends on Friday, two workdays after the plan.
+    assert data["prognose"] == {
+        "geplantes_ende": "2026-11-11",
+        "voraussichtliches_ende": "2026-11-13",
+        "arbeitstage_spaeter_als_geplant": 2,
+        "arbeitstage_nach_der_deadline": -25,
+        "haelt_auf": {"B": []},
+    }
     b = data["aufgaben"][1]
     assert (b["id"], b["overdue"], b["planned_end"], b["depends_on"]) == (
         "B",

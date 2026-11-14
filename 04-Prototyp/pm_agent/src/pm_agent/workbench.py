@@ -17,7 +17,7 @@ from pydantic import ValidationError
 
 from pm_agent.agent import LOG_DIR
 from pm_agent.models import Assignment, CheckResult, Member, Plan, Project, Task
-from pm_agent.planning import count_workdays
+from pm_agent.planning import workday_shift
 
 DATA_DIR = LOG_DIR.parent / "data"
 TEAM_FILE = DATA_DIR / "team.json"
@@ -260,9 +260,8 @@ def check_changes(before: CheckResult, after: CheckResult) -> list[str]:
     """What a change of the plan does to its check: end date, warnings, moved dates."""
     lines = []
     if before.end_date and after.end_date and before.end_date != after.end_date:
-        first, last = sorted([before.end_date, after.end_date])
-        days = count_workdays(first + timedelta(days=1), last)
-        direction = "später" if after.end_date > before.end_date else "früher"
+        shift = workday_shift(before.end_date, after.end_date)
+        days, direction = abs(shift), "später" if shift > 0 else "früher"
         lines.append(
             f"Planende: {_date(before.end_date)} → {_date(after.end_date)} "
             f"({days} Arbeitstag{'' if days == 1 else 'e'} {direction})"

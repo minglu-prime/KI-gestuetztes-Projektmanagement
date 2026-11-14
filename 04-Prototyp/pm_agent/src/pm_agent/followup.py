@@ -16,7 +16,7 @@ from typing import Any
 from pm_agent.agent import LOG_DIR, PROMPTS, run_agent
 from pm_agent.models import ControlReport, StatusSummary
 from pm_agent.tools import Submission
-from pm_agent.tracking import Evaluation, Tracking, evaluate
+from pm_agent.tracking import Evaluation, Tracking, evaluate, forecast
 
 
 def run_status_summary(
@@ -104,6 +104,7 @@ def check_report(report: ControlReport, evaluation: Evaluation) -> list[str]:
 def facts(tracking: Tracking, evaluation: Evaluation) -> str:
     """What both agents get: the plan, the progress and the computed numbers, as JSON."""
     plan = {t.id: t for t in tracking.plan.tasks}
+    outlook = forecast(tracking, evaluation.today)
     data = {
         "projekt": tracking.project.model_dump(mode="json"),
         "stand": evaluation.today.isoformat(),
@@ -113,6 +114,14 @@ def facts(tracking: Tracking, evaluation: Evaluation) -> str:
             "fortschritt": round(evaluation.progress, 3),
             "abweichung_fertiger_aufgaben": evaluation.finished_deviation,
             "im_verzug": [t.id for t in evaluation.overdue],
+        },
+        # If the remaining work starts today. Negative days after the deadline are buffer.
+        "prognose": {
+            "geplantes_ende": outlook.planned_end.isoformat(),
+            "voraussichtliches_ende": outlook.end.isoformat() if outlook.end else None,
+            "arbeitstage_spaeter_als_geplant": outlook.shift,
+            "arbeitstage_nach_der_deadline": outlook.deadline_gap,
+            "haelt_auf": outlook.blocked,
         },
         "aufgaben": [
             {

@@ -7,10 +7,15 @@ import pandas as pd
 import streamlit as st
 
 from pm_agent import followup, workbench
-from pm_agent.tracking import agent_runs, evaluate, has_progress, percent
+from pm_agent.tracking import agent_runs, evaluate, forecast, has_progress, percent
 from pm_agent.ui import adopted_project, consent, run_with_progress
 
 state = st.session_state
+
+
+def days(count: int) -> str:
+    return "Arbeitstag" if abs(count) == 1 else "Arbeitstage"
+
 
 st.header("Kontrolle")
 st.caption(
@@ -43,6 +48,42 @@ if tracking is not None:
         st.success("Keine Aufgabe im Verzug.")
     if st.button("Fortschritt erfassen", icon=":material/edit_note:"):
         st.switch_page("pages/durchfuehrung.py")
+
+    with st.container(border=True, key="panel-forecast"):
+        st.markdown("#### :material/trending_up: Prognose")
+        outlook = forecast(tracking, date.today())
+        if outlook.end is None:
+            st.success("Alle Aufgaben sind fertig.")
+        else:
+            end, deadline = st.columns(2)
+            end.metric(
+                "Voraussichtliches Ende",
+                f"{outlook.end:%d.%m.%Y}",
+                # A later end is the bad direction: "inverse" paints it red.
+                delta=f"{outlook.shift:+d} {days(outlook.shift)} gegenüber dem Plan"
+                if outlook.shift
+                else None,
+                delta_color="inverse",
+            )
+            if outlook.deadline_gap > 0:
+                deadline.metric(
+                    "Deadline verpasst um",
+                    f"{outlook.deadline_gap} {days(outlook.deadline_gap)}",
+                )
+            else:
+                deadline.metric(
+                    "Puffer bis zur Deadline",
+                    f"{-outlook.deadline_gap} {days(outlook.deadline_gap)}",
+                )
+            titles = {task.id: task.title for task in tracking.plan.tasks}
+            for late, waiting in outlook.blocked.items():
+                held = ", ".join(waiting) if waiting else "keine weitere Aufgabe"
+                st.markdown(f"- **{late} · {titles[late]}** hält auf: {held}")
+            st.caption(
+                "Annahme: Die restliche Arbeit beginnt heute, in der Reihenfolge des Plans. Eine "
+                "offene Aufgabe zählt mit ihrer Schätzung, eine begonnene mit Schätzung minus "
+                "Ist-Stunden, mindestens einer Stunde."
+            )
 
     with st.container(border=True, key="panel-tasks"):
         st.markdown("#### :material/bar_chart: Plan und Ist je Aufgabe")
