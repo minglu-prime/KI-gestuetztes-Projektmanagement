@@ -1,0 +1,35 @@
+name: Recherche / Quelle
+description: Eine Forschungsfrage mit überprüfbarer Literatur bearbeiten
+title: "[Recherche] "
+labels: ["area:research"]
+body:
+  - type: textarea
+    id: question
+    attributes:
+      label: Forschungsfrage und Bezug
+      description: Welche konkrete Frage soll diese Recherche beantworten?
+    validations:
+      required: true
+  - type: textarea
+    id: search
+    attributes:
+      label: Suchstrategie und Quellen
+      description: Suchbegriffe, Portale, Zeitfenster und bisherige Links; Volltextstatus angeben.
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Ergebnis und Abnahmekriterien
+      value: |
+        - [ ] Literaturregister ergänzt, Dubletten geprüft
+        - [ ] Zentrale Aussagen am Original geprüft; Evidenzkarte(n) erstellt
+        - [ ] Ergebnisse und Grenzen mit konkreter Quelle verknüpft
+        - [ ] Konsequenz für Baseline / Experiment beschrieben
+    validations:
+      required: true
+  - type: input
+    id: lead
+    attributes:
+      label: Lead / Review / Meilenstein
+      placeholder: "Vorschlag: Tim / Cara / M1"

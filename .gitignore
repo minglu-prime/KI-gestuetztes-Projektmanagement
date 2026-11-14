@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+data/
+.env
+.venv/
+output/
+.playwright-cli/
+private/
+researcher-only/
+*.db
+*.db-wal
+*.db-shm

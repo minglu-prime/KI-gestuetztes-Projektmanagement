@@ -1,0 +1,28 @@
+name: Arbeitspaket / Entwicklung
+description: Konkrete Abgabe für Projektsteuerung, Demonstrator oder Bericht
+title: "[Aufgabe] "
+body:
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Ziel und Abgabe
+      description: Was soll nach Abschluss vorhanden sein, und wo wird es abgelegt?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Arbeit und Abhängigkeiten
+    validations:
+      required: true
+  - type: textarea
+    id: done
+    attributes:
+      label: Abnahmekriterien und Prüfung
+      description: Fachliches Review, passende Tests, Verlinkung oder Demonstration.
+    validations:
+      required: true
+  - type: input
+    id: lead
+    attributes:
+      label: Lead / Review / Meilenstein

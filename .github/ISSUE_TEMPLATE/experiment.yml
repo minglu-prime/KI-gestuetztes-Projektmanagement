@@ -1,0 +1,35 @@
+name: Experiment / Pilot
+description: Designentscheidung, Messung oder Durchführung vorbereiten
+title: "[Experiment] "
+labels: ["area:experiment"]
+body:
+  - type: textarea
+    id: goal
+    attributes:
+      label: Frage oder Risiko für den Versuch
+      description: Welche Entscheidung oder überprüfbare Änderung ist erforderlich?
+    validations:
+      required: true
+  - type: textarea
+    id: conditions
+    attributes:
+      label: Bedingungen, Ablauf und Kontrolle
+      description: Manuell/KI, Fall, Reihenfolge, Zeit, Ressourcen und mögliche Verzerrung beschreiben.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Messung und Abnahmekriterien
+      value: |
+        - [ ] Kriterien vor Datenerhebung definiert
+        - [ ] Betroffene Protokoll-/Materialversion dokumentiert
+        - [ ] Pilot oder Prüfnachweis vorhanden
+        - [ ] Fehler, Abweichungen und offene Punkte dokumentiert
+        - [ ] Keine privaten Daten oder geheimen formalen Antworten im Issue
+    validations:
+      required: true
+  - type: input
+    id: lead
+    attributes:
+      label: Lead / Abhängigkeit / Meilenstein
