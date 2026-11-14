@@ -400,7 +400,7 @@ with tabs[3]:
                         x2="Ende:T",
                         y=alt.Y("Aufgabe:N", sort=None, title=None, axis=alt.Axis(labelLimit=260)),
                         color="Person:N",
-                        # A dark outline for the tasks that set the end of the plan.
+                        # A dark outline for the tasks without slack.
                         stroke=alt.condition(
                             "datum.Kritisch", alt.value("#18352d"), alt.value("transparent")
                         ),
@@ -428,8 +428,9 @@ with tabs[3]:
                 )
                 st.html(f'<p class="path"><strong>Kritischer Pfad</strong>{path}</p>')
                 st.caption(
-                    "Dunkel umrandet: der kritische Pfad. Wie viele Arbeitstage Puffer eine "
-                    "Aufgabe hat, steht im Tooltip und in der Tabelle der Zuweisungen."
+                    "Dunkel umrandet: Aufgaben ohne Puffer. Wie viele Arbeitstage Puffer eine "
+                    "Aufgabe hat, steht im Tooltip und in der Tabelle der Zuweisungen. Der "
+                    "kritische Pfad ist die Kette, die das Ende bestimmt."
                 )
             else:
                 st.info("Ohne fehlerfreien Plan gibt es keinen Terminplan.")
@@ -481,7 +482,7 @@ with tabs[3]:
                 chosen = st.selectbox("Aufgabe", list(names), format_func=names.get)
                 view = explain_task(state.plan, team, result, chosen)
                 room = (
-                    chip("Auf dem kritischen Pfad", "warn")
+                    chip("Kein Puffer: jede Verzögerung verschiebt das Ende", "warn")
                     if view["critical"]
                     else chip(
                         f"{view['slack']} Arbeitstag{'' if view['slack'] == 1 else 'e'} Puffer",

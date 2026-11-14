@@ -1,10 +1,17 @@
+import random
 import time
 from datetime import date, timedelta
 
 import pytest
 
 from pm_agent.models import Assignment, Member, Plan, Project, Task
-from pm_agent.planning import add_workdays, check_plan, count_workdays, workday_shift
+from pm_agent.planning import (
+    add_workdays,
+    check_plan,
+    count_workdays,
+    scheduling_order,
+    workday_shift,
+)
 
 MON = date(2026, 11, 9)
 ANNA = Member(name="Anna", skills={"Python": 4}, hours_per_week=40)  # 8 h per workday
@@ -396,3 +403,113 @@ def test_slack_counts_whole_workdays_and_skips_absences():
 def test_a_plan_with_errors_has_no_slack():
     p = plan(task("A", 8), owners={"A": "Zoe"})
     assert check_plan(p, [ANNA], project()).slack == {}
+
+
+def test_a_task_that_only_waits_for_an_absence_is_not_on_the_critical_path():
+    # Ben does A on Monday. Anna is away all week and does B (after A) from the next Monday,
+    # whenever A is done that week. A can slip four days, so it is not critical.
+    anna = away(MON, date(2026, 11, 13))
+    p = plan(task("A", 8), task("B", 8, deps=["A"]), owners={"A": "Ben", "B": "Anna"})
+    result = check_plan(p, [anna, BEN], project())
+    assert by_id(result)["B"].start == date(2026, 11, 16)
+    assert result.slack == {"A": 4, "B": 0}
+    assert result.critical_path == ["B"]
+
+
+def test_slack_counts_days_that_an_absence_makes_harmless():
+    # Anna is away on Tuesday. A (16 h) runs Mon and Wed; Ben's B ends on Thursday. A can
+    # also run Wed and Thu: two days later (one of them is the absence).
+    anna = away(date(2026, 11, 10))
+    p = plan(task("A", 16), task("B", 32), owners={"A": "Anna", "B": "Ben"})
+    assert check_plan(p, [anna, BEN], project()).slack == {"A": 2, "B": 0}
+    # C takes Monday morning, D (8 h) Monday afternoon and Wednesday morning. A day later D
+    # is done within Wednesday, the day the plan ends anyway.
+    q = plan(
+        task("C", 4),
+        task("D", 8, deps=["C"]),
+        task("B", 24),
+        owners={"C": "Anna", "D": "Anna", "B": "Ben"},
+    )
+    assert check_plan(q, [anna, BEN], project()).slack["D"] == 1
+
+
+def test_every_warning_has_a_kind_that_survives_changing_numbers():
+    clara = Member(name="Clara", hours_per_week=10)
+    p = plan(task("A", 15, skills=["SQL"]), owners={"A": "Clara"})
+    result = check_plan(p, [clara], project(deadline=date(2026, 11, 13)))
+    assert result.warning_kinds == ["late", "overload:Clara", "skill:A:SQL"]
+    assert len(result.warning_kinds) == len(result.warnings)
+    on_the_day = check_plan(plan(task("A", 8), owners={"A": "Anna"}), [ANNA], project(deadline=MON))
+    assert on_the_day.warning_kinds == ["buffer"]
+    gone = away(date(2026, 11, 1), date(2026, 12, 31))
+    assert check_plan(
+        plan(task("A", 8), owners={"A": "Anna"}), [gone], project()
+    ).warning_kinds == [
+        "late",
+        "away:Anna",
+    ]
+
+
+def test_tasks_can_be_scheduled_in_a_given_order():
+    # Both orders are valid: A and B do not depend on each other and are both Anna's.
+    p = plan(task("A", 8), task("B", 16), owners={"A": "Anna", "B": "Anna"})
+    assert scheduling_order(p) == ["A", "B"]
+    swapped = by_id(check_plan(p, [ANNA], project(), order=["B", "A"]))
+    assert (swapped["B"].start, swapped["A"].start) == (MON, date(2026, 11, 11))
+    with pytest.raises(ValueError, match="order"):
+        check_plan(p, [ANNA], project(), order=["A"])
+    chain = plan(task("A", 8), task("B", 8, deps=["A"]), owners={"A": "Anna", "B": "Anna"})
+    with pytest.raises(ValueError, match="order"):
+        check_plan(chain, [ANNA], project(), order=["B", "A"])
+
+
+def test_on_random_plans_with_absences_nothing_is_planned_into_an_absence():
+    # The same seed every time: 200 small plans, two people who are sometimes away.
+    rng = random.Random(7)
+    for _ in range(200):
+        team = []
+        for name, hours in (("Anna", 40), ("Ben", 20)):
+            absences = []
+            if rng.random() < 0.6:
+                first = MON + timedelta(days=rng.randrange(10))
+                absences.append({"first": first, "last": first + timedelta(days=rng.randrange(4))})
+            team.append(Member(name=name, hours_per_week=hours, absences=absences))
+        ids = [f"T{n}" for n in range(rng.randrange(3, 7))]
+        tasks = [
+            task(tid, rng.choice([4, 8, 12, 16]), deps=[d for d in ids[:n] if rng.random() < 0.35])
+            for n, tid in enumerate(ids)
+        ]
+        p = plan(*tasks, owners={tid: rng.choice(["Anna", "Ben"]) for tid in ids})
+        result = check_plan(p, team, project())
+
+        assert result.ok
+        assert result.critical_path, p
+        assert all(days >= 0 for days in result.slack.values())
+        # No task is planned on a day its person is away.
+        people = {m.name: m for m in team}
+        for s in result.schedule:
+            for absence in people[s.member].absences:
+                assert not absence.first <= s.start <= absence.last, (s, absence)
+                assert not absence.first <= s.end <= absence.last, (s, absence)
+
+
+def test_the_last_task_of_the_chain_can_have_a_day_of_slack_when_days_are_not_full():
+    # Found by the random plans. Ben works 4 h a day and is away on Monday 16.11. His D (12 h)
+    # starts on Friday afternoon after Anna's C and ends on Thursday at noon. Started a day
+    # later it fills Tue, Wed and Thu and ends on the same Thursday.
+    ben = Member(
+        name="Ben",
+        hours_per_week=20,
+        absences=[{"first": date(2026, 11, 16), "last": date(2026, 11, 16)}],
+    )
+    p = plan(
+        task("C", 36),  # Anna: Mon to Fri noon
+        task("D", 12, deps=["C"]),
+        owners={"C": "Anna", "D": "Ben"},
+    )
+    result = check_plan(p, [ANNA, ben], project())
+    assert by_id(result)["D"].end == date(2026, 11, 19)
+    assert result.critical_path == ["C", "D"]  # the chain that sets the end
+    # And still the plan has a whole day of room: C a day later ends on Monday noon, when
+    # Ben is away anyway. The day is shared: either may slip, not both.
+    assert result.slack == {"C": 1, "D": 1}

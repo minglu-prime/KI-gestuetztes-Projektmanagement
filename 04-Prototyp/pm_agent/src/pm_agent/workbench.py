@@ -256,7 +256,9 @@ def explain_task(
         "skills": [(skill, has.get(skill)) for skill in task.required_skills],
         "depends_on": [(dep, tasks[dep].title) for dep in task.depends_on],
         "needed_by": [(t.id, t.title) for t in plan.tasks if task_id in t.depends_on],
-        "critical": task_id in result.critical_path,
+        # No slack, not membership in critical_path: the last task of that chain can have
+        # a whole day of room when its days are not full.
+        "critical": result.slack[task_id] == 0,
         "slack": result.slack[task_id],
         "alternatives": [
             {"member": m.name, "skills": fit, "utilization": load[m.name]} for m, fit in others
@@ -447,7 +449,7 @@ def gantt(plan: Plan, result: CheckResult, deadline: date) -> tuple[list[dict[st
             "Start": s.start,
             "Ende": bar_end(s.end),
             "Zeitraum": f"{s.start:%d.%m.} – {s.end:%d.%m.}",
-            "Kritisch": s.task_id in result.critical_path,
+            "Kritisch": result.slack[s.task_id] == 0,
             "Puffer": result.slack[s.task_id],
         }
         for s in result.schedule

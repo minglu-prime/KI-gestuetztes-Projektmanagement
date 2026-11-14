@@ -159,7 +159,7 @@ def test_a_task_is_explained_in_the_result(with_plan):
     assert "**Warum Anna?**" in texts and "kennt die Raumdaten" in texts
     assert "- SQL: bei Anna nicht angegeben" in texts
     assert "- B · API" in texts  # B waits for it
-    (details,) = [h.value for h in with_plan.html if "kritischen Pfad" in h.value]
+    (details,) = [h.value for h in with_plan.html if "Kein Puffer" in h.value]
     assert "8 h" in details and "09.11. – 09.11.2026" in details
     # Anna is the only person in the team: nobody else could take it.
     assert any("Niemand sonst im Team" in c.value for c in with_plan.caption)
