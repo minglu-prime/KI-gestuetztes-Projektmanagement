@@ -1,10 +1,12 @@
 """What changed between two plans, and what the progress view says about one agent round."""
 
+from datetime import date
+
 from test_tools import PROJECT, TEAM, plan_input
 
-from pm_agent.models import Member, Plan
+from pm_agent.models import Member, Plan, Project
 from pm_agent.planning import check_plan
-from pm_agent.workbench import check_changes, describe_round, plan_changes
+from pm_agent.workbench import check_changes, describe_round, pair_tasks, plan_changes
 
 BEN = Member(name="Ben", skills={"SQL": 3}, hours_per_week=20)
 PLAN = Plan.model_validate(plan_input())
@@ -115,3 +117,76 @@ def test_a_round_without_a_readable_draft_keeps_the_tool_message():
     view = describe_round(1, record, PLAN)
     assert view["draft"] is None and view["size"] == "" and view["changes"] == []
     assert view["messages"] == ["x"]
+
+
+def simple(*tasks):
+    """A plan from (id, title, member, hours, depends_on) tuples."""
+    return Plan.model_validate(
+        {
+            "tasks": [
+                {"id": i, "title": title, "estimate_hours": hours, "depends_on": deps}
+                for i, title, _, hours, deps in tasks
+            ],
+            "assignments": [
+                {"task_id": i, "member": member, "reason": "r"} for i, _, member, _, _ in tasks
+            ],
+        }
+    )
+
+
+def test_a_warning_whose_numbers_change_stays_a_warning():
+    # Clara has 10 h until Friday. 15 h are too much, and so are 12 h.
+    clara = Member(name="Clara", hours_per_week=10)
+    week = Project(idea="x", start_date=date(2026, 11, 9), deadline=date(2026, 11, 13))
+    before = check_plan(simple(("A", "Bericht", "Clara", 15, [])), [clara], week)
+    after = check_plan(simple(("A", "Bericht", "Clara", 12, [])), [clara], week)
+
+    assert check_changes(before, after) == [
+        "Planende: 18.11.2026 → 16.11.2026 (2 Arbeitstage früher)",
+        "Warnung bleibt: Der Plan endet am 16.11.2026, 1 Arbeitstag nach der Deadline (13.11.2026)",
+        "Warnung bleibt: Clara ist überlastet: 12 h zugewiesen, bis zur Deadline sind 10 h "
+        "verfügbar (120%)",
+        "Termine von einer Aufgabe verschieben sich",
+    ]
+
+
+def test_a_dependency_on_a_removed_task_is_not_hidden_by_a_reused_id():
+    before = simple(
+        ("T1", "A", "Anna", 8, []), ("T2", "B", "Anna", 8, []), ("T3", "C", "Anna", 8, ["T2"])
+    )
+    # B is gone, A has taken its ID: C now waits for A instead of B.
+    after = simple(("T2", "A", "Anna", 8, []), ("T3", "C", "Anna", 8, ["T2"]))
+    assert plan_changes(before, after) == [
+        "Entfernt: T2 · B",
+        "T3 · C: hängt ab von T2 (vorher T2 [entfernt])",
+        "Eine Aufgabe hat eine neue ID",
+    ]
+
+
+def test_tasks_with_the_same_title_are_not_paired_by_title():
+    before = simple(("T1", "Test", "Anna", 8, []), ("T2", "Test", "Ben", 4, []))
+    after = simple(("T3", "Test", "Anna", 8, []), ("T4", "Test", "Ben", 4, []))
+    assert pair_tasks(before, after) == {}
+    # Which is which cannot be known: no invented reassignment, the tasks are listed.
+    assert plan_changes(before, after) == [
+        "Neu: T3 · Test (Anna, 8 h)",
+        "Neu: T4 · Test (Ben, 4 h)",
+        "Entfernt: T1 · Test",
+        "Entfernt: T2 · Test",
+    ]
+
+
+def test_renumbering_alone_changes_nothing_in_the_check():
+    renumbered = plan_input()
+    renumbered["tasks"][0]["id"] = "X1"
+    renumbered["tasks"][1].update(id="X2", depends_on=["X1"])
+    renumbered["assignments"][0]["task_id"] = "X1"
+    renumbered["assignments"][1]["task_id"] = "X2"
+    after = Plan.model_validate(renumbered)
+    pairs = pair_tasks(PLAN, after)
+    assert pairs == {"A": "X1", "B": "X2"}
+    # Same dates, and the missing skill is the same warning about the same task.
+    assert (
+        check_changes(check_plan(PLAN, TEAM, PROJECT), check_plan(after, TEAM, PROJECT), pairs)
+        == []
+    )

@@ -314,27 +314,47 @@ def suggested_wishes(
     return wishes[:4]
 
 
-def plan_changes(before: Plan, after: Plan) -> list[str]:
-    """What differs between two plans, one line per change, for the project lead. Reasons of
-    assignments and descriptions are left out: they do not change what is planned.
+def pair_tasks(before: Plan, after: Plan) -> dict[str, str]:
+    """Which task of `after` is which task of `before`: ID in before -> ID in after.
 
-    Tasks are paired by ID and title, then by title alone, then by ID alone. Claude sometimes
-    renumbers a draft; paired by ID only, every task after an inserted one would count as
-    renamed and reassigned."""
+    Paired by ID and title, then by title alone, then by ID alone. Claude sometimes renumbers
+    a draft; paired by ID only, every task after an inserted one would count as renamed and
+    reassigned. A title pairs two tasks only if it is unique in both plans: with two tasks
+    called the same, nothing says which is which."""
     old = {task.id: task for task in before.tasks}
     new = {task.id: task for task in after.tasks}
-    by_title = {task.title: task.id for task in after.tasks}
-    twin: dict[str, str] = {}  # ID in `before` -> ID of the same task in `after`
+
+    def unique(plan: Plan) -> dict[str, str]:
+        titles = [task.title for task in plan.tasks]
+        return {task.title: task.id for task in plan.tasks if titles.count(task.title) == 1}
+
+    old_titles, new_titles = unique(before), unique(after)
+    twin: dict[str, str] = {}
     for tid, task in old.items():
         if tid in new and new[tid].title == task.title:
             twin[tid] = tid
     for tid, task in old.items():  # renumbered
-        other = by_title.get(task.title)
-        if tid not in twin and other is not None and other not in twin.values():
+        other = new_titles.get(task.title)
+        if (
+            tid not in twin
+            and task.title in old_titles
+            and other is not None
+            and other not in twin.values()
+        ):
             twin[tid] = other
     for tid in old:  # renamed
         if tid not in twin and tid in new and tid not in twin.values():
             twin[tid] = tid
+    return twin
+
+
+def plan_changes(before: Plan, after: Plan) -> list[str]:
+    """What differs between two plans, one line per change, for the project lead. Reasons of
+    assignments and descriptions are left out: they do not change what is planned. Which
+    task is which decides pair_tasks."""
+    old = {task.id: task for task in before.tasks}
+    new = {task.id: task for task in after.tasks}
+    twin = pair_tasks(before, after)
     origin = {new_id: old_id for old_id, new_id in twin.items()}
 
     old_owner = {a.task_id: a.member for a in before.assignments}
@@ -350,8 +370,9 @@ def plan_changes(before: Plan, after: Plan) -> list[str]:
             continue
         old_id = origin[tid]
         was, parts = old[old_id], []
-        # The dependencies of before, in the IDs of after.
-        needed = [twin.get(dep, dep) for dep in was.depends_on]
+        # The dependencies of before, in the IDs of after. A dependency on a removed task
+        # is marked: its ID may have gone to another task, and would then look unchanged.
+        needed = [twin[dep] if dep in twin else f"{dep} [entfernt]" for dep in was.depends_on]
         if task.title != was.title:
             parts.append(f"heißt jetzt „{task.title}“")
         if old_owner.get(old_id) != new_owner.get(tid):
@@ -380,8 +401,28 @@ def plan_changes(before: Plan, after: Plan) -> list[str]:
     return lines
 
 
-def check_changes(before: CheckResult, after: CheckResult) -> list[str]:
-    """What a change of the plan does to its check: end date, warnings, moved dates."""
+def check_changes(
+    before: CheckResult, after: CheckResult, pairs: dict[str, str] | None = None
+) -> list[str]:
+    """What a change of the plan does to its check: end date, warnings, moved dates.
+
+    `pairs` (pair_tasks) says which task of before is which task of after. Without it tasks
+    are the same if their IDs are."""
+    if pairs is None:
+        pairs = {s.task_id: s.task_id for s in before.schedule}
+
+    def kinds(result: CheckResult, renumber: dict[str, str]) -> dict[str, str]:
+        """Kind -> text of each warning, with task IDs in the IDs of `after`."""
+        named = {}
+        for kind, text in zip(result.warning_kinds, result.warnings, strict=True):
+            topic, _, rest = kind.partition(":")
+            if topic == "skill":
+                task_id, _, skill = rest.partition(":")
+                kind = f"skill:{renumber.get(task_id, task_id)}:{skill}"
+            named[kind] = text
+        return named
+
+    was, now = kinds(before, pairs), kinds(after, {})
     lines = []
     if before.end_date and after.end_date and before.end_date != after.end_date:
         shift = workday_shift(before.end_date, after.end_date)
@@ -391,9 +432,15 @@ def check_changes(before: CheckResult, after: CheckResult) -> list[str]:
             f"({days} Arbeitstag{'' if days == 1 else 'e'} {direction})"
         )
     lines += [f"Fehler: {error}" for error in after.errors if error not in before.errors]
-    lines += [f"Neue Warnung: {w}" for w in after.warnings if w not in before.warnings]
-    lines += [f"Behoben: {w}" for w in before.warnings if w not in after.warnings]
-    dates = {s.task_id: (s.start, s.end) for s in before.schedule}
+    # By kind, not by text: "5 Arbeitstage nach der Deadline" that became 3 is the same
+    # warning with another number, not one solved and a new one.
+    for kind, text in now.items():
+        if kind not in was:
+            lines.append(f"Neue Warnung: {text}")
+        elif text != was[kind] and not kind.startswith("skill:"):
+            lines.append(f"Warnung bleibt: {text}")
+    lines += [f"Behoben: {text}" for kind, text in was.items() if kind not in now]
+    dates = {pairs[s.task_id]: (s.start, s.end) for s in before.schedule if s.task_id in pairs}
     moved = sum(s.task_id in dates and dates[s.task_id] != (s.start, s.end) for s in after.schedule)
     if moved:
         subject = "einer Aufgabe verschieben" if moved == 1 else f"{moved} Aufgaben verschieben"

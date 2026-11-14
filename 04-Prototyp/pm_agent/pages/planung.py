@@ -35,6 +35,7 @@ from pm_agent.workbench import (
     gantt,
     load_run,
     load_team,
+    pair_tasks,
     plan_changes,
     plan_rows,
     rows_to_plan,
@@ -642,7 +643,9 @@ with tabs[4]:
                     st.text(proposal["wish"])
                     proposal["changes"] = plan_changes(state.plan, proposal["plan"])
                     if proposed is not None:
-                        proposal["changes"] += check_changes(result, proposed)
+                        proposal["changes"] += check_changes(
+                            result, proposed, pair_tasks(state.plan, proposal["plan"])
+                        )
                     if proposal["changes"]:
                         st.markdown("\n".join(f"- {c}" for c in proposal["changes"]))
                     else:
