@@ -1,5 +1,6 @@
 """Streamlit pieces that several pages share."""
 
+import re
 from collections.abc import Callable
 from html import escape
 from typing import Any, TypeVar
@@ -45,11 +46,13 @@ def adopted_project() -> Tracking | None:
 
 
 def heading(icon: str, text: str) -> None:
-    """A panel heading with a Material icon in front. Written as ":material/name:" in Markdown,
-    Streamlit labels the icon "name icon", and a screen reader reads that English word before
-    the German heading. The icon only decorates, so here it is hidden from screen readers."""
+    """A panel heading with a Material icon in front. Written as a Material shortcode in
+    Markdown, Streamlit labels the icon "name icon", and a screen reader reads that English
+    word before the German heading. The icon only decorates, so here it is hidden from screen
+    readers. `text` shows as written: neither HTML nor Markdown in it is applied."""
+    plain = escape(re.sub(r"([\\`*_\[\]~|#])", r"\\\1", text))
     st.markdown(
-        f'#### <span class="icon" aria-hidden="true">{escape(icon)}</span> {escape(text)}',
+        f'#### <span class="icon" aria-hidden="true">{escape(icon)}</span> {plain}',
         unsafe_allow_html=True,
     )
 

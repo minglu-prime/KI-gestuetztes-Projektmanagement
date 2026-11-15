@@ -35,13 +35,15 @@ def test_every_chart_on_a_page_says_what_it_shows():
         assert source.count("st.altair_chart(") == source.count("on_panel("), page.name
 
 
-def test_no_heading_reads_out_the_name_of_its_icon():
+def test_no_text_reads_out_the_name_of_an_icon():
     # Streamlit gives an icon in Markdown role="img" and the English label "<name> icon": a
-    # screen reader said "trending_up icon Prognose". ui.heading hides the icon instead.
-    pages = Path(__file__).parents[1] / "pages"
-    for page in pages.glob("*.py"):
-        source = page.read_text(encoding="utf-8")
-        assert not re.search(r"#+ (\{icon\}|:material/)", source), page.name
+    # screen reader said "trending_up icon Prognose". As the icon= of a button, link or page
+    # it is hidden from screen readers; in a heading ui.heading hides it.
+    root = Path(__file__).parents[1]
+    for source in (*root.glob("*.py"), *root.glob("pages/*.py"), *root.glob("src/**/*.py")):
+        for number, line in enumerate(source.read_text(encoding="utf-8").splitlines(), 1):
+            if ":material/" in line:
+                assert "icon=" in line.split(":material/")[0], f"{source.name}:{number}"
 
 
 def test_heading_hides_the_icon_from_screen_readers():
@@ -50,12 +52,13 @@ def test_heading_hides_the_icon_from_screen_readers():
     def page():
         from pm_agent.ui import heading
 
-        heading("trending_up", "Prognose & <Plan>")
+        heading("trending_up", "Prognose & <Plan_v2> *neu*")
 
     app = AppTest.from_function(page).run()
     assert not app.exception
     assert app.markdown[0].value == (
-        '#### <span class="icon" aria-hidden="true">trending_up</span> Prognose &amp; &lt;Plan&gt;'
+        '#### <span class="icon" aria-hidden="true">trending_up</span> '
+        r"Prognose &amp; &lt;Plan\_v2&gt; \*neu\*"
     )
 
 
