@@ -9,6 +9,7 @@ import csv
 import io
 import json
 import math
+import os
 import re
 import threading
 from datetime import date, datetime, timedelta
@@ -205,7 +206,6 @@ def load_run(path: Path) -> tuple[Project, list[Member], Plan, dict[str, Any]]:
 # appended at the same moment can write over each other. Within this server only; two
 # servers on one logs folder are not kept apart.
 _RECORD_LOCK = threading.Lock()
-_NO_CONTENT = b"\xef\xbb\xbf \t\r\n"  # a byte order mark and white space
 
 
 def append_run(row: dict[str, Any], path: Path | None = None) -> None:
@@ -219,15 +219,14 @@ def append_run(row: dict[str, Any], path: Path | None = None) -> None:
     existing file is rewritten, so nothing in it can be lost or end up under another
     heading.
 
-    Raises OSError if a file cannot be written, and ValueError (UnicodeEncodeError) if the
-    row cannot be; the record is as it was then."""
+    Raises ValueError (UnicodeEncodeError) if the row cannot be written, before any file is
+    touched, and OSError if a file cannot be. After an OSError every line is still there,
+    in runs.csv or, if the old file was already put aside, in that file."""
     path = path or RUNS_CSV  # read at call time: tests point it to a temporary folder
     path.parent.mkdir(parents=True, exist_ok=True)
     with _RECORD_LOCK:
         old = path.read_bytes() if path.exists() else b""
         heading = _record_heading(old)
-        if not old.strip(_NO_CONTENT):
-            old, heading = b"", None  # nothing in it: begin anew, nothing to put aside
         fits = heading is not None and set(row) <= set(heading)
         text = io.StringIO(newline="")
         writer = csv.DictWriter(text, fieldnames=heading if fits else list(row), restval="")
@@ -237,10 +236,34 @@ def append_run(row: dict[str, Any], path: Path | None = None) -> None:
             text.write("\r\n")
         writer.writerow(row)
         line = text.getvalue().encode("utf-8")  # fails here, before any file is touched
-        if old and not fits:
-            _put_aside(path, old)
-        with path.open("ab" if old and fits else "wb") as file:
+        if not fits and not _is_blank(old):
+            _put_aside(path)
+        with path.open("ab" if fits else "wb") as file:
             file.write(line)  # in one piece
+
+
+def read_runs(path: Path | None = None) -> list[dict[str, str]]:
+    """The lines of runs.csv, one dict per export; [] if there is no file or nothing in it.
+    Read with the check append_run writes with, so that a table never shows a file with
+    cells left out or shifted. Raises InputError if the file is not a clean record."""
+    path = path or RUNS_CSV
+    content = path.read_bytes() if path.exists() else b""
+    if _is_blank(content):
+        return []
+    if _record_heading(content) is None:
+        raise InputError(
+            "kein sauberes Protokoll (andere Kodierung, ein offenes Anführungszeichen oder "
+            "eine Zeile mit mehr oder weniger Zellen als die Kopfzeile)"
+        )
+    return list(csv.DictReader(io.StringIO(content.decode("utf-8-sig"), newline="")))
+
+
+def _is_blank(content: bytes) -> bool:
+    """Nothing in it but a byte order mark and white space: nothing to keep."""
+    try:
+        return not content.decode("utf-8-sig").strip()
+    except UnicodeDecodeError:
+        return False
 
 
 def _record_heading(content: bytes) -> list[str] | None:
@@ -256,30 +279,31 @@ def _record_heading(content: bytes) -> list[str] | None:
     return lines[0]
 
 
-def _put_aside(path: Path, content: bytes) -> None:
-    """Keep the file under a name with the time and take it away from its place. The copy
-    is created with "x", which refuses a name that exists: no file is ever written over,
-    also not by another server that puts a file aside in the same second."""
+def _put_aside(path: Path) -> None:
+    """Give the file a name with the time, so that its place is free. The file itself is
+    moved, not a copy of what was read: a line that another server appended in between goes
+    with it. And never onto a name that exists, also not one that another server took in
+    the same second."""
     stamp, number = datetime.now().strftime("%Y%m%d-%H%M%S"), 1
     while True:
         count = "" if number == 1 else f"-{number}"
         aside = path.with_name(f"{path.stem}-bis-{stamp}{count}{path.suffix}")
         try:
-            with aside.open("xb") as file:
-                file.write(content)
-            break
+            if os.name == "nt":
+                os.rename(path, aside)  # on Windows a rename refuses an existing name
+            else:
+                os.link(path, aside)  # elsewhere it would write over it; a link refuses
+                path.unlink()
+            return
         except FileExistsError:
             number += 1
-    try:
-        path.unlink()
-    except OSError:
-        aside.unlink()  # the original stays where it is: no second copy of it
-        raise
 
 
 def put_aside(path: Path | None = None) -> list[str]:
     """The names of the files append_run has put aside, oldest first."""
     path = path or RUNS_CSV
+    if not path.parent.is_dir():  # no logs folder yet: nothing was ever written
+        return []
     name = re.compile(
         rf"{re.escape(path.stem)}-bis-(\d{{8}}-\d{{6}})(?:-(\d+))?{re.escape(path.suffix)}"
     )

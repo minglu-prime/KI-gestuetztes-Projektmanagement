@@ -22,6 +22,7 @@ from pm_agent.workbench import (
     load_team,
     plan_rows,
     put_aside,
+    read_runs,
     round_summary,
     rows_to_plan,
     rows_to_team,
@@ -179,6 +180,15 @@ def test_runs_csv_whose_columns_fit_keeps_every_byte(tmp_path):
     assert list(tmp_path.glob("runs-bis-*.csv")) == []
 
 
+def test_bytes_that_only_look_like_a_byte_order_mark_are_content(tmp_path):
+    # EF BB BB is a letter (U+FEFB), not the mark EF BB BF.
+    path = tmp_path / "runs.csv"
+    path.write_bytes(b"\xef\xbb\xbb\r\n")
+    append_run({"quelle": "agent"}, path)
+    (aside,) = put_aside(path)
+    assert (tmp_path / aside).read_bytes() == b"\xef\xbb\xbb\r\n"
+
+
 @pytest.mark.parametrize("empty", [b"", b"\xef\xbb\xbf", b"\r\n\r\n", b"\xef\xbb\xbf\n \n"])
 def test_runs_csv_without_any_content_is_begun_anew(tmp_path, empty):
     # Nothing to keep, so nothing to put aside.
@@ -201,6 +211,9 @@ def test_runs_csv_is_never_put_aside_over_another_file(tmp_path, monkeypatch):
     path = tmp_path / "runs.csv"
     (tmp_path / "runs-bis-notizen.csv").write_bytes(b"meins")
     (tmp_path / "runs-bis-20261115-120000-9.csv").mkdir()
+    # A file that already has the name the first one would get, as another server of the
+    # same second would leave it: it is not written over.
+    (tmp_path / "runs-bis-20261115-120000.csv").write_bytes(b"von nebenan")
     for number in range(3):
         path.write_bytes(b"alt%d\r\n1\r\n" % number)
         append_run({"quelle": "agent"}, path)
@@ -208,12 +221,55 @@ def test_runs_csv_is_never_put_aside_over_another_file(tmp_path, monkeypatch):
         "runs-bis-20261115-120000.csv",
         "runs-bis-20261115-120000-2.csv",
         "runs-bis-20261115-120000-3.csv",
+        "runs-bis-20261115-120000-4.csv",
     ]
     assert [(tmp_path / name).read_bytes() for name in put_aside(path)] == [
+        b"von nebenan",
         b"alt0\r\n1\r\n",
         b"alt1\r\n1\r\n",
         b"alt2\r\n1\r\n",
     ]
+
+
+def test_putting_aside_moves_the_file_that_is_there(tmp_path, monkeypatch):
+    # Another server on the same folder appends a line after this one has read the file.
+    # Put aside as a copy of what was read, that line would be in no file at all.
+    path = tmp_path / "runs.csv"
+    path.write_bytes(b"quelle,runden\r\nagent,1\r\n")
+    heading = workbench._record_heading
+
+    def read_then_the_other_server_writes(content):
+        with path.open("ab") as file:
+            file.write(b"nebenan,2\r\n")
+        return heading(content)
+
+    monkeypatch.setattr(workbench, "_record_heading", read_then_the_other_server_writes)
+    append_run({"quelle": "agent", "runden": 3, "format": "csv"}, path)
+    (aside,) = put_aside(path)
+    assert (tmp_path / aside).read_bytes() == b"quelle,runden\r\nagent,1\r\nnebenan,2\r\n"
+
+
+def test_no_list_of_files_put_aside_without_the_folder(tmp_path):
+    # A fresh clone has no logs folder until the first run or export.
+    assert put_aside(tmp_path / "logs" / "runs.csv") == []
+    assert read_runs(tmp_path / "logs" / "runs.csv") == []
+
+
+def test_the_record_is_read_with_the_check_it_is_written_with(tmp_path):
+    path = tmp_path / "runs.csv"
+    assert read_runs(path) == []
+    path.write_bytes(b"\xef\xbb\xbf\r\n")  # nothing in it
+    assert read_runs(path) == []
+    append_run({"quelle": "Agent, auf Wunsch geändert", "runden": 3}, path)
+    append_run({"quelle": "agent", "runden": None}, path)
+    assert read_runs(path) == [
+        {"quelle": "Agent, auf Wunsch geändert", "runden": "3"},
+        {"quelle": "agent", "runden": ""},
+    ]
+    # A surplus cell that a table program would read as "no value" and leave out.
+    path.write_bytes(b"quelle,runden\r\nagent,5,NA\r\nagent,3,None\r\n")
+    with pytest.raises(InputError, match="kein sauberes Protokoll"):
+        read_runs(path)
 
 
 def test_runs_csv_takes_every_line_of_exports_at_the_same_time(tmp_path):
@@ -247,6 +303,11 @@ def test_a_line_that_cannot_be_written_leaves_the_file_as_it_was(tmp_path):
     with pytest.raises(UnicodeEncodeError):
         append_run({"quelle": "Protokoll run-\udc80.json"}, path)
     assert path.read_bytes() == b"quelle\r\nagent\r\n"
+    # Also a file that would have to be put aside first: it stays where it is.
+    with pytest.raises(UnicodeEncodeError):
+        append_run({"quelle": "Protokoll run-\udc80.json", "neu": 1}, path)
+    assert path.read_bytes() == b"quelle\r\nagent\r\n"
+    assert put_aside(path) == []
 
 
 def test_runs_csv_is_found_where_the_tests_point_it(tmp_path, monkeypatch):

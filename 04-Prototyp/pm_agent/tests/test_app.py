@@ -917,6 +917,14 @@ def test_kontrolle_shows_no_table_with_cells_left_out(tracked):
     assert not any("quelle" in frame.value.columns for frame in at.dataframe)
 
 
+def test_kontrolle_opens_before_there_is_a_logs_folder(tracked, monkeypatch, tmp_path):
+    # A fresh clone: logs/ is git-ignored and made by the first run or export.
+    monkeypatch.setattr(workbench, "RUNS_CSV", tmp_path / "noch-nicht-da" / "runs.csv")
+    at = tracked.switch_page("pages/kontrolle.py").run()
+    assert not at.exception and not at.error
+    assert "Noch kein Plan exportiert." in [c.value for c in at.caption]
+
+
 def test_kontrolle_takes_an_empty_record_for_no_export_yet(tracked):
     workbench.RUNS_CSV.write_bytes(b"")
     at = tracked.switch_page("pages/kontrolle.py").run()
