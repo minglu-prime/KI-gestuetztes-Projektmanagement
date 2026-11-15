@@ -31,8 +31,9 @@ class PlanningTools:
             self._check,
             name="check_plan",
             description=(
-                "Prüft einen Planentwurf deterministisch. Liefert Fehler, Warnungen, Enddatum, "
-                "kritischen Pfad und die Auslastung je Person bis zur Deadline."
+                "Prüft einen Planentwurf deterministisch und rechnet dabei mit den "
+                "Abwesenheiten des Teams. Liefert Fehler, Warnungen, Enddatum, kritischen Pfad "
+                "und die Auslastung je Person bis zur Deadline."
             ),
             input_schema=Plan,
         )

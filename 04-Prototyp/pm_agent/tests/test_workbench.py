@@ -11,6 +11,8 @@ from pm_agent.planning import check_plan
 from pm_agent.workbench import (
     InputError,
     append_run,
+    bar_end,
+    explain_task,
     gantt,
     load_run,
     load_team,
@@ -20,6 +22,8 @@ from pm_agent.workbench import (
     rows_to_team,
     save_team,
     saved_runs,
+    suggested_wishes,
+    table_plan,
     team_rows,
     to_csv,
     to_markdown,
@@ -191,3 +195,166 @@ def test_a_task_that_ends_after_the_deadline_crosses_the_line():
     result = check_plan(PLAN, TEAM, PROJECT.model_copy(update={"deadline": date(2026, 11, 10)}))
     bars, line = gantt(PLAN, result, date(2026, 11, 10))
     assert max(b["Ende"] for b in bars) > line
+
+
+def test_absences_are_read_from_the_team_table_and_written_back_the_same_way():
+    rows = [
+        {
+            "Name": "Anna",
+            "Skills": "",
+            "Stunden/Woche": 20,
+            "Abwesend": "01.12.2026–05.12.2026, 23.12.2026, 4.1.2027 - 8.1.2027, "
+            "01.02.2027 bis 02.02.2027",
+        }
+    ]
+    (anna,) = rows_to_team(rows)
+    assert [(a.first, a.last) for a in anna.absences] == [
+        (date(2026, 12, 1), date(2026, 12, 5)),
+        (date(2026, 12, 23), date(2026, 12, 23)),
+        (date(2027, 1, 4), date(2027, 1, 8)),
+        (date(2027, 2, 1), date(2027, 2, 2)),
+    ]
+    (row,) = team_rows([anna])
+    assert row["Abwesend"] == (
+        "01.12.2026–05.12.2026, 23.12.2026, 04.01.2027–08.01.2027, 01.02.2027–02.02.2027"
+    )
+    assert rows_to_team([row]) == [anna]
+
+
+def test_an_unreadable_absence_names_the_row_and_shows_the_expected_form():
+    rows = [{"Name": "Anna", "Skills": "", "Stunden/Woche": 20, "Abwesend": "nächste Woche"}]
+    with pytest.raises(InputError) as err:
+        rows_to_team(rows)
+    assert str(err.value) == (
+        "Zeile 1 (Anna): Abwesenheit 'nächste Woche' nicht lesbar, erwartet zum Beispiel "
+        "'01.12.2026–05.12.2026' oder '23.12.2026'"
+    )
+    rows[0]["Abwesend"] = "31.02.2027"
+    with pytest.raises(InputError, match="Abwesenheit '31.02.2027' nicht lesbar"):
+        rows_to_team(rows)
+    rows[0]["Abwesend"] = "05.12.2026–01.12.2026"
+    with pytest.raises(InputError, match="Ende der Abwesenheit liegt vor ihrem Beginn"):
+        rows_to_team(rows)
+
+
+BEN = Member(name="Ben", skills={"SQL": 3}, hours_per_week=20)
+CLARA = Member(name="Clara", skills={"sql": 4, "Python": 2}, hours_per_week=10)
+
+
+def test_a_task_is_explained_with_its_reason_skills_neighbours_and_slack():
+    team = [*TEAM, BEN, CLARA]
+    result = check_plan(PLAN, team, PROJECT)
+    view = explain_task(PLAN, team, result, "A")
+
+    assert (view["title"], view["member"], view["hours"]) == ("Datenmodell", "Anna", 8)
+    assert view["reason"] == "kennt die Raumdaten"
+    assert (view["start"], view["end"]) == (date(2026, 11, 9), date(2026, 11, 9))
+    assert view["skills"] == [("SQL", None)]  # Anna has not named SQL
+    assert view["depends_on"] == [] and view["needed_by"] == [("B", "API")]
+    assert view["critical"] is True and view["slack"] == 0
+    # Who else could do it: best fit first. Skill names match without regard to case.
+    assert view["alternatives"] == [
+        {"member": "Clara", "skills": {"SQL": 4}, "utilization": 0},
+        {"member": "Ben", "skills": {"SQL": 3}, "utilization": 0},
+    ]
+
+
+def test_a_task_without_required_skills_lists_the_least_loaded_people_first():
+    busy_ben = Plan.model_validate(
+        {
+            **plan_input(),
+            "tasks": plan_input()["tasks"] + [{"id": "C", "title": "Doku", "estimate_hours": 10}],
+            "assignments": plan_input()["assignments"]
+            + [{"task_id": "C", "member": "Ben", "reason": "hat Zeit"}],
+        }
+    )
+    team = [*TEAM, BEN, CLARA]
+    view = explain_task(busy_ben, team, check_plan(busy_ben, team, PROJECT), "B")
+    assert view["skills"] == []
+    assert view["depends_on"] == [("A", "Datenmodell")]
+    assert [a["member"] for a in view["alternatives"]] == ["Clara", "Ben"]
+    assert view["alternatives"][1]["utilization"] == pytest.approx(10 / 120)
+
+
+def test_the_bars_of_the_gantt_chart_carry_slack_and_the_critical_path():
+    ben = Member(name="Ben", skills={"SQL": 3}, hours_per_week=40)
+    data = plan_input()
+    data["tasks"].append({"id": "C", "title": "Doku", "estimate_hours": 8})
+    data["assignments"].append({"task_id": "C", "member": "Ben", "reason": "hat Zeit"})
+    plan = Plan.model_validate(data)
+    team = [*TEAM, ben]
+    bars, _ = gantt(plan, check_plan(plan, team, PROJECT), PROJECT.deadline)
+    # Anna needs Mon-Wed for A and B. Ben's C takes one day and could slip two.
+    assert [(b["Aufgabe"], b["Kritisch"], b["Puffer"]) for b in bars] == [
+        ("A · Datenmodell", True, 0),
+        ("B · API", True, 0),
+        ("C · Doku", False, 2),
+    ]
+
+
+def test_a_deadline_on_the_last_day_of_the_calendar_can_still_be_drawn():
+    # A day after 31.12.9999 does not exist. The charts drew the line there and crashed.
+    assert bar_end(date(2026, 11, 11)) == date(2026, 11, 12)
+    assert bar_end(date.max) == date.max
+    bars, line = gantt(PLAN, check_plan(PLAN, TEAM, PROJECT), date.max)
+    assert line == date.max and len(bars) == 2
+
+
+def test_wishes_are_suggested_from_what_the_check_found():
+    team = [*TEAM, BEN]
+    suggestions = suggested_wishes(PLAN, team, check_plan(PLAN, team, PROJECT), PROJECT)
+    # Anna does A without SQL, Ben has it. And always: what if the longest critical task grows.
+    assert suggestions == [
+        "Gib A (Datenmodell) an Ben: Ben hat SQL angegeben.",
+        "Was, wenn B (API) doppelt so lange dauert?",
+    ]
+
+
+def test_a_late_plan_and_an_overloaded_person_come_first():
+    tight = PROJECT.model_copy(update={"deadline": date(2026, 11, 10)})  # the plan needs 3 days
+    team = [*TEAM, BEN]
+    suggestions = suggested_wishes(PLAN, team, check_plan(PLAN, team, tight), tight)
+    assert suggestions[:3] == [
+        "Der Plan soll spätestens am 10.11.2026 enden.",
+        "Entlaste Anna: Bis zur Deadline ist mehr zugewiesen als verfügbar.",
+        "Gib A (Datenmodell) an Ben: Ben hat SQL angegeben.",
+    ]
+    assert len(suggestions) <= 4
+
+
+def test_a_plan_that_ends_on_the_deadline_gets_a_wish_for_buffer():
+    on_the_day = PROJECT.model_copy(update={"deadline": date(2026, 11, 11)})
+    suggestions = suggested_wishes(PLAN, TEAM, check_plan(PLAN, TEAM, on_the_day), on_the_day)
+    assert suggestions[0] == "Schaffe vor der Deadline mindestens zwei Arbeitstage Puffer."
+
+
+def test_an_uneven_load_suggests_moving_work_and_a_broken_plan_suggests_nothing():
+    idle = Member(name="Dora", skills={"Python": 3}, hours_per_week=40)
+    tight = PROJECT.model_copy(update={"deadline": date(2026, 11, 13)})  # one week
+    result = check_plan(PLAN, [*TEAM, idle], tight)  # Anna 24 of 40 h, Dora nothing
+    assert "Verteile Arbeit von Anna auf Dora um." in suggested_wishes(
+        PLAN, [*TEAM, idle], result, tight
+    )
+    broken = Plan.model_validate(plan_input(member="Zoe"))
+    assert suggested_wishes(broken, TEAM, check_plan(broken, TEAM, PROJECT), PROJECT) == []
+
+
+def test_the_table_gives_a_plan_back_in_its_own_form():
+    # Claude may list the assignments in another order than the tasks. The table has one row
+    # per task, so they come back in task order: the same plan, written differently.
+    data = plan_input()
+    data["assignments"].reverse()
+    shuffled = Plan.model_validate(data)
+    assert rows_to_plan(plan_rows(shuffled), shuffled, shuffled.risks) != shuffled
+    assert table_plan(shuffled) == PLAN
+    assert table_plan(PLAN) == PLAN
+
+
+def test_a_plan_the_table_cannot_give_back_is_its_own_table_form():
+    # Pydantic keeps a title made of a control character, the table reads it as empty.
+    data = plan_input()
+    data["tasks"][0]["title"] = "\x1c"
+    odd = Plan.model_validate(data)
+    with pytest.raises(InputError):
+        rows_to_plan(plan_rows(odd), odd, odd.risks)
+    assert table_plan(odd) == odd

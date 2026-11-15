@@ -24,10 +24,10 @@ Das Menü links:
 
 | Seite | Inhalt |
 |---|---|
-| Startseite | Überblick und Stand des übernommenen Projekts |
+| Startseite | Überblick, Stand des übernommenen Projekts und Prognose seines Endes |
 | Agenten · Planung | Plan mit Claude erstellen, prüfen, anpassen, exportieren, als Projekt übernehmen |
-| Agenten · Durchführung | Status und Ist-Stunden je Aufgabe erfassen; Claude schlägt Zusammenfassung und nächste Schritte vor; Statusbericht und Arbeitspaketbeschreibungen aus Vorlagen (`src/pm_agent/templates`) |
-| Agenten · Kontrolle | Plan/Ist-Vergleich, Verzug, Kosten bei gesetztem Stundensatz; Claude bewertet den Stand und schlägt Gegenmaßnahmen vor; Zeit und Token aller Agentenläufe |
+| Agenten · Durchführung | Wer in den nächsten fünf Arbeitstagen womit beginnt (aus der Prognose); Status, Ist-Stunden und geschätzten Rest je Aufgabe erfassen, mit dem voraussichtlichen Ende je Aufgabe; Claude schlägt Zusammenfassung und nächste Schritte vor; Statusbericht und Arbeitspaketbeschreibungen aus Vorlagen (`src/pm_agent/templates`) |
+| Agenten · Kontrolle | Plan/Ist-Vergleich, Verzug, Prognose des Endes (restliche Arbeit ab heute, mit den Aufgaben, die auf verspätete warten) und von dort der Weg zurück in die Planung: „Rest mit Claude umplanen“ lädt die unfertigen Aufgaben als Plan ab heute; Earned Value nach der 0/100-Methode (Planwert, Fertigstellungswert, Ist-Stunden, SPI, CPI); Kosten bei gesetztem Stundensatz; Claude bewertet den Stand und schlägt Gegenmaßnahmen vor, und wo eine Maßnahme Aufgaben umverteilt, rechnet Python ihre Wirkung auf die Prognose nach; Zeit und Token aller Agentenläufe; alles zusammen als Kontrollbericht aus einer Vorlage |
 | KI-Lab | startet den Studienserver aus `../ki_lab` und zeigt ihn eingebettet |
 | Über uns, Impressum | Projektkontext; Impressumsangaben trägt das Team noch ein |
 
@@ -46,13 +46,19 @@ sie funktionieren die Runden ohne KI, KI-Runden melden einen Fehler.
 
 Sechs Schritte als Reiter:
 
-1. **Team**: Personen mit Skills (z. B. `Python 4, SQL 3`) und Wochenstunden; lokal speichern
+1. **Team**: Personen mit Skills (z. B. `Python 4, SQL 3`), Wochenstunden und Abwesenheiten
+   (z. B. `01.12.2026–05.12.2026, 23.12.2026`: an diesen Tagen wird für die Person keine
+   Arbeit eingeplant); lokal speichern
    in `data/team.json`. Ohne Zustimmung des Teams startet keine Planung.
 2. **Projekt**: Idee, Start, Deadline.
 3. **Planung**: Claude plant, jede Runde erscheint sofort. Alternativ einen protokollierten Lauf
    aus `logs/` öffnen, ohne Claude erneut aufzurufen (z. B. für Vorführungen).
 4. **Ergebnis**: Planende, Fehler, Warnungen, Gantt-Diagramm, Auslastung, Begründungen, Risiken.
-5. **Anpassen**: zwei Wege. Mit Claude: einen Wunsch oder eine Annahme eintippen („Clara
+   „Aufgabe im Detail“ erklärt eine Aufgabe: warum diese Person, welche Skills sie dafür hat,
+   was vorher fertig sein muss und was darauf wartet, wie viele Arbeitstage Puffer sie hat
+   und wer im Team sie sonst übernehmen könnte.
+5. **Anpassen**: zwei Wege. Mit Claude: einen Wunsch oder eine Annahme eintippen oder einen
+   der Vorschläge anklicken, die Python aus der Prüfung ableitet („Clara
    übernimmt die Tests“, „Was, wenn das Backend doppelt so lange dauert?“); Claude ändert
    den Plan, Python prüft ihn und zeigt die Unterschiede zum bisherigen Plan, erst
    „Übernehmen“ macht ihn gültig. Von Hand: Tabelle ändern und erneut prüfen, ohne LLM.

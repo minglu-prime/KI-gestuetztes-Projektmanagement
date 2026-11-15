@@ -3,7 +3,7 @@ from datetime import date
 import pytest
 from pydantic import ValidationError
 
-from pm_agent.models import Assignment, Member, Plan, Project, Task
+from pm_agent.models import Absence, Assignment, Member, Plan, Project, Task
 
 
 @pytest.mark.parametrize("hours", [0, -4, float("inf")])
@@ -63,3 +63,13 @@ def test_deadline_may_equal_the_start_but_not_precede_it():
 def test_plan_needs_at_least_one_task():
     with pytest.raises(ValidationError):
         Plan(tasks=[], assignments=[])
+
+
+def test_an_absence_is_a_day_or_a_range_and_cannot_end_before_it_starts():
+    Absence(first=date(2026, 12, 1), last=date(2026, 12, 1))
+    with pytest.raises(ValidationError, match="Ende der Abwesenheit liegt vor ihrem Beginn"):
+        Absence(first=date(2026, 12, 5), last=date(2026, 12, 1))
+
+
+def test_a_member_saved_before_absences_existed_still_loads():
+    assert Member.model_validate({"name": "Anna", "hours_per_week": 20}).absences == []

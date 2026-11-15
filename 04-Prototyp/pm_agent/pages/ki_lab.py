@@ -26,15 +26,24 @@ except LabError as err:
     st.stop()
 
 if status is None:
-    st.info("Das KI-Lab läuft noch nicht.")
-    if st.button("KI-Lab starten", type="primary"):
-        try:
-            with st.spinner("KI-Lab startet …"):
-                lab_server.start([origin], lab_server.PORT)
-        except LabError as err:
-            st.error(str(err))
-            st.stop()
-        st.rerun()
+    with st.container(border=True, key="panel-lab-start"):
+        st.markdown("#### :material/science: Eine Sitzung im KI-Lab")
+        st.markdown(
+            """
+1. Du bearbeitest zwei Planungsfälle, jeden höchstens 25 Minuten.
+2. Einen ohne KI-Hilfe, einen mit: Dort beantwortet ein Sprachmodell deine Fragen zum Fall.
+3. Das Lab protokolliert die Sitzung für die Auswertung.
+"""
+        )
+        st.info("Das KI-Lab läuft noch nicht.")
+        if st.button("KI-Lab starten", type="primary", icon=":material/play_arrow:"):
+            try:
+                with st.spinner("KI-Lab startet …"):
+                    lab_server.start([origin], lab_server.PORT)
+            except LabError as err:
+                st.error(str(err))
+                st.stop()
+            st.rerun()
     st.stop()
 
 left, middle, right = st.columns(3)
@@ -47,10 +56,10 @@ if not status["ai_configured"]:
         "KI-Runden meldet das Lab einen Fehler; es gibt keine Demo-Antworten."
     )
 
-open_tab, stop = st.columns([1, 4])
-open_tab.link_button("In neuem Tab öffnen", lab_url)
-if lab_server.started_here():
-    stop.button("KI-Lab stoppen", on_click=lab_server.stop)
+with st.container(horizontal=True):
+    st.link_button("In neuem Tab öffnen", lab_url, icon=":material/open_in_new:")
+    if lab_server.started_here():
+        st.button("KI-Lab stoppen", icon=":material/stop:", on_click=lab_server.stop)
 
 try:
     framed = lab_server.allows_frame(origin, lab_server.PORT)

@@ -8,24 +8,36 @@ directory, and both folders are git-ignored: they hold personal data.
 import csv
 import io
 import json
+import math
 import re
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 from pydantic import ValidationError
 
 from pm_agent.agent import LOG_DIR
-from pm_agent.models import Assignment, CheckResult, Member, Plan, Project, Task
-from pm_agent.planning import count_workdays
+from pm_agent.models import (
+    Absence,
+    Assignment,
+    CheckResult,
+    Member,
+    Plan,
+    Project,
+    Task,
+)
+from pm_agent.planning import workday_shift
 
 DATA_DIR = LOG_DIR.parent / "data"
 TEAM_FILE = DATA_DIR / "team.json"
 RUNS_CSV = LOG_DIR / "runs.csv"
 
-TEAM_COLUMNS = ["Name", "Skills", "Stunden/Woche", "Notiz"]
+TEAM_COLUMNS = ["Name", "Skills", "Stunden/Woche", "Abwesend", "Notiz"]
 PLAN_COLUMNS = ["ID", "Aufgabe", "Person", "Stunden", "Abhängig von", "Skills", "Begründung"]
 _SKILL = re.compile(r"^(.+?)\s*[: ]\s*([1-5])$")
+_DAY = r"(\d{1,2}\.\d{1,2}\.\d{4})"
+# One day, or two days with "-", "–" or "bis" between them.
+_ABSENCE = re.compile(rf"^{_DAY}(?:\s*(?:-|–|bis)\s*{_DAY})?$")
 
 
 class InputError(ValueError):
@@ -38,6 +50,10 @@ def team_rows(team: list[Member]) -> list[dict[str, Any]]:
             "Name": m.name,
             "Skills": ", ".join(f"{skill} {level}" for skill, level in m.skills.items()),
             "Stunden/Woche": m.hours_per_week,
+            "Abwesend": ", ".join(
+                _date(a.first) if a.first == a.last else f"{_date(a.first)}–{_date(a.last)}"
+                for a in m.absences
+            ),
             "Notiz": m.note,
         }
         for m in team
@@ -57,6 +73,7 @@ def rows_to_team(rows: list[dict[str, Any]]) -> list[Member]:
                     name=name,
                     skills=_skills(_cell(row.get("Skills"))),
                     hours_per_week=row.get("Stunden/Woche"),
+                    absences=_absences(_cell(row.get("Abwesend"))),
                     note=_cell(row.get("Notiz")),
                 )
             )
@@ -119,6 +136,21 @@ def rows_to_plan(rows: list[dict[str, Any]], original: Plan, risks: list[str]) -
         return Plan(tasks=tasks, assignments=assignments, risks=[r for r in risks if r.strip()])
     except ValidationError as err:
         raise InputError(_reason(err)) from err
+
+
+def table_plan(plan: Plan) -> Plan:
+    """The plan as the table gives it back when nobody has touched it. The table is not a
+    mirror: assignments come back in task order, and a skill, a dependency or a risk with a
+    separator in it (comma, line break) comes back in pieces. Whether the table was edited
+    is decided against this form, not against the plan itself.
+
+    A plan the table cannot give back at all (a title that reads as empty there) is its own
+    form: every readable table then differs from it, and reading the table as it stands
+    reports the row."""
+    try:
+        return rows_to_plan(plan_rows(plan), plan, "\n".join(plan.risks).splitlines())
+    except InputError:
+        return plan
 
 
 def load_team(path: Path = TEAM_FILE) -> list[Member]:
@@ -190,27 +222,154 @@ def round_summary(number: int, record: dict[str, Any]) -> tuple[str, list[str]]:
     return f"Runde {number} · {headline}", messages
 
 
-def plan_changes(before: Plan, after: Plan) -> list[str]:
-    """What differs between two plans, one line per change, for the project lead. Reasons of
-    assignments and descriptions are left out: they do not change what is planned.
+def explain_task(
+    plan: Plan, team: list[Member], result: CheckResult, task_id: str
+) -> dict[str, Any]:
+    """Everything about one task of a checked plan, for the project lead who asks "why this
+    person, and what hangs on it?". `skills` pairs each required skill with the level the
+    assigned person has (None: not named). `alternatives` are the other team members who
+    have at least one of the required skills, best fit first; for a task without required
+    skills, everyone else, least loaded first."""
+    tasks = {task.id: task for task in plan.tasks}
+    task = tasks[task_id]
+    assignment = next(a for a in plan.assignments if a.task_id == task_id)
+    dates = next(s for s in result.schedule if s.task_id == task_id)
+    load = {item.member: item.utilization for item in result.load}
 
-    Tasks are paired by ID and title, then by title alone, then by ID alone. Claude sometimes
-    renumbers a draft; paired by ID only, every task after an inserted one would count as
-    renamed and reassigned."""
+    def levels(member: Member) -> dict[str, int]:
+        """The member's level for each required skill they have, in the task's spelling."""
+        known = {skill.casefold(): level for skill, level in member.skills.items()}
+        return {
+            skill: known[skill.casefold()]
+            for skill in task.required_skills
+            if skill.casefold() in known
+        }
+
+    assigned = next(m for m in team if m.name == assignment.member)
+    has = levels(assigned)
+    others = [(m, levels(m)) for m in team if m.name != assigned.name]
+    if task.required_skills:
+        others = [(m, fit) for m, fit in others if fit]
+    others.sort(
+        key=lambda pair: (
+            -len(pair[1]),
+            -sum(pair[1].values()),
+            # No utilisation: away until the deadline. Such a person comes last.
+            math.inf if load[pair[0].name] is None else load[pair[0].name],
+            pair[0].name,
+        )
+    )
+    return {
+        "id": task.id,
+        "title": task.title,
+        "description": task.description,
+        "member": assignment.member,
+        "reason": assignment.reason,
+        "hours": task.estimate_hours,
+        "start": dates.start,
+        "end": dates.end,
+        "skills": [(skill, has.get(skill)) for skill in task.required_skills],
+        "depends_on": [(dep, tasks[dep].title) for dep in task.depends_on],
+        "needed_by": [(t.id, t.title) for t in plan.tasks if task_id in t.depends_on],
+        # No slack, not membership in critical_path: the last task of that chain can have
+        # a whole day of room when its days are not full.
+        "critical": result.slack[task_id] == 0,
+        "slack": result.slack[task_id],
+        "alternatives": [
+            {"member": m.name, "skills": fit, "utilization": load[m.name]} for m, fit in others
+        ],
+    }
+
+
+def suggested_wishes(
+    plan: Plan, team: list[Member], result: CheckResult, project: Project
+) -> list[str]:
+    """Up to four things the project lead could ask Claude to change, read off the check of
+    the plan: what is most pressing first. Nothing for a plan with errors."""
+    if result.errors or result.end_date is None:
+        return []
+    tasks = {task.id: task for task in plan.tasks}
+    owner = {a.task_id: a.member for a in plan.assignments}
+    wishes = []
+    if result.end_date > project.deadline:
+        wishes.append(f"Der Plan soll spätestens am {_date(project.deadline)} enden.")
+    elif workday_shift(result.end_date, project.deadline) == 0:
+        wishes.append("Schaffe vor der Deadline mindestens zwei Arbeitstage Puffer.")
+    loads = [item for item in result.load if item.utilization is not None]
+    for item in loads:
+        if round(item.utilization, 9) > 1:
+            wishes.append(
+                f"Entlaste {item.member}: Bis zur Deadline ist mehr zugewiesen als verfügbar."
+            )
+            break
+    # A task whose person has not named a required skill, while someone else has.
+    skills = {m.name: {s.casefold(): level for s, level in m.skills.items()} for m in team}
+    for task in plan.tasks:
+        missing = [s for s in task.required_skills if s.casefold() not in skills[owner[task.id]]]
+        able = [
+            (skills[m.name][skill.casefold()], m.name)
+            for skill in missing[:1]
+            for m in team
+            if skill.casefold() in skills[m.name]
+        ]
+        if able:
+            best = max(able)[1]
+            wishes.append(
+                f"Gib {task.id} ({task.title}) an {best}: {best} hat {missing[0]} angegeben."
+            )
+            break
+    if len(loads) > 1:
+        busiest = max(loads, key=lambda item: item.utilization)
+        idlest = min(loads, key=lambda item: item.utilization)
+        if busiest.utilization - idlest.utilization >= 0.3:
+            wishes.append(f"Verteile Arbeit von {busiest.member} auf {idlest.member} um.")
+    if result.critical_path:
+        longest = max(result.critical_path, key=lambda tid: tasks[tid].estimate_hours)
+        wishes.append(f"Was, wenn {longest} ({tasks[longest].title}) doppelt so lange dauert?")
+    return wishes[:4]
+
+
+def pair_tasks(before: Plan, after: Plan) -> dict[str, str]:
+    """Which task of `after` is which task of `before`: ID in before -> ID in after.
+
+    Paired by ID and title, then by title alone, then by ID alone. Claude sometimes renumbers
+    a draft; paired by ID only, every task after an inserted one would count as renamed and
+    reassigned. A title pairs two tasks only if it is unique in both plans: with two tasks
+    called the same, nothing says which is which."""
     old = {task.id: task for task in before.tasks}
     new = {task.id: task for task in after.tasks}
-    by_title = {task.title: task.id for task in after.tasks}
-    twin: dict[str, str] = {}  # ID in `before` -> ID of the same task in `after`
+
+    def unique(plan: Plan) -> dict[str, str]:
+        titles = [task.title for task in plan.tasks]
+        return {task.title: task.id for task in plan.tasks if titles.count(task.title) == 1}
+
+    old_titles, new_titles = unique(before), unique(after)
+    twin: dict[str, str] = {}
     for tid, task in old.items():
         if tid in new and new[tid].title == task.title:
             twin[tid] = tid
     for tid, task in old.items():  # renumbered
-        other = by_title.get(task.title)
-        if tid not in twin and other is not None and other not in twin.values():
+        other = new_titles.get(task.title)
+        if (
+            tid not in twin
+            and task.title in old_titles
+            and other is not None
+            and other not in twin.values()
+        ):
             twin[tid] = other
     for tid in old:  # renamed
         if tid not in twin and tid in new and tid not in twin.values():
             twin[tid] = tid
+    return twin
+
+
+def plan_changes(before: Plan, after: Plan) -> list[str]:
+    """What differs between two plans, one line per change, for the project lead. Reasons of
+    assignments and descriptions are left out: they do not change what is planned. Which
+    task is which decides pair_tasks."""
+    old = {task.id: task for task in before.tasks}
+    new = {task.id: task for task in after.tasks}
+    twin = pair_tasks(before, after)
     origin = {new_id: old_id for old_id, new_id in twin.items()}
 
     old_owner = {a.task_id: a.member for a in before.assignments}
@@ -226,8 +385,14 @@ def plan_changes(before: Plan, after: Plan) -> list[str]:
             continue
         old_id = origin[tid]
         was, parts = old[old_id], []
-        # The dependencies of before, in the IDs of after.
-        needed = [twin.get(dep, dep) for dep in was.depends_on]
+        # The dependencies of before, in the IDs of after. A dependency on a removed task
+        # is marked: its ID may have gone to another task, and would then look unchanged.
+        # A dependency on an ID that `before` never had is a mistake of the draft, not a
+        # removed task: it stays as it is.
+        needed = [
+            twin[dep] if dep in twin else f"{dep} [entfernt]" if dep in old else dep
+            for dep in was.depends_on
+        ]
         if task.title != was.title:
             parts.append(f"heißt jetzt „{task.title}“")
         if old_owner.get(old_id) != new_owner.get(tid):
@@ -256,21 +421,46 @@ def plan_changes(before: Plan, after: Plan) -> list[str]:
     return lines
 
 
-def check_changes(before: CheckResult, after: CheckResult) -> list[str]:
-    """What a change of the plan does to its check: end date, warnings, moved dates."""
+def check_changes(
+    before: CheckResult, after: CheckResult, pairs: dict[str, str] | None = None
+) -> list[str]:
+    """What a change of the plan does to its check: end date, warnings, moved dates.
+
+    `pairs` (pair_tasks) says which task of before is which task of after. Without it tasks
+    are the same if their IDs are."""
+    if pairs is None:
+        kept = {s.task_id for s in after.schedule}
+        pairs = {s.task_id: s.task_id for s in before.schedule if s.task_id in kept}
+
+    now = dict(zip(after.warning_kinds, after.warnings, strict=True))
+    # The warnings of before, with task IDs in the IDs of after. A warning about a task that
+    # is gone went with it: plan_changes names the task, and its ID may belong to another
+    # task now.
+    was = {}
+    for kind, text in zip(before.warning_kinds, before.warnings, strict=True):
+        if kind[0] == "skill":
+            if kind[1] not in pairs:
+                continue
+            kind = ("skill", pairs[kind[1]], kind[2])
+        was[kind] = text
     lines = []
     if before.end_date and after.end_date and before.end_date != after.end_date:
-        first, last = sorted([before.end_date, after.end_date])
-        days = count_workdays(first + timedelta(days=1), last)
-        direction = "später" if after.end_date > before.end_date else "früher"
+        shift = workday_shift(before.end_date, after.end_date)
+        days, direction = abs(shift), "später" if shift > 0 else "früher"
         lines.append(
             f"Planende: {_date(before.end_date)} → {_date(after.end_date)} "
             f"({days} Arbeitstag{'' if days == 1 else 'e'} {direction})"
         )
     lines += [f"Fehler: {error}" for error in after.errors if error not in before.errors]
-    lines += [f"Neue Warnung: {w}" for w in after.warnings if w not in before.warnings]
-    lines += [f"Behoben: {w}" for w in before.warnings if w not in after.warnings]
-    dates = {s.task_id: (s.start, s.end) for s in before.schedule}
+    # By kind, not by text: "5 Arbeitstage nach der Deadline" that became 3 is the same
+    # warning with another number, not one solved and a new one.
+    for kind, text in now.items():
+        if kind not in was:
+            lines.append(f"Neue Warnung: {text}")
+        elif text != was[kind] and kind[0] != "skill":
+            lines.append(f"Warnung bleibt: {text}")
+    lines += [f"Behoben: {text}" for kind, text in was.items() if kind not in now]
+    dates = {pairs[s.task_id]: (s.start, s.end) for s in before.schedule if s.task_id in pairs}
     moved = sum(s.task_id in dates and dates[s.task_id] != (s.start, s.end) for s in after.schedule)
     if moved:
         subject = "einer Aufgabe verschieben" if moved == 1 else f"{moved} Aufgaben verschieben"
@@ -305,26 +495,33 @@ def describe_round(number: int, record: dict[str, Any], previous: Plan | None) -
     }
 
 
-def gantt(plan: Plan, result: CheckResult, deadline: date) -> tuple[list[dict[str, Any]], date]:
-    """The bars of the Gantt chart and where the deadline line is drawn.
+def bar_end(last_day: date) -> date:
+    """Where a bar that covers `last_day` ends on a time axis, and where the line of a
+    deadline on that day is drawn.
 
-    The time axis marks the start of each day. A bar covers whole days, so it runs to the
-    start of the day after the task's last day. The deadline day is a working day too, so
-    the line sits at its end the same way. Drawn at its start, a task finishing on the
-    deadline looked late."""
-    day = timedelta(days=1)
+    The axis marks the start of each day. A bar covers whole days, so it runs to the start
+    of the day after its last day. The deadline day is a working day too, so its line sits
+    at the end of the day the same way. Drawn at its start, a task finishing on the deadline
+    looked late. The last day of the calendar has no day after it and stays where it is."""
+    return last_day if last_day == date.max else last_day + timedelta(days=1)
+
+
+def gantt(plan: Plan, result: CheckResult, deadline: date) -> tuple[list[dict[str, Any]], date]:
+    """The bars of the Gantt chart and where the deadline line is drawn (see bar_end)."""
     titles = {t.id: t.title for t in plan.tasks}
     bars = [
         {
             "Aufgabe": f"{s.task_id} · {titles[s.task_id]}",
             "Person": s.member,
             "Start": s.start,
-            "Ende": s.end + day,
+            "Ende": bar_end(s.end),
             "Zeitraum": f"{s.start:%d.%m.} – {s.end:%d.%m.}",
+            "Kritisch": result.slack[s.task_id] == 0,
+            "Puffer": result.slack[s.task_id],
         }
         for s in result.schedule
     ]
-    return bars, deadline + day
+    return bars, bar_end(deadline)
 
 
 def to_markdown(project: Project, plan: Plan, result: CheckResult) -> str:
@@ -385,6 +582,21 @@ def _skills(text: str) -> dict[str, int]:
     return skills
 
 
+def _absences(text: str) -> list[Absence]:
+    absences = []
+    for part in filter(None, (p.strip() for p in text.split(","))):
+        match = _ABSENCE.match(part)
+        try:
+            days = [datetime.strptime(day, "%d.%m.%Y").date() for day in match.groups() if day]
+        except (AttributeError, ValueError):  # no match, or a date like 31.02.
+            raise InputError(
+                f"Abwesenheit '{part}' nicht lesbar, erwartet zum Beispiel "
+                "'01.12.2026–05.12.2026' oder '23.12.2026'"
+            ) from None
+        absences.append(Absence(first=days[0], last=days[-1]))
+    return absences
+
+
 def _list(value: Any) -> list[str]:
     return [p.strip() for p in _cell(value).split(",") if p.strip()]
 
@@ -407,4 +619,5 @@ def _date(day: Any) -> str:
 
 
 def _md(text: str) -> str:
-    return text.replace("|", "\\|").replace("\n", " ")
+    """Text for one table cell or one list item: no column separator, on one line."""
+    return " ".join(text.replace("|", "\\|").split())

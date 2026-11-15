@@ -333,11 +333,22 @@
 /* A document preview: a sheet of the page colour inside its white panel. */
 [class*="st-key-preview-"] { background: var(--paper); }
 
+/* Suggested wishes: quieter than a button that does something for good. */
+.st-key-suggestions button {
+  border-style: dashed;
+  color: var(--green);
+  font-weight: 500;
+}
+
 /* The rounds of an agent run as a timeline: one line down the left side. */
 [class*="st-key-rounds-"] {
   border-left: 2px solid var(--line);
   padding-left: 16px;
 }
+
+/* A wide table in a document (status report, exported plan) scrolls inside its own box. On a
+   narrow screen it used to push the whole page sideways. */
+[data-testid="stMarkdownContainer"]:has(table) { overflow-x: auto; }
 
 /* People who asked their system for less motion get none. */
 @media (prefers-reduced-motion: reduce) {

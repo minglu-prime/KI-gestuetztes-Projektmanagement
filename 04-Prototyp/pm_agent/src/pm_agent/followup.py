@@ -14,9 +14,9 @@ from pathlib import Path
 from typing import Any
 
 from pm_agent.agent import LOG_DIR, PROMPTS, run_agent
-from pm_agent.models import ControlReport, StatusSummary
+from pm_agent.models import ControlReport, Member, StatusSummary
 from pm_agent.tools import Submission
-from pm_agent.tracking import Evaluation, Tracking, evaluate
+from pm_agent.tracking import Evaluation, Tracking, evaluate, forecast
 
 
 def run_status_summary(
@@ -53,10 +53,11 @@ def run_control_report(
         noun="Kontrollbericht",
         description=(
             "Reicht Bewertung, Feststellungen und Gegenmaßnahmen ein. Lehnt ab, wenn eine "
-            "Aufgabe im Verzug keine Gegenmaßnahme hat, und nennt die Gründe."
+            "Aufgabe im Verzug keine Gegenmaßnahme hat oder eine Umverteilung nicht möglich "
+            "ist, und nennt die Gründe."
         ),
         schema=ControlReport,
-        check=lambda report: check_report(report, evaluation),
+        check=lambda report: check_report(report, evaluation, tracking.team),
     )
     return _run("kontrolle", submission, tracking, evaluation, log_dir, on_round)
 
@@ -80,8 +81,13 @@ def check_summary(summary: StatusSummary, evaluation: Evaluation) -> list[str]:
     return errors
 
 
-def check_report(report: ControlReport, evaluation: Evaluation) -> list[str]:
+def check_report(
+    report: ControlReport, evaluation: Evaluation, team: list[Member] | None = None
+) -> list[str]:
+    """`team` is needed to check reassignments; without it they are not checked."""
     known = {t.id for t in evaluation.tasks}
+    finished = {t.id for t in evaluation.tasks if t.status == "fertig"}
+    names = {m.name for m in team} if team is not None else None
     errors = []
     for kind, items in (("Feststellung", report.findings), ("Gegenmaßnahme", report.measures)):
         for item in items:
@@ -90,6 +96,19 @@ def check_report(report: ControlReport, evaluation: Evaluation) -> list[str]:
                 for task_id in item.task_ids
                 if task_id not in known
             ]
+    for measure in report.measures:
+        if measure.reassign_to is None:
+            continue
+        if names is not None and measure.reassign_to not in names:
+            errors.append(
+                f"Gegenmaßnahme will Aufgaben an '{measure.reassign_to}' geben, diese Person "
+                "ist nicht im Team"
+            )
+        errors += [
+            f"Gegenmaßnahme will die fertige Aufgabe '{task_id}' neu vergeben"
+            for task_id in measure.task_ids
+            if task_id in finished
+        ]
     covered = {task_id for measure in report.measures for task_id in measure.task_ids}
     errors += [
         f"Aufgabe '{t.id}' ist im Verzug, aber keine Gegenmaßnahme nennt sie"
@@ -104,6 +123,7 @@ def check_report(report: ControlReport, evaluation: Evaluation) -> list[str]:
 def facts(tracking: Tracking, evaluation: Evaluation) -> str:
     """What both agents get: the plan, the progress and the computed numbers, as JSON."""
     plan = {t.id: t for t in tracking.plan.tasks}
+    outlook = forecast(tracking, evaluation.today)
     data = {
         "projekt": tracking.project.model_dump(mode="json"),
         "stand": evaluation.today.isoformat(),
@@ -113,6 +133,15 @@ def facts(tracking: Tracking, evaluation: Evaluation) -> str:
             "fortschritt": round(evaluation.progress, 3),
             "abweichung_fertiger_aufgaben": evaluation.finished_deviation,
             "im_verzug": [t.id for t in evaluation.overdue],
+        },
+        # If the remaining work starts today. Negative days after the deadline are buffer.
+        "prognose": {
+            "geplantes_ende": outlook.planned_end.isoformat(),
+            "voraussichtliches_ende": outlook.end.isoformat() if outlook.end else None,
+            "arbeitstage_spaeter_als_geplant": outlook.shift,
+            "arbeitstage_nach_der_deadline": outlook.deadline_gap,
+            "haelt_auf": outlook.blocked,
+            "nicht_berechenbar": outlook.problem,
         },
         "aufgaben": [
             {

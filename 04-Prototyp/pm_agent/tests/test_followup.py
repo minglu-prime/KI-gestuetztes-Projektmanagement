@@ -94,6 +94,15 @@ def test_the_agents_get_the_computed_numbers_not_raw_material_to_compute(trackin
         "abweichung_fertiger_aufgaben": 2,
         "im_verzug": ["B"],
     }
+    # B has 12 of its 16 h left on Thu 12.11.: it ends on Friday, two workdays after the plan.
+    assert data["prognose"] == {
+        "geplantes_ende": "2026-11-11",
+        "voraussichtliches_ende": "2026-11-13",
+        "arbeitstage_spaeter_als_geplant": 2,
+        "arbeitstage_nach_der_deadline": -25,
+        "haelt_auf": {"B": []},
+        "nicht_berechenbar": None,
+    }
     b = data["aufgaben"][1]
     assert (b["id"], b["overdue"], b["planned_end"], b["depends_on"]) == (
         "B",
@@ -171,3 +180,43 @@ def test_input_that_does_not_parse_is_rejected_with_the_field(api, tracking, tmp
     rejection = json.dumps(requests[1]["messages"][-1]["content"], ensure_ascii=False)
     assert "Kontrollbericht abgelehnt" in rejection
     assert "Ungültige Eingabe bei assessment" in rejection
+
+
+def test_a_reassignment_in_a_measure_must_name_a_team_member_and_open_tasks(tracking):
+    evaluation = evaluate(tracking, TODAY)
+
+    def report(task_ids, member):
+        measure = {"task_ids": task_ids, "action": "x", "effect": "y", "reassign_to": member}
+        late = {"task_ids": ["B"], "action": "Anna priorisiert B.", "effect": "B wird fertig."}
+        return ControlReport(
+            assessment="gefährdet",
+            findings=[{"observation": "B ist überfällig."}],
+            measures=[measure, late],
+        )
+
+    assert check_report(report(["B"], "Anna"), evaluation, TEAM) == []
+    assert check_report(report(["B"], "Zoe"), evaluation, TEAM) == [
+        "Gegenmaßnahme will Aufgaben an 'Zoe' geben, diese Person ist nicht im Team"
+    ]
+    assert check_report(report(["A"], "Anna"), evaluation, TEAM) == [
+        "Gegenmaßnahme will die fertige Aufgabe 'A' neu vergeben"
+    ]
+
+
+def test_a_reassignment_to_someone_outside_the_team_goes_back_to_claude(api, tracking, tmp_path):
+    replies, requests = api
+    to_zoe = {"task_ids": ["B"], "action": "Zoe übernimmt B.", "effect": "x", "reassign_to": "Zoe"}
+    to_anna = {**to_zoe, "action": "Anna behält B.", "reassign_to": "Anna"}
+    replies += [
+        reply([tool_call("submit_control", {**REPORT, "measures": [to_zoe]}, "call_1")]),
+        reply([tool_call("submit_control", {**REPORT, "measures": [to_anna]}, "call_2")]),
+    ]
+
+    report = run_control_report(tracking, TODAY, log_dir=tmp_path)
+
+    assert report.measures[0].reassign_to == "Anna"
+    (rejection,) = requests[1]["messages"][-1]["content"]
+    assert rejection["is_error"] is True
+    assert "an 'Zoe' geben, diese Person ist nicht im Team" in json.dumps(
+        rejection, ensure_ascii=False
+    )

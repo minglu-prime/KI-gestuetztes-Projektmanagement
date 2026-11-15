@@ -250,7 +250,7 @@ def _text(content: Any) -> str:
 
 
 def _inputs(project: Project, team: list[Member]) -> str:
-    members = json.dumps([m.model_dump() for m in team], ensure_ascii=False, indent=2)
+    members = json.dumps([m.model_dump(mode="json") for m in team], ensure_ascii=False, indent=2)
     return f"Projekt:\n{project.model_dump_json(indent=2)}\n\nTeam:\n{members}"
 
 

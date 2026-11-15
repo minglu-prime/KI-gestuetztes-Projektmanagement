@@ -7,6 +7,10 @@ address = "localhost"
 [browser]
 gatherUsageStats = false
 
+[client]
+# No "Deploy" button: the site runs on this computer only (see [server]).
+toolbarMode = "minimal"
+
 # Colours, fonts and shapes of the KI-Lab (../ki_lab/web/style.css), so that the embedded lab
 # and the site look like one product.
 [theme]

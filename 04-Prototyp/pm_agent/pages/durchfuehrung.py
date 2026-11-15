@@ -7,14 +7,20 @@ import streamlit as st
 
 from pm_agent import followup
 from pm_agent.tracking import (
+    NO_WEEK_AHEAD,
+    NOTHING_AHEAD,
+    NOTHING_LEFT,
     PROGRESS_COLUMNS,
+    PROGRESS_READ_ONLY,
     STATUSES,
     apply_rows,
     evaluate,
+    forecast,
     percent,
     progress_rows,
     save,
     status_report,
+    week_ahead,
     work_packages,
 )
 from pm_agent.ui import adopted_project, chip, consent, run_with_progress, strip
@@ -50,6 +56,27 @@ st.markdown(f"**{tracking.project.idea}**")
 st.progress(result.progress, text=f"{percent(result.progress)} der Planstunden fertig")
 st.caption(f"Übernommen am {tracking.adopted:%d.%m.%Y %H:%M} · {len(tracking.plan.tasks)} Aufgaben")
 
+with st.container(border=True, key="panel-ahead"):
+    st.markdown("#### :material/event_upcoming: Die nächsten fünf Arbeitstage")
+    outlook = forecast(tracking, date.today())
+    ahead = week_ahead(tracking, date.today())
+    if outlook.problem:
+        st.error(
+            f"{NO_WEEK_AHEAD} {outlook.problem}. Prüfe Status und Rest-Stunden in der Tabelle "
+            "unten."
+        )
+    elif outlook.end is None:
+        st.success(NOTHING_LEFT)
+    elif not ahead:
+        # Reachable when everyone with unfinished work is away for the whole time.
+        st.info(NOTHING_AHEAD)
+    else:
+        st.dataframe(pd.DataFrame(ahead), hide_index=True)
+        st.caption(
+            "Was laut Prognose bis in fünf Arbeitstagen beginnt, je Person in der Reihenfolge "
+            "des Plans. Die Prognose plant alles Unfertige ab heute neu ein."
+        )
+
 with st.container(border=True, key="panel-progress"):
     st.markdown("#### :material/edit_note: Fortschritt")
     if state.pop("progress_saved", False):
@@ -60,15 +87,22 @@ with st.container(border=True, key="panel-progress"):
         key=f"progress_editor_{state.get('progress_version', 0)}",
         hide_index=True,
         width="stretch",
-        disabled=PROGRESS_COLUMNS[:5],
+        disabled=PROGRESS_READ_ONLY,
         column_config={
             "Status": st.column_config.SelectboxColumn(options=STATUSES, required=True),
             "Ist (h)": st.column_config.NumberColumn(min_value=0.0, step=0.5),
+            "Rest (h)": st.column_config.NumberColumn(
+                min_value=0.0,
+                step=0.5,
+                help="Was noch zu tun ist, wenn es von Plan minus Ist abweicht. Leer lassen, "
+                "wenn unbekannt. Die Prognose auf der Seite Kontrolle rechnet damit.",
+            ),
         },
     )
     st.caption(
-        "Status, Ist-Stunden und Notiz lassen sich ändern. Änderungen gelten erst nach dem "
-        "Speichern."
+        "Status, Ist-Stunden, Rest und Notiz lassen sich ändern. Änderungen gelten erst nach "
+        "dem Speichern. „Prognose Ende“ zeigt, wann die Aufgabe nach heutigem Stand fertig "
+        "wird."
     )
     if st.button("Fortschritt speichern", type="primary", icon=":material/save:"):
         try:

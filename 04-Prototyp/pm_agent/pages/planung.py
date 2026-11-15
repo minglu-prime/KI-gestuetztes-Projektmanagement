@@ -6,6 +6,7 @@ use persist_state="session"; the two table editors cannot, so their content is k
 session state and restored when the user comes back (see restore_editors).
 """
 
+import math
 import time
 from datetime import date, datetime
 from html import escape
@@ -19,9 +20,9 @@ from pydantic import ValidationError
 from pm_agent.agent import PlanningError, run_planning, run_replanning
 from pm_agent.models import Project
 from pm_agent.planning import check_plan
-from pm_agent.tracking import adopt, has_progress
+from pm_agent.tracking import adopt, has_progress, rest_project
 from pm_agent.tracking import load as load_tracking
-from pm_agent.ui import chip, round_printer, strip
+from pm_agent.ui import BUSY_HINT, chip, round_printer, strip
 from pm_agent.workbench import (
     PLAN_COLUMNS,
     RUNS_CSV,
@@ -30,15 +31,19 @@ from pm_agent.workbench import (
     InputError,
     append_run,
     check_changes,
+    explain_task,
     gantt,
     load_run,
     load_team,
+    pair_tasks,
     plan_changes,
     plan_rows,
     rows_to_plan,
     rows_to_team,
     save_team,
     saved_runs,
+    suggested_wishes,
+    table_plan,
     team_rows,
     to_csv,
     to_markdown,
@@ -97,11 +102,47 @@ def show_plan(plan, rounds, source, agent_seconds, rounds_start=None) -> None:
         rounds_start=rounds_start,
         source=source,
         agent_seconds=agent_seconds,
+        round_count=len(rounds),
         shown_at=time.monotonic(),
         edited=False,
+        hand_edited=False,
         plan_df=pd.DataFrame(plan_rows(plan), columns=PLAN_COLUMNS),
         plan_current=None,
         risks_text="\n".join(plan.risks),
+        editor_version=state.editor_version + 1,
+    )
+
+
+def forget_conversation() -> None:
+    """A new plan is on the table: the conversation, an open proposal and a wish that was
+    not answered yet were about another one."""
+    state.update(chat=[], proposal=None)
+    state.pop("asked", None)
+
+
+def table_matches_plan() -> bool:
+    """Whether the table of step 5, as the editor last returned it, says what the current
+    plan says. False while hand edits wait for "Erneut prüfen". Compared in the form the
+    table gives a plan back (table_plan): an untouched table is never an edit."""
+    if state.get("plan_current") is None:  # not shown since the plan changed
+        return True
+    try:
+        typed = rows_to_plan(
+            state.plan_current.to_dict("records"),
+            state.original,
+            state.get("risks_text", "").splitlines(),
+        )
+    except InputError:  # unreadable as it stands: certainly not the current plan
+        return False
+    return typed == table_plan(state.plan)
+
+
+def reset_table() -> None:
+    """Callback: the table of step 5 shows the current plan again, hand edits are dropped."""
+    state.update(
+        plan_df=pd.DataFrame(plan_rows(state.plan), columns=PLAN_COLUMNS),
+        plan_current=None,
+        risks_text="\n".join(state.plan.risks),
         editor_version=state.editor_version + 1,
     )
 
@@ -114,30 +155,64 @@ def open_run(path) -> None:
     state.team_version += 1
     state.update(idea=project.idea, start=project.start_date, deadline=project.deadline)
     show_plan(plan, record["rounds"], f"Protokoll {path.name}", record.get("seconds"))
-    state.update(chat=[], proposal=None)  # the conversation was about another plan
+    forget_conversation()
     state.step = STEPS[3]  # straight to the result
 
 
-def ask() -> None:
-    """Callback of the chat input: keep the wish for the run that follows."""
-    state.asked = state.wish
+def load_rest() -> None:
+    """The unfinished part of the adopted project becomes the current plan, starting today,
+    so that it can be changed in the conversation and adopted again. Runs before the
+    widgets, so it may fill their keys. Raises InputError if there is nothing to load."""
+    adopted = load_tracking()
+    if adopted is None:
+        raise InputError("Es ist kein Projekt übernommen")
+    project, plan = rest_project(adopted, date.today())
+    state.team_df = pd.DataFrame(team_rows(adopted.team), columns=TEAM_COLUMNS)
+    state.team_current = None
+    state.team_version += 1
+    state.update(idea=project.idea, start=project.start_date, deadline=project.deadline)
+    show_plan(plan, [], "Rest des übernommenen Projekts", None)
+    forget_conversation()
+    state.step = STEPS[4]  # straight to the step with the conversation
+
+
+def ask(wish: str | None = None) -> None:
+    """Callback of the chat input and of the suggested wishes: keep the wish for the run that
+    follows. Without an argument it is what was typed."""
+    state.asked = wish or state.wish
 
 
 def decide(accept: bool) -> None:
     """Callback: the project lead takes or drops the change Claude proposed."""
     proposal = state.proposal
+    if proposal is None:
+        # The second click of a double click: Streamlit calls the callback again although
+        # the first click has already decided. Nothing is left to decide.
+        return
     state.proposal = None
     state.chat.append(
         {"wish": proposal["wish"], "changes": proposal["changes"], "accepted": accept}
     )
     if accept:
+        # What the export record says about the plan as a whole goes on: the agent's time
+        # and rounds add up, a hand edit stays a hand edit, the review began when it began.
+        seconds = (state.agent_seconds or 0) + proposal["seconds"]
+        rounds = state.get("round_count", len(state.rounds)) + len(proposal["rounds"])
+        hand_edited, shown_at = state.get("hand_edited", state.edited), state.shown_at
         show_plan(
             proposal["plan"],
             proposal["rounds"],
             "Agent, auf Wunsch geändert",
-            proposal["seconds"],
+            round(seconds, 1),
             rounds_start=proposal["basis"],
         )
+        state.update(round_count=rounds, hand_edited=hand_edited, shown_at=shown_at)
+
+
+def whole_percent(share: float | None) -> float | None:
+    """A share for a table column, rounded up to whole per cent like the overload warning:
+    100.2 % must not read as 100 %. None (away until the deadline) stays empty."""
+    return None if share is None else math.ceil(round(share * 100, 9)) / 100
 
 
 def go(step: str) -> None:
@@ -160,11 +235,19 @@ def next_step(label: str, step: str, ready: bool, key: str) -> None:
 init()
 if state.get("page_changed"):  # set by app.py
     restore_editors()
+rest_error = None
+if state.pop("rest_requested", False):  # set by the Kontrolle page
+    try:
+        load_rest()
+    except InputError as err:
+        rest_error = str(err)
 st.header("Planung")
 st.caption(
     "Claude schlägt einen Plan vor, Python prüft ihn deterministisch, die Projektleitung "
     "entscheidet."
 )
+if rest_error:
+    st.error(f"Der Rest des Projekts konnte nicht geladen werden: {rest_error}")
 status_strip = st.empty()  # filled at the end, when team, project and plan are known
 # on_change="rerun" makes the selection a value in the session state, so buttons can open a
 # step. Every step is still rendered on every run (see the module docstring).
@@ -175,7 +258,8 @@ with tabs[0]:
     st.subheader("Team")
     st.caption(
         "Wer arbeitet mit? Skills mit Stufe 1–5 und die Stunden pro Woche bestimmen, wem "
-        "welche Aufgabe zugewiesen wird."
+        "welche Aufgabe zugewiesen wird. An Tagen unter „Abwesend“ wird für die Person keine "
+        "Arbeit eingeplant."
     )
     if state.team_file_error:
         st.error(f"Gespeichertes Team konnte nicht geladen werden: {state.team_file_error}")
@@ -190,6 +274,10 @@ with tabs[0]:
                 help="Skill mit Stufe 1–5, z. B. Python 4, SQL 3"
             ),
             "Stunden/Woche": st.column_config.NumberColumn(min_value=1, max_value=168),
+            "Abwesend": st.column_config.TextColumn(
+                help="Tage ohne Arbeit, z. B. 01.12.2026–05.12.2026, 23.12.2026. Feiertage "
+                "kennt der Kalender nicht: bei allen Personen eintragen."
+            ),
             "Notiz": st.column_config.TextColumn(help="z. B. Urlaub, Prüfungsphase"),
         },
     )
@@ -269,6 +357,7 @@ with tabs[2]:
         ):
             rounds = []
             with st.status("Claude plant …", expanded=True) as status:
+                st.caption(BUSY_HINT)
                 show_round = round_printer()
 
                 def on_round(record):
@@ -285,7 +374,7 @@ with tabs[2]:
                     failure = f"Die Claude API meldet einen Fehler: {err}"
                 else:
                     show_plan(plan, rounds, "Agent", round(time.monotonic() - started, 1))
-                    state.update(chat=[], proposal=None)  # the conversation was about another plan
+                    forget_conversation()
                 # The message goes below the box: a collapsed status would hide it.
                 label = f"Kein Plan nach {len(rounds)} Runden" if failure else "Plan angenommen"
                 status.update(label=label, state="error" if failure else "complete", expanded=True)
@@ -360,7 +449,17 @@ with tabs[3]:
                         x2="Ende:T",
                         y=alt.Y("Aufgabe:N", sort=None, title=None, axis=alt.Axis(labelLimit=260)),
                         color="Person:N",
-                        tooltip=["Aufgabe", "Person", "Zeitraum"],
+                        # A dark outline for the tasks without slack.
+                        stroke=alt.condition(
+                            "datum.Kritisch", alt.value("#18352d"), alt.value("transparent")
+                        ),
+                        strokeWidth=alt.value(2),
+                        tooltip=[
+                            "Aufgabe",
+                            "Person",
+                            "Zeitraum",
+                            alt.Tooltip("Puffer:Q", title="Puffer (Arbeitstage)"),
+                        ],
                     )
                 )
                 deadline_data = alt.Chart(pd.DataFrame({"Deadline": [deadline_line]}))
@@ -377,6 +476,11 @@ with tabs[3]:
                     for task_id in result.critical_path
                 )
                 st.html(f'<p class="path"><strong>Kritischer Pfad</strong>{path}</p>')
+                st.caption(
+                    "Dunkel umrandet: Aufgaben ohne Puffer. Wie viele Arbeitstage Puffer eine "
+                    "Aufgabe hat, steht im Tooltip und in der Tabelle der Zuweisungen. Der "
+                    "kritische Pfad ist die Kette, die das Ende bestimmt."
+                )
             else:
                 st.info("Ohne fehlerfreien Plan gibt es keinen Terminplan.")
 
@@ -389,7 +493,7 @@ with tabs[3]:
                             "Person": item.member,
                             "Zugewiesen (h)": round(item.assigned_hours, 1),
                             "Verfügbar (h)": round(item.capacity_hours, 1),
-                            "Auslastung": item.utilization,
+                            "Auslastung": whole_percent(item.utilization),
                         }
                         for item in result.load
                     ]
@@ -411,10 +515,88 @@ with tabs[3]:
 
         with st.container(border=True, key="panel-reasons"):
             st.markdown("#### :material/assignment_ind: Zuweisungen und Begründungen")
-            st.dataframe(
-                pd.DataFrame(plan_rows(state.plan))[["ID", "Aufgabe", "Person", "Begründung"]],
-                hide_index=True,
-            )
+            reasons = pd.DataFrame(plan_rows(state.plan))[["ID", "Aufgabe", "Person", "Begründung"]]
+            if result.slack:
+                reasons.insert(3, "Puffer (Tage)", reasons["ID"].map(result.slack))
+            st.dataframe(reasons, hide_index=True)
+
+        if result.schedule:
+            with st.container(border=True, key="panel-task"):
+                st.markdown("#### :material/search: Aufgabe im Detail")
+                st.caption(
+                    "Warum diese Person, was hängt an der Aufgabe, und wer könnte sie sonst "
+                    "übernehmen? Die Begründung stammt von Claude, alles andere rechnet Python."
+                )
+                names = {task.id: f"{task.id} · {task.title}" for task in state.plan.tasks}
+                chosen = st.selectbox("Aufgabe", list(names), format_func=names.get)
+                view = explain_task(state.plan, team, result, chosen)
+                room = (
+                    chip("Kein Puffer: jede Verzögerung verschiebt das Ende", "warn")
+                    if view["critical"]
+                    else chip(
+                        f"{view['slack']} Arbeitstag{'' if view['slack'] == 1 else 'e'} Puffer",
+                        "on" if view["slack"] else "",
+                    )
+                )
+                st.html(
+                    strip(
+                        chip(view["member"], "plain"),
+                        chip(f"{view['hours']:g} h", "plain"),
+                        chip(f"{view['start']:%d.%m.} – {view['end']:%d.%m.%Y}", "plain"),
+                        room,
+                    )
+                )
+                if view["description"]:
+                    st.markdown(view["description"])
+                why, around = st.columns(2, gap="medium")
+                with why:
+                    st.markdown(f"**Warum {view['member']}?**")
+                    st.markdown(view["reason"])
+                    for skill, level in view["skills"]:
+                        have = (
+                            f"Stufe {level}" if level else f"bei {view['member']} nicht angegeben"
+                        )
+                        st.markdown(f"- {skill}: {have}")
+                with around:
+                    st.markdown("**Braucht vorher**")
+                    st.markdown(
+                        "\n".join(f"- {tid} · {title}" for tid, title in view["depends_on"])
+                        or "Nichts: Die Aufgabe kann sofort beginnen."
+                    )
+                    st.markdown("**Darauf warten**")
+                    st.markdown(
+                        "\n".join(f"- {tid} · {title}" for tid, title in view["needed_by"])
+                        or "Keine andere Aufgabe."
+                    )
+                st.markdown("**Wer könnte es sonst?**")
+                if view["alternatives"]:
+                    st.dataframe(
+                        pd.DataFrame(
+                            [
+                                {
+                                    "Person": other["member"],
+                                    "Passende Skills": ", ".join(
+                                        f"{skill} {level}"
+                                        for skill, level in other["skills"].items()
+                                    ),
+                                    "Auslastung": whole_percent(other["utilization"]),
+                                }
+                                for other in view["alternatives"]
+                            ]
+                        ),
+                        hide_index=True,
+                        column_config={
+                            "Auslastung": st.column_config.ProgressColumn(
+                                format="percent", min_value=0, max_value=1
+                            )
+                        },
+                    )
+                    st.caption(
+                        "Auslastung bis zur Deadline im aktuellen Plan. Eine Umverteilung "
+                        "lässt sich im Schritt Anpassen durchspielen."
+                    )
+                else:
+                    st.caption("Niemand sonst im Team hat einen der verlangten Skills angegeben.")
 
         with st.container(horizontal=True):
             st.button("Plan anpassen", icon=":material/edit:", on_click=go, args=(STEPS[4],))
@@ -426,7 +608,45 @@ with tabs[4]:
     if state.plan is None:
         st.info("Noch kein Plan zum Anpassen.")
     else:
-        with st.container(border=True, key="panel-chat"):
+        # The conversation stands above the table but runs after it: it has to know
+        # what the table says in this run, not in the one before.
+        chat_panel = st.container(border=True, key="panel-chat")
+        st.markdown("#### :material/edit: Von Hand ändern")
+        st.caption(
+            "Ändere Personen, Stunden oder Abhängigkeiten. „Erneut prüfen“ rechnet nur "
+            "deterministisch nach, Claude wird nicht aufgerufen."
+        )
+        edited_plan = st.data_editor(
+            state.plan_df,
+            key=f"plan_editor_{state.editor_version}",
+            num_rows="dynamic",
+            width="stretch",
+            column_config={
+                "Stunden": st.column_config.NumberColumn(min_value=0.5),
+                "Abhängig von": st.column_config.TextColumn(help="IDs, getrennt durch Komma"),
+                "Skills": st.column_config.TextColumn(help="getrennt durch Komma"),
+            },
+        )
+        state.plan_current = edited_plan
+        risks = st.text_area("Risiken (eins pro Zeile)", key="risks_text", persist_state="session")
+        if st.button("Erneut prüfen", type="primary", icon=":material/fact_check:"):
+            try:
+                new = rows_to_plan(
+                    edited_plan.to_dict("records"), state.original, risks.splitlines()
+                )
+            except InputError as err:
+                st.error(f"Bitte korrigieren:\n\n{err}")
+            else:
+                changed = new != table_plan(state.original)
+                state.update(
+                    plan=new,
+                    edited=changed,
+                    hand_edited=state.get("hand_edited", False) or changed,
+                )
+                st.rerun()
+        next_step("Ergebnis ansehen", STEPS[3], False, "back_to_result")
+
+        with chat_panel:
             st.markdown("#### :material/forum: Mit Claude ändern")
             st.caption(
                 "Sag, was sich ändern soll, oder spiel eine Annahme durch: „Clara übernimmt die "
@@ -441,7 +661,9 @@ with tabs[4]:
                     st.markdown("\n".join(f"- {c}" for c in turn["changes"]) or "Keine Änderung.")
 
             proposal = state.proposal
-            if proposal is not None and proposal["basis"] != state.plan:
+            # In the form of the table: "Erneut prüfen" writes an untouched plan anew in
+            # that form, and nobody has changed it then.
+            if proposal is not None and table_plan(proposal["basis"]) != table_plan(state.plan):
                 state.proposal = proposal = None
                 st.info(
                     "Der Plan wurde seit dem Vorschlag von Hand geändert. Der Vorschlag passt "
@@ -455,13 +677,18 @@ with tabs[4]:
                 ]
                 if not ok
             ]
+            # Claude gets the current plan, and taking its proposal replaces the table. Hand
+            # edits that were not checked would be ignored first and overwritten then: no
+            # wish and no "Übernehmen" while they wait.
+            unchecked = not table_matches_plan()
             wish = state.pop("asked", None)  # set by the chat input at the end of the panel
             # A second wish must not replace a proposal that is still open.
-            if wish and proposal is None and not blocked:
+            if wish and proposal is None and not blocked and not unchecked:
                 with st.chat_message("user"):
                     st.text(wish)
                 change_rounds = []
                 with st.status("Claude ändert den Plan …", expanded=True) as status:
+                    st.caption(BUSY_HINT)
                     with st.container(key="rounds-change"):
                         show_change_round = round_printer(state.plan)
 
@@ -509,7 +736,9 @@ with tabs[4]:
                     st.text(proposal["wish"])
                     proposal["changes"] = plan_changes(state.plan, proposal["plan"])
                     if proposed is not None:
-                        proposal["changes"] += check_changes(result, proposed)
+                        proposal["changes"] += check_changes(
+                            result, proposed, pair_tasks(state.plan, proposal["plan"])
+                        )
                     if proposal["changes"]:
                         st.markdown("\n".join(f"- {c}" for c in proposal["changes"]))
                     else:
@@ -521,7 +750,7 @@ with tabs[4]:
                             icon=":material/check:",
                             on_click=decide,
                             args=(True,),
-                            disabled=proposed is None or not proposal["changes"],
+                            disabled=proposed is None or not proposal["changes"] or unchecked,
                         )
                         st.button(
                             "Verwerfen", icon=":material/close:", on_click=decide, args=(False,)
@@ -541,44 +770,34 @@ with tabs[4]:
             # the run that follows, which answers it above.
             if blocked:
                 st.caption("Für eine Änderung mit Claude fehlt noch: " + ", ".join(blocked) + ".")
+            elif unchecked:
+                st.warning(
+                    "In der Tabelle unten stehen Änderungen, die noch nicht geprüft sind. Claude "
+                    "bekäme den Plan ohne sie, und sein Vorschlag würde sie überschreiben. "
+                    "Übernimm sie mit „Erneut prüfen“ oder setz die Tabelle zurück."
+                    + (" Dein Wunsch wurde nicht gestellt." if wish else "")
+                )
+                st.button("Tabelle zurücksetzen", icon=":material/undo:", on_click=reset_table)
             elif proposal is not None:
                 st.caption("Entscheide erst über den offenen Vorschlag.")
+            else:
+                suggestions = suggested_wishes(state.plan, team, result, project)
+                if suggestions:
+                    st.caption("Naheliegend nach der Prüfung des Plans, mit einem Klick gefragt:")
+                    with st.container(horizontal=True, key="suggestions"):
+                        for number, suggestion in enumerate(suggestions):
+                            st.button(
+                                suggestion,
+                                key=f"suggestion_{number}",
+                                on_click=ask,
+                                args=(suggestion,),
+                            )
             st.chat_input(
                 "Was soll sich ändern?",
                 key="wish",
                 on_submit=ask,
-                disabled=bool(blocked) or proposal is not None,
+                disabled=bool(blocked) or proposal is not None or unchecked,
             )
-
-        st.markdown("#### :material/edit: Von Hand ändern")
-        st.caption(
-            "Ändere Personen, Stunden oder Abhängigkeiten. „Erneut prüfen“ rechnet nur "
-            "deterministisch nach, Claude wird nicht aufgerufen."
-        )
-        edited_plan = st.data_editor(
-            state.plan_df,
-            key=f"plan_editor_{state.editor_version}",
-            num_rows="dynamic",
-            width="stretch",
-            column_config={
-                "Stunden": st.column_config.NumberColumn(min_value=0.5),
-                "Abhängig von": st.column_config.TextColumn(help="IDs, getrennt durch Komma"),
-                "Skills": st.column_config.TextColumn(help="getrennt durch Komma"),
-            },
-        )
-        state.plan_current = edited_plan
-        risks = st.text_area("Risiken (eins pro Zeile)", key="risks_text", persist_state="session")
-        if st.button("Erneut prüfen", type="primary", icon=":material/fact_check:"):
-            try:
-                new = rows_to_plan(
-                    edited_plan.to_dict("records"), state.original, risks.splitlines()
-                )
-            except InputError as err:
-                st.error(f"Bitte korrigieren:\n\n{err}")
-            else:
-                state.update(plan=new, edited=new != state.original)
-                st.rerun()
-        next_step("Ergebnis ansehen", STEPS[3], False, "back_to_result")
 
 # 6 · Export -------------------------------------------------------------------------------
 with tabs[5]:
@@ -595,9 +814,9 @@ with tabs[5]:
                     "exportiert": datetime.now().astimezone().isoformat(timespec="seconds"),
                     "quelle": state.source,
                     "agent_sekunden": state.agent_seconds,
-                    "runden": len(state.rounds),
+                    "runden": state.get("round_count", len(state.rounds)),
                     "pruefung_sekunden": round(time.monotonic() - state.shown_at, 1),
-                    "angepasst": state.edited,
+                    "angepasst": state.get("hand_edited", state.edited),
                     "tasks": len(state.plan.tasks),
                     "fehler": len(result.errors),
                     "warnungen": len(result.warnings),

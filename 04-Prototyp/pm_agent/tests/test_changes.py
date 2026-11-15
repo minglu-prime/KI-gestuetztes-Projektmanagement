@@ -1,10 +1,12 @@
 """What changed between two plans, and what the progress view says about one agent round."""
 
+from datetime import date
+
 from test_tools import PROJECT, TEAM, plan_input
 
-from pm_agent.models import Member, Plan
+from pm_agent.models import Member, Plan, Project
 from pm_agent.planning import check_plan
-from pm_agent.workbench import check_changes, describe_round, plan_changes
+from pm_agent.workbench import check_changes, describe_round, pair_tasks, plan_changes
 
 BEN = Member(name="Ben", skills={"SQL": 3}, hours_per_week=20)
 PLAN = Plan.model_validate(plan_input())
@@ -115,3 +117,138 @@ def test_a_round_without_a_readable_draft_keeps_the_tool_message():
     view = describe_round(1, record, PLAN)
     assert view["draft"] is None and view["size"] == "" and view["changes"] == []
     assert view["messages"] == ["x"]
+
+
+def simple(*tasks):
+    """A plan from (id, title, member, hours, depends_on) tuples."""
+    return Plan.model_validate(
+        {
+            "tasks": [
+                {"id": i, "title": title, "estimate_hours": hours, "depends_on": deps}
+                for i, title, _, hours, deps in tasks
+            ],
+            "assignments": [
+                {"task_id": i, "member": member, "reason": "r"} for i, _, member, _, _ in tasks
+            ],
+        }
+    )
+
+
+def test_a_warning_whose_numbers_change_stays_a_warning():
+    # Clara has 10 h until Friday. 15 h are too much, and so are 12 h.
+    clara = Member(name="Clara", hours_per_week=10)
+    week = Project(idea="x", start_date=date(2026, 11, 9), deadline=date(2026, 11, 13))
+    before = check_plan(simple(("A", "Bericht", "Clara", 15, [])), [clara], week)
+    after = check_plan(simple(("A", "Bericht", "Clara", 12, [])), [clara], week)
+
+    assert check_changes(before, after) == [
+        "Planende: 18.11.2026 → 16.11.2026 (2 Arbeitstage früher)",
+        "Warnung bleibt: Der Plan endet am 16.11.2026, 1 Arbeitstag nach der Deadline (13.11.2026)",
+        "Warnung bleibt: Clara ist überlastet: 12 h zugewiesen, bis zur Deadline sind 10 h "
+        "verfügbar (120%)",
+        "Termine von einer Aufgabe verschieben sich",
+    ]
+
+
+def test_a_dependency_on_a_removed_task_is_not_hidden_by_a_reused_id():
+    before = simple(
+        ("T1", "A", "Anna", 8, []), ("T2", "B", "Anna", 8, []), ("T3", "C", "Anna", 8, ["T2"])
+    )
+    # B is gone, A has taken its ID: C now waits for A instead of B.
+    after = simple(("T2", "A", "Anna", 8, []), ("T3", "C", "Anna", 8, ["T2"]))
+    assert plan_changes(before, after) == [
+        "Entfernt: T2 · B",
+        "T3 · C: hängt ab von T2 (vorher T2 [entfernt])",
+        "Eine Aufgabe hat eine neue ID",
+    ]
+
+
+def test_tasks_with_the_same_title_are_not_paired_by_title():
+    before = simple(("T1", "Test", "Anna", 8, []), ("T2", "Test", "Ben", 4, []))
+    after = simple(("T3", "Test", "Anna", 8, []), ("T4", "Test", "Ben", 4, []))
+    assert pair_tasks(before, after) == {}
+    # Which is which cannot be known: no invented reassignment, the tasks are listed.
+    assert plan_changes(before, after) == [
+        "Neu: T3 · Test (Anna, 8 h)",
+        "Neu: T4 · Test (Ben, 4 h)",
+        "Entfernt: T1 · Test",
+        "Entfernt: T2 · Test",
+    ]
+
+
+def test_renumbering_alone_changes_nothing_in_the_check():
+    renumbered = plan_input()
+    renumbered["tasks"][0]["id"] = "X1"
+    renumbered["tasks"][1].update(id="X2", depends_on=["X1"])
+    renumbered["assignments"][0]["task_id"] = "X1"
+    renumbered["assignments"][1]["task_id"] = "X2"
+    after = Plan.model_validate(renumbered)
+    pairs = pair_tasks(PLAN, after)
+    assert pairs == {"A": "X1", "B": "X2"}
+    # Same dates, and the missing skill is the same warning about the same task.
+    assert (
+        check_changes(check_plan(PLAN, TEAM, PROJECT), check_plan(after, TEAM, PROJECT), pairs)
+        == []
+    )
+
+
+def skilled(*tasks):
+    """A plan of 8 h tasks from (ID, title, member, skills)."""
+    return Plan.model_validate(
+        {
+            "tasks": [
+                {"id": i, "title": title, "estimate_hours": 8, "required_skills": skills}
+                for i, title, _, skills in tasks
+            ],
+            "assignments": [
+                {"task_id": i, "member": member, "reason": "r"} for i, _, member, _ in tasks
+            ],
+        }
+    )
+
+
+def test_a_warning_about_a_removed_task_is_not_taken_for_the_task_with_its_id():
+    team = [*TEAM, BEN]  # Anna has not named SQL, Ben has
+    before = skilled(
+        ("T1", "A", "Anna", []), ("T2", "B", "Anna", ["SQL"]), ("T3", "C", "Ben", ["SQL"])
+    )
+    # B is gone. C has taken its ID and went from Ben to Anna, who has not named SQL.
+    after = skilled(("T1", "A", "Anna", []), ("T2", "C", "Anna", ["SQL"]))
+    pairs = pair_tasks(before, after)
+    assert pairs == {"T1": "T1", "T3": "T2"}
+    lines = check_changes(
+        check_plan(before, team, PROJECT), check_plan(after, team, PROJECT), pairs
+    )
+    assert (
+        "Neue Warnung: Task 'T2' braucht 'SQL', Anna hat diese Fähigkeit nicht angegeben" in lines
+    )
+    # The warning about B went with B ("Entfernt: T2 · B" says so): nobody solved it.
+    assert not any(line.startswith("Behoben") for line in lines)
+
+
+def test_a_colon_in_an_id_or_a_skill_does_not_mix_up_the_warnings():
+    def check(plan):
+        return check_plan(plan, TEAM, PROJECT)
+
+    before = skilled(("A", "Entwurf", "Anna", []), ("A:1", "Abfragen", "Anna", ["SQL"]))
+    after = skilled(("X", "Entwurf", "Anna", []), ("A:1", "Abfragen", "Anna", ["SQL"]))
+    assert check_changes(check(before), check(after), pair_tasks(before, after)) == []
+    # "A" needing "1:SQL" and "A:1" needing "SQL" are two warnings.
+    both = skilled(("A", "Entwurf", "Anna", ["1:SQL"]), ("A:1", "Abfragen", "Anna", ["SQL"]))
+    assert check_changes(check(both), check(before)) == [
+        "Behoben: Task 'A' braucht '1:SQL', Anna hat diese Fähigkeit nicht angegeben"
+    ]
+
+
+def test_a_dependency_on_a_task_that_never_existed_is_not_called_removed():
+    # Two drafts in a row with the same mistake: T2 waits for T9, which is in neither.
+    before = simple(("T1", "A", "Anna", 8, []), ("T2", "B", "Anna", 8, ["T9"]))
+    after = simple(("T1", "A", "Anna", 4, []), ("T2", "B", "Anna", 8, ["T9"]))
+    assert plan_changes(before, after) == ["T1 · A: 8 h → 4 h"]
+
+
+def test_without_pairs_a_removed_task_takes_its_warning_along_as_well():
+    before = skilled(("A", "Entwurf", "Anna", []), ("B", "Abfragen", "Anna", ["SQL"]))
+    after = skilled(("A", "Entwurf", "Anna", []))
+    lines = check_changes(check_plan(before, TEAM, PROJECT), check_plan(after, TEAM, PROJECT))
+    assert not any(line.startswith("Behoben") for line in lines)

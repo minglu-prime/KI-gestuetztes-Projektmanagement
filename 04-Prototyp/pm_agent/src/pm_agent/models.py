@@ -20,12 +20,26 @@ class _Model(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
 
 
+class Absence(_Model):
+    """Days on which a member does not work, both ends included."""
+
+    first: date
+    last: date
+
+    @model_validator(mode="after")
+    def _not_backwards(self) -> "Absence":
+        if self.last < self.first:
+            raise ValueError("Das Ende der Abwesenheit liegt vor ihrem Beginn")
+        return self
+
+
 class Member(_Model):
     name: NonEmpty
     skills: dict[NonEmpty, SkillLevel] = Field(default_factory=dict)
     # A week has 168 hours. Below 1 h a member cannot be planned, and tiny values
     # underflow to 0 h per workday.
     hours_per_week: float = Field(ge=1, le=7 * 24)
+    absences: list[Absence] = Field(default_factory=list)
     note: str = ""
 
 
@@ -74,15 +88,24 @@ class MemberLoad(_Model):
     member: str
     assigned_hours: float
     capacity_hours: float  # available between start date and deadline
-    utilization: float  # assigned / capacity; above 1.0 means overloaded
+    # assigned / capacity; above 1.0 means overloaded. None: away until the deadline.
+    utilization: float | None
 
 
 class CheckResult(_Model):
     errors: list[str] = Field(default_factory=list)  # plan cannot be scheduled until fixed
     warnings: list[str] = Field(default_factory=list)  # schedulable, project lead must decide
+    # One entry per warning, in the same order: what it is about, without the numbers in
+    # its text: ("late",), ("buffer",), ("overload", "Anna"), ("away", "Anna"),
+    # ("skill", "T1", "SQL"). Two checks of a changed plan are compared by these, so a
+    # warning whose numbers moved is not taken for a new one. Tuples, not joined strings:
+    # an ID or a skill can contain any separator.
+    warning_kinds: list[tuple[str, ...]] = Field(default_factory=list)
     schedule: list[ScheduledTask] = Field(default_factory=list)
     end_date: date | None = None
     critical_path: list[str] = Field(default_factory=list)
+    # Task ID -> whole workdays the task can start later without moving the end of the plan.
+    slack: dict[str, int] = Field(default_factory=dict)
     load: list[MemberLoad] = Field(default_factory=list)
 
     @property
@@ -110,7 +133,10 @@ class Finding(_Model):
 class Measure(_Model):
     task_ids: list[NonEmpty] = Field(min_length=1)
     action: NonEmpty
-    effect: NonEmpty  # what the measure is expected to change
+    effect: NonEmpty  # what the measure is expected to change, in Claude's words
+    # Set if the measure gives its tasks to this team member. Python then computes what that
+    # does to the forecast, so the effect is not only claimed.
+    reassign_to: NonEmpty | None = None
 
 
 class ControlReport(_Model):

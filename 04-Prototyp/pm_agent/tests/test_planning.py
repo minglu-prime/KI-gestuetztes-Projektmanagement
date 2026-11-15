@@ -1,10 +1,17 @@
+import random
 import time
 from datetime import date, timedelta
 
 import pytest
 
 from pm_agent.models import Assignment, Member, Plan, Project, Task
-from pm_agent.planning import add_workdays, check_plan, count_workdays
+from pm_agent.planning import (
+    add_workdays,
+    check_plan,
+    count_workdays,
+    scheduling_order,
+    workday_shift,
+)
 
 MON = date(2026, 11, 9)
 ANNA = Member(name="Anna", skills={"Python": 4}, hours_per_week=40)  # 8 h per workday
@@ -249,3 +256,310 @@ def test_no_workday_between_start_and_deadline_is_an_error():
 def test_empty_team_is_an_error():
     result = check_plan(plan(task("A", 8), owners={"A": "Anna"}), [], project())
     assert "Das Team ist leer" in result.errors
+
+
+def test_workday_shift_counts_workdays_between_two_dates_with_a_sign():
+    assert workday_shift(date(2026, 11, 11), date(2026, 11, 12)) == 1
+    assert workday_shift(date(2026, 11, 12), date(2026, 11, 11)) == -1
+    assert workday_shift(date(2026, 11, 13), date(2026, 11, 16)) == 1  # Friday to Monday
+    assert workday_shift(MON, MON) == 0
+
+
+def away(first, last=None, name="Anna", hours=40):
+    """Anna (8 h per workday) with one absence."""
+    absence = {"first": first, "last": last or first}
+    return Member(name=name, skills={"Python": 4}, hours_per_week=hours, absences=[absence])
+
+
+def test_work_starts_after_an_absence_on_the_first_day():
+    p = plan(task("A", 8), owners={"A": "Anna"})
+    s = by_id(check_plan(p, [away(MON)], project()))
+    assert (s["A"].start, s["A"].end) == (date(2026, 11, 10), date(2026, 11, 10))
+
+
+def test_an_absence_in_the_middle_of_a_task_stretches_it():
+    p = plan(task("A", 24), owners={"A": "Anna"})  # three days of work
+    s = by_id(check_plan(p, [away(date(2026, 11, 10))], project()))  # away on Tuesday
+    assert (s["A"].start, s["A"].end) == (MON, date(2026, 11, 12))  # Mon, Wed, Thu
+
+
+def test_an_absence_over_a_weekend_costs_its_workdays_only():
+    p = plan(task("A", 40), owners={"A": "Anna"})  # one week of work
+    friday_to_monday = away(date(2026, 11, 13), date(2026, 11, 16))
+    s = by_id(check_plan(p, [friday_to_monday], project()))
+    # Mon-Thu, then Tue 17.11.: Friday and Monday are gone.
+    assert (s["A"].start, s["A"].end) == (MON, date(2026, 11, 17))
+
+
+def test_the_rest_of_a_day_is_used_before_an_absence():
+    # A takes the first half of Monday. B (8 h) gets the second half, waits out Tuesday and
+    # ends on Wednesday at noon.
+    p = plan(task("A", 4), task("B", 8, deps=["A"]), owners={"A": "Anna", "B": "Anna"})
+    s = by_id(check_plan(p, [away(date(2026, 11, 10))], project()))
+    assert (s["B"].start, s["B"].end) == (MON, date(2026, 11, 11))
+
+
+def test_absences_outside_the_project_and_on_weekends_change_nothing():
+    p = plan(task("A", 8), task("B", 16, deps=["A"]), owners={"A": "Anna", "B": "Anna"})
+    plain = check_plan(p, [ANNA], project())
+    for first, last in [
+        (date(2026, 10, 1), date(2026, 11, 8)),  # before the start
+        (date(2026, 11, 14), date(2026, 11, 15)),  # a weekend
+        (date(2027, 1, 4), date(2027, 1, 8)),  # after the plan has ended
+    ]:
+        result = check_plan(p, [away(first, last)], project())
+        assert result.schedule == plain.schedule, (first, last)
+
+
+def test_an_absence_of_one_person_does_not_move_the_others():
+    p = plan(task("A", 8), task("B", 8), owners={"A": "Anna", "B": "Ben"})
+    s = by_id(check_plan(p, [away(MON), BEN], project()))
+    assert s["A"].start == date(2026, 11, 10) and s["B"].start == MON
+
+
+def test_absent_days_are_not_available_until_the_deadline():
+    # Mon-Fri window, Anna is away on two of the five days: 24 h instead of 40 h.
+    p = plan(task("A", 32), owners={"A": "Anna"})
+    two_days = away(date(2026, 11, 10), date(2026, 11, 11))
+    result = check_plan(p, [two_days], project(deadline=date(2026, 11, 13)))
+    assert result.load[0].capacity_hours == 24
+    assert result.load[0].utilization == pytest.approx(32 / 24)
+    assert "Anna ist überlastet: 32 h zugewiesen, bis zur Deadline sind 24 h verfügbar (134%)" in (
+        result.warnings
+    )
+
+
+def test_someone_away_for_the_whole_project_has_no_capacity_and_that_is_said():
+    p = plan(task("A", 8), owners={"A": "Anna"})
+    gone = away(date(2026, 11, 1), date(2026, 12, 31))
+    result = check_plan(p, [gone], project())  # deadline 18.12.
+    assert result.ok
+    assert (result.load[0].capacity_hours, result.load[0].utilization) == (0, None)
+    assert result.schedule[0].start == date(2027, 1, 1)
+    assert (
+        "Anna ist bis zur Deadline durchgehend abwesend, hat aber 8 h zugewiesen" in result.warnings
+    )
+
+
+def test_an_absence_to_the_end_of_the_calendar_is_an_error_not_an_endless_loop():
+    p = plan(task("A", 8), owners={"A": "Anna"})
+    result = check_plan(p, [away(MON, date.max)], project())
+    assert result.errors == [
+        "Task 'A' würde erst nach dem 31.12.9999 enden, so weit reicht der Kalender nicht"
+    ]
+
+
+def test_overlapping_and_unsorted_absences_count_once():
+    anna = Member(
+        name="Anna",
+        hours_per_week=40,
+        absences=[
+            {"first": date(2026, 11, 11), "last": date(2026, 11, 12)},
+            {"first": date(2026, 11, 10), "last": date(2026, 11, 11)},
+        ],
+    )
+    p = plan(task("A", 16), owners={"A": "Anna"})
+    result = check_plan(p, [anna], project(deadline=date(2026, 11, 13)))
+    s = by_id(result)
+    assert (s["A"].start, s["A"].end) == (MON, date(2026, 11, 13))  # Mon, then Fri
+    assert result.load[0].capacity_hours == 16  # five days, three of them away
+
+
+def test_slack_is_how_many_workdays_a_task_can_slip_without_moving_the_end():
+    # Anna works Mon-Wed on A and C. Ben's B (one day) could also be done on Tue or Wed.
+    p = plan(
+        task("A", 8),
+        task("B", 8),
+        task("C", 16, deps=["A"]),
+        owners={"A": "Anna", "B": "Ben", "C": "Anna"},
+    )
+    result = check_plan(p, [ANNA, BEN], project())
+    assert result.end_date == date(2026, 11, 11)
+    assert result.slack == {"A": 0, "B": 2, "C": 0}
+
+
+def test_slack_is_shared_along_a_chain():
+    # Ben: B then D, Mon and Tue. Either may slip one day, but not both.
+    p = plan(
+        task("A", 24),
+        task("B", 8),
+        task("D", 8, deps=["B"]),
+        owners={"A": "Anna", "B": "Ben", "D": "Ben"},
+    )
+    assert check_plan(p, [ANNA, BEN], project()).slack == {"A": 0, "B": 1, "D": 1}
+
+
+def test_slack_counts_whole_workdays_and_skips_absences():
+    # Ben needs Mon-Wed. Anna's A takes Monday; she is away on Tuesday. Slipping one day
+    # lands on Wednesday, slipping two days as well: only the third day moves the end.
+    p = plan(task("A", 8), task("B", 24), owners={"A": "Anna", "B": "Ben"})
+    result = check_plan(p, [away(date(2026, 11, 10)), BEN], project())
+    assert result.slack == {"A": 2, "B": 0}
+    # Half a day of room is no whole workday.
+    half = plan(task("A", 4), task("B", 8), owners={"A": "Anna", "B": "Ben"})
+    assert check_plan(half, [ANNA, BEN], project()).slack == {"A": 0, "B": 0}
+
+
+def test_a_plan_with_errors_has_no_slack():
+    p = plan(task("A", 8), owners={"A": "Zoe"})
+    assert check_plan(p, [ANNA], project()).slack == {}
+
+
+def test_a_task_that_only_waits_for_an_absence_is_not_on_the_critical_path():
+    # Ben does A on Monday. Anna is away all week and does B (after A) from the next Monday,
+    # whenever A is done that week. A can slip four days, so it is not critical.
+    anna = away(MON, date(2026, 11, 13))
+    p = plan(task("A", 8), task("B", 8, deps=["A"]), owners={"A": "Ben", "B": "Anna"})
+    result = check_plan(p, [anna, BEN], project())
+    assert by_id(result)["B"].start == date(2026, 11, 16)
+    assert result.slack == {"A": 4, "B": 0}
+    assert result.critical_path == ["B"]
+
+
+def test_slack_counts_days_that_an_absence_makes_harmless():
+    # Anna is away on Tuesday. A (16 h) runs Mon and Wed; Ben's B ends on Thursday. A can
+    # also run Wed and Thu: two days later (one of them is the absence).
+    anna = away(date(2026, 11, 10))
+    p = plan(task("A", 16), task("B", 32), owners={"A": "Anna", "B": "Ben"})
+    assert check_plan(p, [anna, BEN], project()).slack == {"A": 2, "B": 0}
+    # C takes Monday morning, D (8 h) Monday afternoon and Wednesday morning. A day later D
+    # is done within Wednesday, the day the plan ends anyway.
+    q = plan(
+        task("C", 4),
+        task("D", 8, deps=["C"]),
+        task("B", 24),
+        owners={"C": "Anna", "D": "Anna", "B": "Ben"},
+    )
+    assert check_plan(q, [anna, BEN], project()).slack["D"] == 1
+
+
+def test_every_warning_has_a_kind_that_survives_changing_numbers():
+    clara = Member(name="Clara", hours_per_week=10)
+    p = plan(task("A", 15, skills=["SQL"]), owners={"A": "Clara"})
+    result = check_plan(p, [clara], project(deadline=date(2026, 11, 13)))
+    assert result.warning_kinds == [
+        ("late",),
+        ("overload", "Clara"),
+        ("skill", "A", "SQL"),
+    ]
+    assert len(result.warning_kinds) == len(result.warnings)
+    on_the_day = check_plan(plan(task("A", 8), owners={"A": "Anna"}), [ANNA], project(deadline=MON))
+    assert on_the_day.warning_kinds == [("buffer",)]
+    gone = away(date(2026, 11, 1), date(2026, 12, 31))
+    assert check_plan(
+        plan(task("A", 8), owners={"A": "Anna"}), [gone], project()
+    ).warning_kinds == [("late",), ("away", "Anna")]
+
+
+def test_tasks_can_be_scheduled_in_a_given_order():
+    # Both orders are valid: A and B do not depend on each other and are both Anna's.
+    p = plan(task("A", 8), task("B", 16), owners={"A": "Anna", "B": "Anna"})
+    assert scheduling_order(p) == ["A", "B"]
+    swapped = by_id(check_plan(p, [ANNA], project(), order=["B", "A"]))
+    assert (swapped["B"].start, swapped["A"].start) == (MON, date(2026, 11, 11))
+    with pytest.raises(ValueError, match="order"):
+        check_plan(p, [ANNA], project(), order=["A"])
+    chain = plan(task("A", 8), task("B", 8, deps=["A"]), owners={"A": "Anna", "B": "Anna"})
+    with pytest.raises(ValueError, match="order"):
+        check_plan(chain, [ANNA], project(), order=["B", "A"])
+
+
+def test_on_random_plans_with_absences_nothing_is_planned_into_an_absence():
+    # The same seed every time: 200 small plans, two people who are sometimes away.
+    rng = random.Random(7)
+    for _ in range(200):
+        team = []
+        for name, hours in (("Anna", 40), ("Ben", 20)):
+            absences = []
+            if rng.random() < 0.6:
+                first = MON + timedelta(days=rng.randrange(10))
+                absences.append({"first": first, "last": first + timedelta(days=rng.randrange(4))})
+            team.append(Member(name=name, hours_per_week=hours, absences=absences))
+        ids = [f"T{n}" for n in range(rng.randrange(3, 7))]
+        tasks = [
+            task(tid, rng.choice([4, 8, 12, 16]), deps=[d for d in ids[:n] if rng.random() < 0.35])
+            for n, tid in enumerate(ids)
+        ]
+        p = plan(*tasks, owners={tid: rng.choice(["Anna", "Ben"]) for tid in ids})
+        result = check_plan(p, team, project())
+
+        assert result.ok
+        assert result.critical_path, p
+        assert all(days >= 0 for days in result.slack.values())
+        # No task is planned on a day its person is away.
+        people = {m.name: m for m in team}
+        for s in result.schedule:
+            for absence in people[s.member].absences:
+                assert not absence.first <= s.start <= absence.last, (s, absence)
+                assert not absence.first <= s.end <= absence.last, (s, absence)
+
+
+def test_the_last_task_of_the_chain_can_have_a_day_of_slack_when_days_are_not_full():
+    # Found by the random plans. Ben works 4 h a day and is away on Monday 16.11. His D (12 h)
+    # starts on Friday afternoon after Anna's C and ends on Thursday at noon. Started a day
+    # later it fills Tue, Wed and Thu and ends on the same Thursday.
+    ben = Member(
+        name="Ben",
+        hours_per_week=20,
+        absences=[{"first": date(2026, 11, 16), "last": date(2026, 11, 16)}],
+    )
+    p = plan(
+        task("C", 36),  # Anna: Mon to Fri noon
+        task("D", 12, deps=["C"]),
+        owners={"C": "Anna", "D": "Ben"},
+    )
+    result = check_plan(p, [ANNA, ben], project())
+    assert by_id(result)["D"].end == date(2026, 11, 19)
+    assert result.critical_path == ["C", "D"]  # the chain that sets the end
+    # And still the plan has a whole day of room: C a day later ends on Monday noon, when
+    # Ben is away anyway. The day is shared: either may slip, not both.
+    assert result.slack == {"C": 1, "D": 1}
+
+
+def test_a_task_that_would_slip_into_an_absence_stays_on_the_critical_path():
+    # Anna is away on Tuesday and does A on Monday, B on Wednesday, C on Thursday. A day
+    # later, A falls into the absence and pushes B and C: it has no slack and sets the end.
+    anna = away(date(2026, 11, 10))
+    p = plan(
+        task("A", 8),
+        task("B", 8, deps=["A"]),
+        task("C", 8, deps=["B"]),
+        owners={"A": "Anna", "B": "Anna", "C": "Anna"},
+    )
+    result = check_plan(p, [anna], project())
+    assert result.slack == {"A": 0, "B": 0, "C": 0}
+    assert result.critical_path == ["A", "B", "C"]
+
+    # Ben's A (12 h) ends on Tuesday at noon, Anna does B on Wednesday. A day later, A ends
+    # on Wednesday at noon and B has to wait for it.
+    q = plan(task("A", 12), task("B", 8, deps=["A"]), owners={"A": "Ben", "B": "Anna"})
+    result = check_plan(q, [anna, BEN], project())
+    assert result.slack == {"A": 0, "B": 0}
+    assert result.critical_path == ["A", "B"]
+
+
+def test_the_check_can_leave_out_the_slack():
+    # The forecast only wants dates. The slack is the expensive part of the check.
+    p = plan(task("A", 8), task("B", 8, deps=["A"]), owners={"A": "Anna", "B": "Ben"})
+    full = check_plan(p, [ANNA, BEN], project())
+    assert full.slack == {"A": 0, "B": 0}
+    assert check_plan(p, [ANNA, BEN], project(), with_slack=False) == full.model_copy(
+        update={"slack": {}}
+    )
+
+
+def test_the_critical_path_follows_whatever_really_holds_a_task():
+    # Anna (away on Tuesday) does her first task on Monday and N on Wednesday. N also waits
+    # for Ben's task, done on Monday too. Ben's task a day later changes nothing for N; Anna's
+    # first task a day later falls into the absence and moves N. Whatever the IDs are.
+    anna = away(date(2026, 11, 10))
+    for own, other in [("A", "Z"), ("P", "D")]:
+        p = plan(
+            task(own, 8),
+            task(other, 8),
+            task("N", 8, deps=[other]),
+            owners={own: "Anna", other: "Ben", "N": "Anna"},
+        )
+        result = check_plan(p, [anna, BEN], project())
+        assert result.slack == {own: 0, other: 1, "N": 0}
+        assert result.critical_path == [own, "N"]

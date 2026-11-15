@@ -16,7 +16,7 @@ from test_tools import PROJECT, TEAM, plan_input
 
 from pm_agent import agent, followup, lab_server, tracking, workbench
 from pm_agent.agent import AgentError, PlanningError
-from pm_agent.models import ControlReport, Plan, StatusSummary
+from pm_agent.models import Absence, ControlReport, Plan, StatusSummary
 
 SITE = Path(__file__).parents[1] / "app.py"
 PLANUNG = "pages/planung.py"
@@ -105,7 +105,7 @@ def test_a_plan_from_the_agent_is_checked_shown_and_exported(app, monkeypatch):
 
 def chips(at):
     """The status strip above the steps, as plain text."""
-    (strip,) = [h.value for h in at.html if 'class="chips"' in h.value]
+    strip = next(h.value for h in at.html if 'class="chips"' in h.value)  # first of the page
     return strip
 
 
@@ -157,6 +157,46 @@ def with_plan(app, monkeypatch):
     return at
 
 
+def test_a_task_is_explained_in_the_result(with_plan):
+    # Opens on the first task: Anna does A although she has not named SQL.
+    texts = [m.value for m in with_plan.markdown]
+    assert "**Warum Anna?**" in texts and "kennt die Raumdaten" in texts
+    assert "- SQL: bei Anna nicht angegeben" in texts
+    assert "- B · API" in texts  # B waits for it
+    (details,) = [h.value for h in with_plan.html if "Kein Puffer" in h.value]
+    assert "8 h" in details and "09.11. – 09.11.2026" in details
+    # Anna is the only person in the team: nobody else could take it.
+    assert any("Niemand sonst im Team" in c.value for c in with_plan.caption)
+
+    at = with_plan.selectbox[0].select("B").run()
+    assert not at.exception
+    assert "- A · Datenmodell" in [m.value for m in at.markdown]
+
+
+def test_a_wish_left_over_from_another_plan_is_not_asked_for_a_reopened_run(
+    with_plan, monkeypatch, tmp_path
+):
+    # A wish is waiting, then the project lead opens a logged run instead.
+    log = tmp_path / "run-20261109-120000.json"
+    record = {
+        "project": PROJECT.model_dump(mode="json"),
+        "team": [m.model_dump(mode="json") for m in TEAM],
+        "plan": PLAN.model_dump(mode="json"),
+        "rounds": [],
+    }
+    log.write_text(json.dumps(record), encoding="utf-8")
+    monkeypatch.setattr(workbench, "saved_runs", lambda: [log])
+    at = with_plan.run()
+    at.session_state["asked"] = WISH
+    button(at, "Lauf öffnen").click()
+    at.run()
+
+    assert not at.exception
+    assert at.session_state["source"] == f"Protokoll {log.name}"
+    assert "asked" not in at.session_state
+    assert at.session_state["proposal"] is None  # Claude was not asked
+
+
 def test_a_change_asked_from_claude_is_shown_as_differences_before_it_counts(with_plan):
     at = with_plan.chat_input(key="wish").set_value(WISH).run()
 
@@ -176,6 +216,122 @@ def test_a_change_asked_from_claude_is_shown_as_differences_before_it_counts(wit
     (turn,) = at.session_state["chat"]
     assert turn["accepted"] is True and turn["wish"] == WISH
     assert not at.chat_input(key="wish").disabled  # ready for the next wish
+
+
+def test_a_suggested_wish_is_asked_with_one_click(with_plan, monkeypatch):
+    asked = []
+
+    def replanned(project, team, plan, wish, on_round=None):
+        asked.append(wish)
+        return Plan.model_validate(plan_input(hours=16))
+
+    monkeypatch.setattr(agent, "run_replanning", replanned)
+    suggestion = "Was, wenn B (API) doppelt so lange dauert?"
+    button(with_plan, suggestion).click()
+    at = with_plan.run()
+
+    assert not at.exception and not at.error
+    assert asked == [suggestion]
+    assert at.session_state["proposal"]["wish"] == suggestion
+    assert suggestion not in [b.label for b in at.button]  # decide on the proposal first
+
+
+def test_claude_is_not_asked_while_the_table_holds_edits_that_were_not_checked(with_plan):
+    # The table as after the project lead changed the hours of A by hand, without "Erneut
+    # prüfen": the current plan still says 8 h. (AppTest cannot type into the editor.)
+    rows = workbench.plan_rows(PLAN)
+    rows[0]["Stunden"] = 40
+    with_plan.session_state["plan_df"] = pd.DataFrame(rows, columns=workbench.PLAN_COLUMNS)
+    with_plan.session_state["asked"] = WISH  # a wish typed in the same moment
+    at = with_plan.run()
+
+    assert not at.exception
+    assert at.chat_input(key="wish").disabled
+    assert any("noch nicht geprüft" in w.value for w in at.warning)
+    # Claude was not called: it would have got the plan without the edit, and taking its
+    # proposal would have overwritten the table.
+    assert at.session_state["proposal"] is None
+    assert at.session_state["plan"] == PLAN
+    assert "Tabelle zurücksetzen" in [b.label for b in at.button]
+
+
+def test_a_proposal_cannot_be_taken_over_edits_that_were_not_checked(with_plan):
+    at = with_plan.chat_input(key="wish").set_value(WISH).run()
+    assert not button(at, "Übernehmen").disabled
+    # While the proposal is open, the project lead changes the hours of B in the table.
+    rows = workbench.plan_rows(PLAN)
+    rows[1]["Stunden"] = 80
+    at.session_state["plan_df"] = pd.DataFrame(rows, columns=workbench.PLAN_COLUMNS)
+    at = at.run()
+
+    assert not at.exception
+    # Taking the proposal would replace the table and lose the 80 h without a word.
+    assert button(at, "Übernehmen").disabled
+    assert any("noch nicht geprüft" in w.value for w in at.warning)
+
+
+def test_a_table_nobody_touched_never_counts_as_edited(app, monkeypatch):
+    # Claude lists the assignments in another order than the tasks; the table sorts them.
+    data = plan_input()
+    data["assignments"].reverse()
+    shuffled = Plan.model_validate(data)
+    monkeypatch.setattr(agent, "run_planning", lambda project, team, on_round=None: shuffled)
+    at = fill_project(app)
+    button(at, "Plan mit Claude erstellen").click()
+    at.run()
+    at = at.run()  # the table has been drawn once
+
+    assert not at.exception
+    assert not at.chat_input(key="wish").disabled
+    assert not any("noch nicht geprüft" in w.value for w in at.warning)
+    button(at, "Erneut prüfen").click()
+    at.run()
+    assert at.session_state["plan"] == PLAN  # as the table writes it
+    assert at.session_state["hand_edited"] is False  # runs.csv: nobody changed the plan
+
+
+def test_checking_an_untouched_table_keeps_an_open_proposal(app, monkeypatch):
+    # The plan's assignments are in another order than its tasks, so "Erneut prüfen" writes
+    # the plan anew in the form of the table. Nobody changed it: the proposal still fits.
+    data = plan_input()
+    data["assignments"].reverse()
+    shuffled = Plan.model_validate(data)
+    doubled = Plan.model_validate(plan_input(hours=16))
+    monkeypatch.setattr(agent, "run_planning", lambda project, team, on_round=None: shuffled)
+    monkeypatch.setattr(
+        agent, "run_replanning", lambda project, team, plan, wish, on_round=None: doubled
+    )
+    at = fill_project(app)
+    button(at, "Plan mit Claude erstellen").click()
+    at.run()
+    at = at.chat_input(key="wish").set_value(WISH).run()
+    assert at.session_state["proposal"] is not None
+    button(at, "Erneut prüfen").click()
+    at = at.run()
+
+    assert not at.exception
+    assert at.session_state["proposal"] is not None
+    assert not button(at, "Übernehmen").disabled
+
+
+def test_taking_a_change_keeps_what_the_export_record_needs(with_plan):
+    # As after 3 rounds and 90 s of planning and a hand edit confirmed with "Erneut prüfen".
+    with_plan.session_state["agent_seconds"] = 90.0
+    with_plan.session_state["round_count"] = 3
+    with_plan.session_state["hand_edited"] = True
+    shown_at = with_plan.session_state["shown_at"]
+    at = with_plan.chat_input(key="wish").set_value(WISH).run()
+    button(at, "Übernehmen").click()
+    at.run()
+
+    assert not at.exception
+    # runs.csv is the data of the before/after comparison: the change by Claude adds to the
+    # agent's time and rounds, and does not erase that the lead edited the plan by hand or
+    # when the review began.
+    assert at.session_state["agent_seconds"] >= 90.0
+    assert at.session_state["round_count"] == 4
+    assert at.session_state["hand_edited"] is True
+    assert at.session_state["shown_at"] == shown_at
 
 
 def test_a_dropped_proposal_leaves_the_plan_as_it_was(with_plan):
@@ -208,6 +364,22 @@ def test_a_failing_change_shows_the_reason_and_no_proposal(with_plan, monkeypatc
     assert [e.value for e in at.error] == ["Claude hat nach 10 Runden noch keinen gültigen Plan."]
     assert at.session_state["proposal"] is None
     assert "Übernehmen" not in [b.label for b in at.button]
+
+
+def test_an_absence_in_the_team_table_moves_the_plan(local, monkeypatch):
+    monday = Absence(first=date(2026, 11, 9), last=date(2026, 11, 9))
+    away = TEAM[0].model_copy(update={"absences": [monday]})
+    monkeypatch.setattr(workbench, "load_team", lambda: [away])
+    monkeypatch.setattr(agent, "run_planning", lambda project, team, on_round=None: PLAN)
+    at = AppTest.from_file(str(SITE.parent / PLANUNG), default_timeout=30).run()
+    at = fill_project(at)
+    button(at, "Plan mit Claude erstellen").click()
+    at.run()
+
+    assert not at.exception
+    assert at.session_state["team_df"]["Abwesend"].tolist() == ["09.11.2026"]
+    # Without the absence the plan ends on 11.11.: the work starts a day later.
+    assert {m.label: m.value for m in at.metric}["Planende"] == "12.11.2026"
 
 
 def test_an_agent_error_is_shown_to_the_project_lead(app, monkeypatch):
@@ -426,8 +598,18 @@ def test_nonzero_progress_survives_reopen_and_reaches_control_and_documents(flow
     after_save = tracking.PROJECT_FILE.read_bytes()
     stored = json.loads(after_save)
     assert stored["progress"] == {
-        "A": {"status": "fertig", "actual_hours": 10, "note": "Schema erneut geprüft"},
-        "B": {"status": "in Arbeit", "actual_hours": 4, "note": "Integration läuft"},
+        "A": {
+            "status": "fertig",
+            "actual_hours": 10,
+            "remaining_hours": None,
+            "note": "Schema erneut geprüft",
+        },
+        "B": {
+            "status": "in Arbeit",
+            "actual_hours": 4,
+            "remaining_hours": None,
+            "note": "Integration läuft",
+        },
     }
     restored = tracking.load()
     assert (restored.project, restored.team, restored.plan) == (PROJECT, TEAM, PLAN)
@@ -486,12 +668,21 @@ def test_nonzero_progress_survives_reopen_and_reaches_control_and_documents(flow
     at.run()
     assert not at.exception and at.header[0].value == "Kontrolle"
     metrics = {m.label: m.value for m in at.metric}
-    assert metrics == {
+    # The metrics of the fixed evaluation day. The forecast tiles count from the real today
+    # and are left out here.
+    fixed = {
         "Fortschritt": "33 %",
         "Planstunden": "24 h",
         "Ist-Stunden bisher": "14 h",
         "Abweichung fertiger Aufgaben": "+2 h",
+        # Earned value on 12.11.: the whole plan should be done, A (8 h) is.
+        "Planwert bis heute": "24 h",
+        "Fertigstellungswert": "8 h",
+        "Ist-Stunden": "14 h",
+        "SPI": "0,33",
+        "CPI": "0,57",
     }
+    assert {label: metrics.get(label) for label in fixed} == fixed
     (tasks,) = [d.value for d in at.dataframe if "Geplantes Ende" in d.value.columns]
     assert tasks[["ID", "Status", "Plan (h)", "Ist (h)"]].to_dict("records") == [
         {"ID": "A", "Status": "fertig", "Plan (h)": 8, "Ist (h)": 10},
@@ -511,8 +702,8 @@ def test_nonzero_progress_survives_reopen_and_reaches_control_and_documents(flow
     assert not at.exception
     metrics = {m.label: m.value for m in at.metric}
     assert (metrics["Plankosten gesamt"], metrics["Ist-Kosten bisher"]) == (
-        "1,200.00 €",
-        "700.00 €",
+        "1.200,00 €",
+        "700,00 €",
     )
     assert tracking.PROJECT_FILE.read_bytes() == after_save
 
@@ -537,8 +728,8 @@ def test_control_costs_for_zero_and_nonzero_hours_and_rates(flow_site, actual_ho
         assert "Ohne Stundensatz werden keine Kosten berechnet." in [c.value for c in at.caption]
     else:
         assert costs == {
-            "Plankosten gesamt": f"{24 * rate:,.2f} €",
-            "Ist-Kosten bisher": f"{actual_hours * rate:,.2f} €",
+            "Plankosten gesamt": tracking.euro(24 * rate),  # the German way: 1.200,00 €
+            "Ist-Kosten bisher": tracking.euro(actual_hours * rate),
         }
 
 
@@ -612,6 +803,86 @@ def test_durchfuehrung_says_where_the_project_stands(tracked):
         assert text in chips(at)
 
 
+def test_durchfuehrung_shows_who_does_what_next(tracked):
+    at = tracked.switch_page("pages/durchfuehrung.py").run()
+    assert not at.exception
+    tables = [t.value for t in at.dataframe]
+    # Whatever today is: nothing is done, so both tasks are still ahead, A first.
+    assert any(list(t["ID"]) == ["A", "B"] and "Beginn" in t.columns for t in tables)
+
+    done = [{"ID": "A", "Status": "fertig"}, {"ID": "B", "Status": "fertig"}]
+    tracking.save(tracking.apply_rows(tracking.load(), done))
+    at = at.run()
+    assert "Alle Aufgaben sind fertig: Es steht nichts mehr an." in [s.value for s in at.success]
+
+
+WAYS_ON = ["Fortschritt erfassen", "Stand prüfen"]
+
+
+def test_the_rest_of_the_project_goes_from_kontrolle_into_the_planung(site):
+    # A deadline that never passes, so that this holds whatever today is.
+    open_end = PROJECT.model_copy(update={"deadline": date.max})
+    tracking.adopt(open_end, TEAM, PLAN)
+    tracking.save(tracking.apply_rows(tracking.load(), [{"ID": "A", "Status": "fertig"}]))
+
+    at = site.switch_page("pages/kontrolle.py").run()
+    button(at, "Rest mit Claude umplanen").click()
+    at.run()
+
+    assert not at.exception and not at.error
+    assert at.header[0].value == "Planung"
+    assert at.session_state["source"] == "Rest des übernommenen Projekts"
+    assert [t.id for t in at.session_state["plan"].tasks] == ["B"]  # A is finished
+    assert at.session_state["step"] == "5 · Anpassen"  # where the conversation is
+    assert at.date_input(key="start").value == max(date.today(), PROJECT.start_date)
+    assert list(at.session_state["team_df"]["Name"]) == ["Anna"]
+
+
+def test_kontrolle_shows_the_earned_value(tracked):
+    at = tracked.switch_page("pages/kontrolle.py").run()
+    assert not at.exception
+    labels = [m.label for m in at.metric]
+    for label in ["Planwert bis heute", "Fertigstellungswert", "SPI", "CPI"]:
+        assert label in labels
+
+
+def test_kontrolle_offers_the_control_document(tracked):
+    at = tracked.switch_page("pages/kontrolle.py").run()
+    assert not at.exception
+    assert any(m.value.startswith("# Kontrollbericht") for m in at.markdown)
+
+
+def test_the_startseite_says_where_the_project_is_heading(tracked):
+    at = tracked.run()
+    assert not at.exception
+    said = [c.value for c in at.caption] + [w.value for w in at.warning]
+    assert any(text.startswith("Prognose: Voraussichtliches Ende") for text in said)
+    # And what to do about it: one of the two buttons is the recommended one.
+    assert any(m.value.startswith("**Als Nächstes:** ") for m in at.markdown)
+    assert sorted(b.proto.type for b in at.button if b.label in WAYS_ON) == [
+        "primary",
+        "secondary",
+    ]
+
+
+def test_kontrolle_forecasts_the_end_from_the_recorded_progress(tracked):
+    # Whatever today is: with every task finished there is nothing left to forecast.
+    done = [{"ID": "A", "Status": "fertig", "Ist (h)": 8}, {"ID": "B", "Status": "fertig"}]
+    tracking.save(tracking.apply_rows(tracking.load(), done))
+    at = tracked.switch_page("pages/kontrolle.py").run()
+    assert not at.exception
+    assert "Alle Aufgaben sind fertig." in [s.value for s in at.success]
+    assert "Voraussichtliches Ende" not in {m.label for m in at.metric}
+
+    # Nothing done yet: the forecast names an end, and a buffer or a missed deadline.
+    tracking.adopt(PROJECT, TEAM, PLAN)
+    at = at.run()
+    assert not at.exception
+    labels = {m.label for m in at.metric}
+    assert "Voraussichtliches Ende" in labels
+    assert labels & {"Puffer bis zur Deadline", "Deadline verpasst um"}
+
+
 def test_the_execution_agent_needs_consent_and_its_proposal_goes_into_the_report(
     tracked, monkeypatch
 ):
@@ -648,7 +919,15 @@ def test_the_control_agent_shows_assessment_findings_and_measures(tracked, monke
     report = ControlReport(
         assessment="gefährdet",
         findings=[{"task_ids": ["B"], "observation": "B hat noch nicht begonnen."}],
-        measures=[{"task_ids": ["B"], "action": "Anna beginnt B.", "effect": "Verzug sinkt."}],
+        measures=[
+            {"task_ids": ["B"], "action": "Anna beginnt B.", "effect": "Verzug sinkt."},
+            {
+                "task_ids": ["B"],
+                "action": "Anna übernimmt B.",
+                "effect": "B wird früher fertig.",
+                "reassign_to": "Anna",
+            },
+        ],
     )
     monkeypatch.setattr(followup, "run_control_report", lambda *args, **kwargs: report)
     at = tracked.switch_page("pages/kontrolle.py").run()
@@ -663,9 +942,17 @@ def test_the_control_agent_shows_assessment_findings_and_measures(tracked, monke
     assert {m.label: m.value for m in at.metric}["Bewertung"] == "gefährdet"
     assert "- **B:** B hat noch nicht begonnen." in [m.value for m in at.markdown]
     (measures,) = [d.value for d in at.dataframe if "Maßnahme" in d.value.columns]
-    assert measures.to_dict("records") == [
-        {"Aufgaben": "B", "Maßnahme": "Anna beginnt B.", "Erwartete Wirkung": "Verzug sinkt."}
-    ]
+    first, second = measures.to_dict("records")
+    assert first == {
+        "Aufgaben": "B",
+        "Maßnahme": "Anna beginnt B.",
+        "Erwartete Wirkung (Claude)": "Verzug sinkt.",
+        "Nachgerechnet (Python)": "Keine Umverteilung: nicht nachrechenbar",
+    }
+    # B is Anna's already: Python finds that giving it to her changes nothing, whatever
+    # Claude expected.
+    assert second["Erwartete Wirkung (Claude)"] == "B wird früher fertig."
+    assert second["Nachgerechnet (Python)"].startswith("Das voraussichtliche Ende bleibt der ")
 
 
 def test_a_failing_agent_shows_the_reason_and_no_result(tracked, monkeypatch):
