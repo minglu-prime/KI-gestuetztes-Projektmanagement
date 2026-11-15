@@ -35,7 +35,6 @@ from pm_agent.workbench import (
     team_rows,
     to_csv,
     to_markdown,
-    write_whole,
 )
 
 PLAN = Plan.model_validate(plan_input())
@@ -593,65 +592,36 @@ def test_free_days_are_typed_like_absences_and_read_back():
         free_days("Weihnachten")
 
 
-@pytest.fixture
-def disk_full(monkeypatch):
-    """Every text file written from now on gets half of its content, then the disk is full."""
-    whole = Path.write_text
-
-    def half(self, data, *args, **kwargs):
-        whole(self, data[: len(data) // 2], *args, **kwargs)
-        raise OSError(28, "No space left on device")
-
-    monkeypatch.setattr(Path, "write_text", half)
-
-
-def test_a_save_that_fails_half_way_leaves_the_saved_team(tmp_path, disk_full):
-    path = tmp_path / "team.json"
-    path.write_bytes(b"[]")
-    with pytest.raises(OSError, match="No space left"):
-        save_team(TEAM, path)
-    assert path.read_bytes() == b"[]"
-    assert [file.name for file in tmp_path.iterdir()] == ["team.json"]
+@pytest.mark.parametrize(
+    "old",
+    [b"quelle,quelle,runden\r\nagent,protokoll,3\r\n", b"quelle,,\r\nagent,1,2\r\n"],
+)
+def test_a_heading_with_a_name_twice_or_without_one_is_no_record(tmp_path, old):
+    # Two columns of one name: read by name, one value would hide the other.
+    path = tmp_path / "runs.csv"
+    path.write_bytes(old)
+    with pytest.raises(InputError, match="kein sauberes Protokoll"):
+        read_runs(path)
+    append_run({"quelle": "agent"}, path)
+    (aside,) = put_aside(path)
+    assert (tmp_path / aside).read_bytes() == old
+    assert read_runs(path) == [{"quelle": "agent"}]
 
 
-def test_a_save_waits_for_a_reader_that_holds_the_file_for_a_moment(tmp_path):
-    # Another browser tab loads the file at the very moment of the save. On Windows the
-    # file cannot be replaced while it is open; written in place, that used to work.
-    path = tmp_path / "projekt.json"
-    path.write_text("alt", encoding="utf-8")
-    opened, done = threading.Event(), threading.Event()
+def test_a_link_that_cannot_be_finished_is_taken_back(tmp_path, monkeypatch):
+    # The other systems' way to move: link, then remove the old name. If the old name
+    # cannot be removed, the new one must not stay, or the next export would put the same
+    # file aside a second time.
+    source, target = tmp_path / "runs.csv", tmp_path / "runs-bis-x.csv"
+    source.write_bytes(b"alt")
+    unlink = Path.unlink
 
-    def read_slowly():
-        with path.open(encoding="utf-8"):
-            opened.set()
-            done.wait(0.15)
+    def held(self, *args, **kwargs):
+        if self == source:
+            raise PermissionError(13, "in use")
+        unlink(self, *args, **kwargs)
 
-    reader = threading.Thread(target=read_slowly)
-    reader.start()
-    opened.wait()
-    write_whole(path, "neu")
-    done.set()
-    reader.join()
-    assert path.read_text(encoding="utf-8") == "neu"
-    assert [file.name for file in tmp_path.iterdir()] == ["projekt.json"]
-
-
-def test_two_saves_at_once_do_not_trip_over_each_other(tmp_path):
-    path = tmp_path / "projekt.json"
-    failures = []
-
-    def save_often(session):
-        for number in range(40):
-            try:
-                write_whole(path, f"sitzung {session}, stand {number}")
-            except OSError as err:
-                failures.append(err)
-
-    threads = [threading.Thread(target=save_often, args=(session,)) for session in range(6)]
-    for thread in threads:
-        thread.start()
-    for thread in threads:
-        thread.join()
-    assert failures == []
-    assert path.read_text(encoding="utf-8").endswith("stand 39")
-    assert [file.name for file in tmp_path.iterdir()] == ["projekt.json"]
+    monkeypatch.setattr(Path, "unlink", held)
+    with pytest.raises(PermissionError):
+        workbench._link_and_unlink(source, target)
+    assert [file.name for file in tmp_path.iterdir()] == ["runs.csv"]

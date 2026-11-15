@@ -955,6 +955,22 @@ def test_kontrolle_opens_before_there_is_a_logs_folder(tracked, monkeypatch, tmp
     assert "Noch kein Plan exportiert." in [c.value for c in at.caption]
 
 
+def test_kontrolle_promises_nothing_about_a_record_it_cannot_open(tracked):
+    # Not a damaged record: something that cannot be opened at all (here a folder). The
+    # next export cannot open it either, so it will not put it aside.
+    workbench.RUNS_CSV.mkdir()
+    at = tracked.switch_page("pages/kontrolle.py").run()
+    assert not at.exception
+    (message,) = [e.value for e in at.error if "runs.csv konnte nicht gelesen werden" in e.value]
+    assert "legt sie beiseite" not in message
+
+    workbench.RUNS_CSV.rmdir()
+    workbench.RUNS_CSV.write_bytes(b"quelle,runden\r\nagent,5,csv\r\n")
+    at = at.run()
+    (message,) = [e.value for e in at.error if "runs.csv konnte nicht gelesen werden" in e.value]
+    assert "der nächste Export legt sie beiseite" in message
+
+
 def test_kontrolle_takes_an_empty_record_for_no_export_yet(tracked):
     workbench.RUNS_CSV.write_bytes(b"")
     at = tracked.switch_page("pages/kontrolle.py").run()

@@ -39,7 +39,6 @@ from pm_agent.workbench import (
     _md,
     _reason,
     bar_end,
-    write_whole,
 )
 
 PROJECT_FILE = DATA_DIR / "projekt.json"
@@ -146,7 +145,7 @@ def load(path: Path | None = None) -> Tracking | None:
 def save(tracking: Tracking, path: Path | None = None) -> None:
     path = path or PROJECT_FILE  # read at call time: tests point it to a temporary folder
     path.parent.mkdir(parents=True, exist_ok=True)
-    write_whole(path, tracking.model_dump_json(indent=2))
+    path.write_text(tracking.model_dump_json(indent=2), encoding="utf-8")
 
 
 def percent(share: float) -> str:

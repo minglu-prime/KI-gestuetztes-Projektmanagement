@@ -396,11 +396,13 @@ with st.container(border=True, key="panel-effort"):
     record = workbench.RUNS_CSV
     try:
         exports = workbench.read_runs()
-    except (workbench.InputError, OSError) as err:
+    except workbench.InputError as err:
         st.error(
             f"{record.parent.name}/{record.name} konnte nicht gelesen werden: {err}. Die Datei "
             "bleibt, wie sie ist; der nächste Export legt sie beiseite und beginnt eine neue."
         )
+    except OSError as err:  # cannot be opened at all: the next export cannot either
+        st.error(f"{record.parent.name}/{record.name} konnte nicht gelesen werden: {err}.")
     else:
         if exports:
             st.dataframe(pd.DataFrame(exports), hide_index=True)

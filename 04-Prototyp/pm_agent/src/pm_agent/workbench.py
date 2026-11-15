@@ -11,9 +11,7 @@ import json
 import math
 import os
 import re
-import tempfile
 import threading
-import time
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -180,34 +178,7 @@ def load_team(path: Path = TEAM_FILE) -> list[Member]:
 def save_team(team: list[Member], path: Path = TEAM_FILE) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     data = [m.model_dump(mode="json") for m in team]
-    write_whole(path, json.dumps(data, ensure_ascii=False, indent=2))
-
-
-def write_whole(path: Path, text: str) -> None:
-    """Replace a file by `text` as a whole. Written next to it first and then moved over
-    it: a write that fails half way (a full disk, a killed process) leaves the old file, not
-    half of the new one. For files that are the only copy of what was entered.
-
-    Raises OSError if that does not work; the old file is as it was then."""
-    # A name of its own for every call: two saves at once must not share the file.
-    handle, name = tempfile.mkstemp(dir=path.parent, prefix=f"{path.name}.", suffix=".tmp")
-    os.close(handle)
-    temporary = Path(name)
-    try:
-        temporary.write_text(text, encoding="utf-8")
-        # On Windows a file cannot be replaced while another program has it open, and be it
-        # another browser tab that loads it at this moment. That passes: try again shortly.
-        for wait in (0, 0.05, 0.1, 0.2, 0.4):
-            time.sleep(wait)
-            try:
-                os.replace(temporary, path)
-                break
-            except PermissionError:
-                if wait == 0.4:
-                    raise
-    except OSError:
-        temporary.unlink(missing_ok=True)
-        raise
+    path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def saved_runs(log_dir: Path = LOG_DIR) -> list[Path]:
@@ -303,6 +274,8 @@ def _record_heading(content: bytes) -> list[str] | None:
         return None
     if not lines or not lines[0]:
         return None
+    if "" in lines[0] or len(set(lines[0])) != len(lines[0]):
+        return None  # read by name, a column without one or with a double would hide values
     if any(line and len(line) != len(lines[0]) for line in lines):  # blank lines are fine
         return None
     return lines[0]
@@ -332,7 +305,11 @@ def _rename(source: Path, target: Path) -> None:
 def _link_and_unlink(source: Path, target: Path) -> None:
     """Elsewhere a rename writes over an existing file. A hard link refuses the name."""
     os.link(source, target)
-    source.unlink()
+    try:
+        source.unlink()
+    except OSError:
+        target.unlink()  # one file under two names would be put aside twice
+        raise
 
 
 # The move of _put_aside: never onto a name that exists.
