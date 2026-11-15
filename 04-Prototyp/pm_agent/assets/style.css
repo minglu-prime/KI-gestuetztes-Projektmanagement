@@ -5,7 +5,7 @@
 
 :root {
   --ink: #18352d;
-  --muted: #64736c;
+  --muted: #5c6b64; /* a shade darker than the lab's #64736c: 4.5 to 1 also on --sage */
   --green: #23654c;
   --green-dark: #174b38;
   --mint: #dceadf;
