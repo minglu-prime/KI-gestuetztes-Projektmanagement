@@ -10,6 +10,7 @@ from pm_agent import followup, workbench
 from pm_agent.tracking import (
     agent_runs,
     control_document,
+    euro,
     evaluate,
     forecast,
     forecast_bars,
@@ -210,8 +211,8 @@ if tracking is not None:
         )
         if rate:
             plan_cost, actual_cost = st.columns(2)
-            plan_cost.metric("Plankosten gesamt", f"{result.planned_hours * rate:,.2f} €")
-            actual_cost.metric("Ist-Kosten bisher", f"{result.actual_hours * rate:,.2f} €")
+            plan_cost.metric("Plankosten gesamt", euro(result.planned_hours * rate))
+            actual_cost.metric("Ist-Kosten bisher", euro(result.actual_hours * rate))
         else:
             st.caption("Ohne Stundensatz werden keine Kosten berechnet.")
 

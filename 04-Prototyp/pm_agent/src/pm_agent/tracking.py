@@ -140,6 +140,11 @@ def percent(share: float) -> str:
     return f"{share:.0%}".replace("%", " %")
 
 
+def euro(amount: float) -> str:
+    """1600 -> "1.600,00 €", the German way."""
+    return f"{amount:,.2f} €".translate(str.maketrans(",.", ".,"))
+
+
 def has_progress(tracking: Tracking) -> bool:
     return any(p != Progress() for p in tracking.progress.values())
 
@@ -600,8 +605,8 @@ def control_document(
     ]
     if rate:
         cost = (
-            f"- Plankosten gesamt: {evaluation.planned_hours * rate:,.2f} €\n"
-            f"- Ist-Kosten bisher: {evaluation.actual_hours * rate:,.2f} €"
+            f"- Plankosten gesamt: {euro(evaluation.planned_hours * rate)}\n"
+            f"- Ist-Kosten bisher: {euro(evaluation.actual_hours * rate)}"
         )
     else:
         cost = "- Kosten: kein Stundensatz gesetzt"

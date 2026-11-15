@@ -634,8 +634,8 @@ def test_the_control_document_takes_the_hourly_rate_and_the_agents_report(two_pe
     )
     text = control_document(two_people, evaluate(two_people, monday), report=report, rate=50)
 
-    assert "- Plankosten gesamt: 1,600.00 €" in text  # 32 h at 50 €
-    assert "- Ist-Kosten bisher: 0.00 €" in text
+    assert "- Plankosten gesamt: 1.600,00 €" in text  # 32 h at 50 €
+    assert "- Ist-Kosten bisher: 0,00 €" in text
     assert "**Bewertung:** kritisch" in text
     assert "- **X, Y:** Nichts wurde begonnen." in text
     assert (
