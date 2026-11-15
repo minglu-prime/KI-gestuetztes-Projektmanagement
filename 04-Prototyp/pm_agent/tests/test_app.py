@@ -328,6 +328,22 @@ def test_an_export_writes_one_line_into_the_record(with_plan):
     assert (line["runden"], line["angepasst"], line["fehler"]) == (0, False, 0)
 
 
+def test_an_export_that_cannot_be_recorded_says_so(with_plan):
+    # Something sits where the record should be and cannot be written to: here a folder.
+    workbench.RUNS_CSV.mkdir()
+    next(b for b in with_plan.download_button if b.label == "Als CSV herunterladen").click()
+    at = with_plan.run()
+
+    assert not at.exception  # the page is still there
+    # (In the test the record lies in a temporary folder, not in logs/.)
+    assert any("heruntergeladen, aber nicht in" in e.value for e in at.error)
+    assert any("/runs.csv vermerkt: " in e.value for e in at.error)
+    assert [b.label for b in at.download_button] == [
+        "Als Markdown herunterladen",
+        "Als CSV herunterladen",
+    ]
+
+
 def test_taking_a_change_keeps_what_the_export_record_needs(with_plan):
     # As after 3 rounds and 90 s of planning and a hand edit confirmed with "Erneut prüfen".
     with_plan.session_state["agent_seconds"] = 90.0
@@ -878,6 +894,17 @@ def test_kontrolle_shows_the_earned_value(tracked):
     labels = [m.label for m in at.metric]
     for label in ["Planwert bis heute", "Fertigstellungswert", "SPI", "CPI"]:
         assert label in labels
+
+
+def test_kontrolle_survives_a_record_it_cannot_read(tracked):
+    # A line with a cell too many, as a hand edit or an old version leaves it.
+    workbench.RUNS_CSV.write_bytes(b"quelle,runden\r\nagent,3\r\nagent,5,csv,x\r\n")
+    (workbench.RUNS_CSV.parent / "runs-bis-20261115-120000.csv").write_bytes(b"alt\r\n1\r\n")
+    at = tracked.switch_page("pages/kontrolle.py").run()
+
+    assert not at.exception
+    assert any("runs.csv konnte nicht gelesen werden" in e.value for e in at.error)
+    assert any("runs-bis-20261115-120000.csv" in c.value for c in at.caption)
 
 
 def test_kontrolle_offers_the_control_document(tracked):

@@ -715,3 +715,25 @@ def test_working_days_leave_out_the_free_days_of_the_project():
         update={"free_days": [Absence(first=date(2026, 12, 24), last=date.max)]}
     )
     assert add_working_days(endless, date(2026, 12, 24), 0) == date.max
+
+
+def test_two_equal_dates_are_no_shift_even_at_the_end_of_the_calendar():
+    # The day after 31.12.9999 does not exist, and is not needed.
+    assert workday_shift(date.max, date.max) == 0
+    assert working_shift(over_the_break(date(2027, 1, 8)), date.max, date.max) == 0
+
+
+def test_a_free_day_after_the_deadline_does_not_change_what_is_said_about_an_absence():
+    # Anna is away until the deadline. The first of May is free, months later.
+    gone = away(date(2026, 11, 1), date(2026, 12, 31))
+    later = Project(
+        idea="Lernplattform für Erstsemester",
+        start_date=MON,
+        deadline=date(2026, 12, 18),
+        free_days=[{"first": date(2027, 5, 1), "last": date(2027, 5, 1)}],
+    )
+    p = plan(task("A", 8), owners={"A": "Anna"})
+    assert (
+        "Anna ist bis zur Deadline durchgehend abwesend, hat aber 8 h zugewiesen"
+        in check_plan(p, [gone], later).warnings
+    )

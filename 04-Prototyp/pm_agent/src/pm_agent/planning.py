@@ -137,10 +137,13 @@ def check_plan(
     for item in load:
         if item.utilization is None:
             if item.assigned_hours:
-                # With free days of the project in play, "absent" would blame the person.
+                # With free days of the project before the deadline, "absent" would blame
+                # the person.
+                span = (project.start_date, project.deadline)
+                free_in_time = working_days(project, *span) < count_workdays(*span)
                 reason = (
                     "hat bis zur Deadline keinen Arbeitstag (abwesend oder frei für alle)"
-                    if project.free_days
+                    if free_in_time
                     else "ist bis zur Deadline durchgehend abwesend"
                 )
                 warn(
@@ -221,6 +224,8 @@ def count_workdays(first: date, last: date) -> int:
 
 def workday_shift(before: date, after: date) -> int:
     """How many workdays `after` lies behind `before`; negative if it lies ahead of it."""
+    if after == before:  # also at 31.12.9999, which has no day after it
+        return 0
     if after >= before:
         return count_workdays(before + timedelta(days=1), after)
     return -count_workdays(after + timedelta(days=1), before)
@@ -240,6 +245,8 @@ def working_days(project: Project, first: date, last: date) -> int:
 def working_shift(project: Project, before: date, after: date) -> int:
     """How many working days of the project `after` lies behind `before`; negative if it
     lies ahead of it."""
+    if after == before:  # also at 31.12.9999, which has no day after it
+        return 0
     if after >= before:
         return working_days(project, before + timedelta(days=1), after)
     return -working_days(project, after + timedelta(days=1), before)

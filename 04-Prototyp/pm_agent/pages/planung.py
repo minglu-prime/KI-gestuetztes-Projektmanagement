@@ -837,25 +837,34 @@ with tabs[5]:
             st.warning("Der Plan hat noch Fehler (siehe Schritt 4). Export ist trotzdem möglich.")
 
         def record_export(fmt: str) -> None:
-            append_run(
-                {
-                    "exportiert": datetime.now().astimezone().isoformat(timespec="seconds"),
-                    "quelle": state.source,
-                    "agent_sekunden": state.agent_seconds,
-                    "runden": state.get("round_count", len(state.rounds)),
-                    "pruefung_sekunden": round(time.monotonic() - state.shown_at, 1),
-                    "angepasst": state.get("hand_edited", state.edited),
-                    "tasks": len(state.plan.tasks),
-                    "fehler": len(result.errors),
-                    "warnungen": len(result.warnings),
-                    "format": fmt,
-                }
-            )
+            row = {
+                "exportiert": datetime.now().astimezone().isoformat(timespec="seconds"),
+                "quelle": state.source,
+                "agent_sekunden": state.agent_seconds,
+                "runden": state.get("round_count", len(state.rounds)),
+                "pruefung_sekunden": round(time.monotonic() - state.shown_at, 1),
+                "angepasst": state.get("hand_edited", state.edited),
+                "tasks": len(state.plan.tasks),
+                "fehler": len(result.errors),
+                "warnungen": len(result.warnings),
+                "format": fmt,
+            }
+            try:
+                append_run(row)
+            except OSError as err:
+                # A callback cannot place a message: the run that follows shows it.
+                state.export_error = str(err)
 
         stamp = date.today().strftime("%Y%m%d")
         download, take_over = st.columns(2, gap="medium")
         with download.container(border=True, key="panel-download", height="stretch"):
             st.markdown("#### :material/download: Herunterladen")
+            not_recorded = state.pop("export_error", None)
+            if not_recorded:
+                st.error(
+                    f"Der Plan ist heruntergeladen, aber nicht in {RUNS_CSV.parent.name}/"
+                    f"{RUNS_CSV.name} vermerkt: {not_recorded}"
+                )
             with st.container(horizontal=True):
                 st.download_button(
                     "Als Markdown herunterladen",

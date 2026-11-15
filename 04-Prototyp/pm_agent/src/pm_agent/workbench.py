@@ -204,44 +204,41 @@ def load_run(path: Path) -> tuple[Project, list[Member], Plan, dict[str, Any]]:
 def append_run(row: dict[str, Any], path: Path | None = None) -> None:
     """One line per exported plan in runs.csv: the data for the before/after comparison.
 
-    The line is appended, under the heading of the file and in its order. Only when the row
-    brings a column the file does not have is the file written anew, with the columns it had
-    plus the new ones. Not in place: into a file of its own, which then replaces the old
-    one, so that nothing is lost if the writing fails half way."""
+    The file is only ever appended to. The line goes under the heading of the file, in its
+    order. A file whose heading does not have the columns of the row, or cannot be read as
+    one (other separator, not UTF-8, an empty first line), is put aside as it is, under a
+    name with the time, and a new file begins: nothing in an existing file is rewritten, so
+    nothing in it can be lost or end up under another heading. Raises OSError if the file
+    cannot be written."""
     path = path or RUNS_CSV  # read at call time: tests point it to a temporary folder
     path.parent.mkdir(parents=True, exist_ok=True)
-    # Bytes that are not UTF-8 (a spreadsheet saved the file) pass through as they are.
-    mode = {"errors": "surrogateescape", "newline": ""}
+    old = path.read_bytes() if path.exists() else b""
     heading: list[str] = []
-    if path.exists():
-        with path.open(encoding="utf-8-sig", **mode) as file:
-            heading = next(csv.reader(file), [])
+    try:
+        heading = next(csv.reader(io.StringIO(old.decode("utf-8-sig"), newline="")), [])
+    except UnicodeDecodeError:
+        pass  # not ours to append to: put aside below
+    if old and not (heading and set(row) <= set(heading)):
+        stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        aside, number = path.with_name(f"{path.stem}-bis-{stamp}{path.suffix}"), 1
+        while aside.exists():  # two in one second
+            number += 1
+            aside = path.with_name(f"{path.stem}-bis-{stamp}-{number}{path.suffix}")
+        os.replace(path, aside)
+        old, heading = b"", []
+    with path.open("a", encoding="utf-8", newline="") as file:
+        writer = csv.DictWriter(file, fieldnames=heading or list(row), restval="")
+        if not old:
+            writer.writeheader()
+        elif old[-1:] not in (b"\n", b"\r"):  # the new line must not continue the last one
+            file.write("\r\n")
+        writer.writerow(row)
 
-    if heading and set(row) <= set(heading):
-        open_end = path.read_bytes()[-1:] not in (b"\n", b"\r")
-        with path.open("a", encoding="utf-8", **mode) as file:
-            if open_end:  # the last line has no end: the new one must not continue it
-                file.write("\r\n")
-            csv.DictWriter(file, fieldnames=heading, restval="").writerow(row)
-        return
 
-    lines: list[list[str]] = []
-    if heading:
-        with path.open(encoding="utf-8-sig", **mode) as file:
-            lines = list(csv.reader(file))[1:]
-    columns = [*heading, *(key for key in row if key not in heading)]
-    # A line longer than the old heading was written by a version that already had more
-    # columns: its surplus cells are the new columns, in their order. What goes beyond even
-    # those keeps a column, without a name anybody gave it.
-    width = max(len(columns), *(len(line) for line in lines), 0)
-    columns += [f"unbenannt_{number}" for number in range(1, width - len(columns) + 1)]
-    temporary = path.with_name(path.name + ".tmp")
-    with temporary.open("w", encoding="utf-8", **mode) as file:
-        writer = csv.writer(file)
-        writer.writerow(columns)
-        writer.writerows(line + [""] * (width - len(line)) for line in lines)
-        writer.writerow([row.get(column, "") for column in columns])
-    os.replace(temporary, path)
+def put_aside(path: Path | None = None) -> list[str]:
+    """The names of the files append_run has put aside, oldest first."""
+    path = path or RUNS_CSV
+    return sorted(p.name for p in path.parent.glob(f"{path.stem}-bis-*{path.suffix}"))
 
 
 def round_summary(number: int, record: dict[str, Any]) -> tuple[str, list[str]]:

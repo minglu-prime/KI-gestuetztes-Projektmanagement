@@ -131,43 +131,47 @@ def test_runs_csv_gets_one_header_and_one_line_per_export(tmp_path):
     ]
 
 
-def test_runs_csv_keeps_every_value_under_its_column_when_the_columns_change(tmp_path):
-    # A later version of the site records one thing more, or names the columns in another
-    # order. The lines written before must not end up under the wrong heading.
-    path = tmp_path / "logs" / "runs.csv"
-    append_run({"quelle": "agent", "runden": 3}, path)
-    append_run({"runden": 0, "format": "csv", "quelle": "protokoll"}, path)
-    assert list(csv.DictReader(io.StringIO(path.read_text(encoding="utf-8")))) == [
-        {"quelle": "agent", "runden": "3", "format": ""},
-        {"quelle": "protokoll", "runden": "0", "format": "csv"},
-    ]
-
-
-def test_runs_csv_loses_no_line_when_an_old_line_is_longer_than_the_heading(tmp_path):
-    # What an earlier version left behind once a column was added: a line with a cell more
-    # than the heading. Bringing the new column must keep every line, and the surplus cell
-    # is the value of that column.
+def test_runs_csv_takes_a_line_under_its_heading_and_in_its_order(tmp_path):
     path = tmp_path / "runs.csv"
-    path.write_text("quelle,runden\nagent,3\nagent,5,csv\nagent,7\n", encoding="utf-8")
-    append_run({"quelle": "agent", "runden": 1, "format": "md"}, path)
+    append_run({"quelle": "agent", "runden": 3, "format": "md"}, path)
+    append_run({"runden": 0, "quelle": "protokoll"}, path)  # another order, a column less
     assert list(csv.DictReader(io.StringIO(path.read_text(encoding="utf-8")))) == [
-        {"quelle": "agent", "runden": "3", "format": ""},
-        {"quelle": "agent", "runden": "5", "format": "csv"},
-        {"quelle": "agent", "runden": "7", "format": ""},
-        {"quelle": "agent", "runden": "1", "format": "md"},
+        {"quelle": "agent", "runden": "3", "format": "md"},
+        {"quelle": "protokoll", "runden": "0", "format": ""},
     ]
-    assert not list(tmp_path.glob("*.tmp"))  # the rewrite went through a file of its own
+    assert list(tmp_path.glob("runs-bis-*.csv")) == []
 
 
-def test_runs_csv_is_appended_to_and_left_alone_otherwise(tmp_path):
-    # A file a spreadsheet saved: a byte order mark, Windows encoding, no line end at the
-    # end, a line with a cell too many. None of that is the business of an export: the new
-    # line goes below, and every byte before it stays.
+@pytest.mark.parametrize(
+    "old",
+    [
+        b"quelle,runden\r\nagent,3\r\nagent,5,csv\r\n",  # the row brings a new column
+        b"\r\nquelle,runden,format\r\nagent,3,md\r\n",  # an empty first line
+        b"quelle;runden;format\r\nagent;3;md\r\n",  # saved by a German spreadsheet
+        "quelle,runden,format\r\ngeändert,3,md\r\n".encode("cp1252"),  # not UTF-8
+    ],
+)
+def test_runs_csv_with_other_columns_is_put_aside_as_it_is(tmp_path, old):
+    # Nothing in such a file is read, moved or rewritten: under which heading its values
+    # belong is not for an export to decide. It gets another name, byte for byte, and a new
+    # file begins.
     path = tmp_path / "runs.csv"
-    before = "\ufeffquelle,runden\r\n".encode() + "geändert,3,x\r\nagent,5".encode("cp1252")
+    path.write_bytes(old)
+    append_run({"quelle": "agent", "runden": 1, "format": "csv"}, path)
+    (aside,) = tmp_path.glob("runs-bis-*.csv")
+    assert aside.read_bytes() == old
+    assert path.read_bytes() == b"quelle,runden,format\r\nagent,1,csv\r\n"
+
+
+def test_runs_csv_whose_columns_fit_keeps_every_byte(tmp_path):
+    # A byte order mark, other line ends, no line end after the last line: the new line
+    # goes below, on a line of its own.
+    path = tmp_path / "runs.csv"
+    before = b"\xef\xbb\xbfquelle,runden\nagent,5"
     path.write_bytes(before)
     append_run({"runden": 1, "quelle": "agent"}, path)
     assert path.read_bytes() == before + b"\r\nagent,1\r\n"
+    assert list(tmp_path.glob("runs-bis-*.csv")) == []
 
 
 def test_runs_csv_is_found_where_the_tests_point_it(tmp_path, monkeypatch):
