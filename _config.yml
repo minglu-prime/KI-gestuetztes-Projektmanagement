@@ -1,7 +1,14 @@
 # Settings of the GitHub Pages site (built with Jekyll by .github/workflows/static.yml).
-# The theme prints `title` above every page whose own title differs; the start page is
-# titled "PM-Agent" already and shows it once.
+# The theme prints `title` as a heading above every page whose own title differs.
 title: PM-Agent
 # The texts are German. Without this the pages say en-US: a browser offers to translate them
 # and a screen reader reads them with English sounds.
 lang: de
+# The start page is the root README, which opens with its own heading "PM-Agent". Jekyll
+# finds no title in it (the heading sits in an HTML block), so the theme printed the site
+# title above it a second time. Given the same title, the theme leaves its heading out.
+defaults:
+  - scope:
+      path: README.md
+    values:
+      title: PM-Agent
