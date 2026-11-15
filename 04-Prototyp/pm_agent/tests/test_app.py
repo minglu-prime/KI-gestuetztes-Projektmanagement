@@ -515,6 +515,19 @@ def test_durchfuehrung_says_where_the_project_stands(tracked):
         assert text in chips(at)
 
 
+def test_durchfuehrung_shows_who_does_what_next(tracked):
+    at = tracked.switch_page("pages/durchfuehrung.py").run()
+    assert not at.exception
+    tables = [t.value for t in at.dataframe]
+    # Whatever today is: nothing is done, so both tasks are still ahead, A first.
+    assert any(list(t["ID"]) == ["A", "B"] and "Beginn" in t.columns for t in tables)
+
+    done = [{"ID": "A", "Status": "fertig"}, {"ID": "B", "Status": "fertig"}]
+    tracking.save(tracking.apply_rows(tracking.load(), done))
+    at = at.run()
+    assert "Alle Aufgaben sind fertig: Es steht nichts mehr an." in [s.value for s in at.success]
+
+
 WAYS_ON = ["Fortschritt erfassen", "Stand prüfen"]
 
 

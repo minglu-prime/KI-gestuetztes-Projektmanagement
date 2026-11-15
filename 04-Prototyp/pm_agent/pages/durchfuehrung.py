@@ -12,10 +12,12 @@ from pm_agent.tracking import (
     STATUSES,
     apply_rows,
     evaluate,
+    forecast,
     percent,
     progress_rows,
     save,
     status_report,
+    week_ahead,
     work_packages,
 )
 from pm_agent.ui import adopted_project, chip, consent, run_with_progress, strip
@@ -50,6 +52,27 @@ st.html(
 st.markdown(f"**{tracking.project.idea}**")
 st.progress(result.progress, text=f"{percent(result.progress)} der Planstunden fertig")
 st.caption(f"Übernommen am {tracking.adopted:%d.%m.%Y %H:%M} · {len(tracking.plan.tasks)} Aufgaben")
+
+with st.container(border=True, key="panel-ahead"):
+    st.markdown("#### :material/event_upcoming: Die nächsten fünf Arbeitstage")
+    outlook = forecast(tracking, date.today())
+    ahead = week_ahead(tracking, date.today())
+    if outlook.problem:
+        st.error(
+            f"Ohne Prognose lässt sich nicht sagen, was ansteht: {outlook.problem}. Prüfe "
+            "Status und Rest-Stunden in der Tabelle unten."
+        )
+    elif outlook.end is None:
+        st.success("Alle Aufgaben sind fertig: Es steht nichts mehr an.")
+    elif not ahead:
+        # Reachable when everyone with unfinished work is away for the whole time.
+        st.info("In den nächsten fünf Arbeitstagen beginnt laut Prognose keine Aufgabe.")
+    else:
+        st.dataframe(pd.DataFrame(ahead), hide_index=True)
+        st.caption(
+            "Was laut Prognose bis in fünf Arbeitstagen beginnt, je Person in der Reihenfolge "
+            "des Plans. Die Prognose plant alles Unfertige ab heute neu ein."
+        )
 
 with st.container(border=True, key="panel-progress"):
     st.markdown("#### :material/edit_note: Fortschritt")

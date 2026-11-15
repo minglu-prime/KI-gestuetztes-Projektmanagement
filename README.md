@@ -148,7 +148,8 @@ Die Kontrolle sagt auch, was ein Verzug bedeutet. Die **Prognose** plant alles, 
 fertig ist, ab heute neu ein und vergleicht das Ende mit Plan und Deadline. Im Beispiel unten
 sind zwei Aufgaben ein bis zwei Tage im Verzug; die Folge ist ein Ende vier Arbeitstage nach
 Plan und einen Tag nach der Deadline. Die Fortschrittstabelle der Durchführung zeigt dasselbe je
-Aufgabe: „Prognose Ende“ neben dem geplanten Ende.
+Aufgabe: „Prognose Ende“ neben dem geplanten Ende. Darüber steht, was daraus für die Woche folgt:
+wer in den nächsten fünf Arbeitstagen womit beginnt.
 
 Von dort geht es zurück in die Planung: „Rest mit Claude umplanen“ lädt die unfertigen Aufgaben
 als Plan ab heute, und das Gespräch mit Claude beginnt mit genau dem Problem, das die Prognose

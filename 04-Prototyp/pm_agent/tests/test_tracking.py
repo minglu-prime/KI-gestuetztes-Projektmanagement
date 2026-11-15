@@ -28,6 +28,7 @@ from pm_agent.tracking import (
     rest_project,
     save,
     status_report,
+    week_ahead,
     work_packages,
 )
 from pm_agent.workbench import InputError
@@ -752,3 +753,32 @@ def test_the_control_document_names_the_earned_value(tracking):
     before = control_document(tracking, evaluate(tracking, today=date(2026, 11, 6)))
     assert "- Termin-Kennzahl (SPI): nicht berechenbar, der Plan hat noch nicht begonnen" in before
     assert "- Aufwands-Kennzahl (CPI): nicht berechenbar, keine Ist-Stunden erfasst" in before
+
+
+def test_the_week_ahead_lists_what_the_forecast_starts_in_the_next_workdays(tracking):
+    # Tue 10.11., nothing done: the forecast puts A on Tuesday and B on Wed and Thu.
+    tuesday = date(2026, 11, 10)
+    assert week_ahead(tracking, tuesday) == [
+        {
+            "Person": "Anna",
+            "ID": "A",
+            "Aufgabe": "Datenmodell",
+            "Beginn": "10.11.2026",
+            "Ende": "10.11.2026",
+            "Status": "offen",
+        },
+        {
+            "Person": "Anna",
+            "ID": "B",
+            "Aufgabe": "API",
+            "Beginn": "11.11.2026",
+            "Ende": "12.11.2026",
+            "Status": "offen",
+        },
+    ]
+    # Only today: B starts tomorrow.
+    assert [row["ID"] for row in week_ahead(tracking, tuesday, days=1)] == ["A"]
+    # Nothing is left of a finished project, and nothing can be said without a forecast.
+    assert week_ahead(progressed(tracking, A="fertig", B="fertig"), tuesday) == []
+    absurd = apply_rows(tracking, [{"ID": "B", "Status": "in Arbeit", "Rest (h)": 20_000_000}])
+    assert week_ahead(absurd, tuesday) == []

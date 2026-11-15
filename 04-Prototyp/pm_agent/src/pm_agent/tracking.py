@@ -433,6 +433,26 @@ def forecast(tracking: Tracking, today: date, reassign: dict[str, str] | None = 
     )
 
 
+def week_ahead(tracking: Tracking, today: date, days: int = 5) -> list[dict[str, Any]]:
+    """Who does what next: the unfinished tasks the forecast starts within the next `days`
+    workdays (today counts), by person and start. Empty if nothing is left or the forecast
+    has a problem; forecast() says which."""
+    horizon = add_workdays(today, days - 1)
+    titles = {task.id: task.title for task in tracking.plan.tasks}
+    ahead = [s for s in forecast(tracking, today).schedule if s.start <= horizon]
+    return [
+        {
+            "Person": s.member,
+            "ID": s.task_id,
+            "Aufgabe": titles[s.task_id],
+            "Beginn": _date(s.start),
+            "Ende": _date(s.end),
+            "Status": tracking.progress[s.task_id].status,
+        }
+        for s in sorted(ahead, key=lambda s: (s.member, s.start))
+    ]
+
+
 def reassignment_effect(tracking: Tracking, today: date, task_ids: list[str], member: str) -> str:
     """What giving these tasks to `member` does to the forecast, as one sentence. Finished
     tasks stay where they are."""
