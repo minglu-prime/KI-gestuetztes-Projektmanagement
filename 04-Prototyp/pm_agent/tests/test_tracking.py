@@ -1,5 +1,6 @@
 import json
 from datetime import date
+from pathlib import Path
 
 import pytest
 from test_tools import PROJECT, TEAM, plan_input
@@ -1012,3 +1013,25 @@ def test_the_forecast_counts_buffer_and_week_in_working_days_of_the_project(tmp_
     # the eight Mon-Fri days of the calendar.
     alone = adopt(project, TEAM, one_person_plan(("A", 24, [])), path=tmp_path / "projekt.json")
     assert forecast(alone, date(2026, 12, 21)).deadline_gap == -1
+
+
+@pytest.fixture
+def disk_full(monkeypatch):
+    """Every text file written from now on gets half of its content, then the disk is full."""
+    whole = Path.write_text
+
+    def half(self, data, *args, **kwargs):
+        whole(self, data[: len(data) // 2], *args, **kwargs)
+        raise OSError(28, "No space left on device")
+
+    monkeypatch.setattr(Path, "write_text", half)
+
+
+def test_a_save_that_fails_half_way_leaves_the_saved_project(tracking, tmp_path, disk_full):
+    # projekt.json is the only copy of the adopted plan and of the progress recorded so far.
+    path = tmp_path / "projekt.json"
+    before = path.read_bytes()
+    with pytest.raises(OSError, match="No space left"):
+        save(apply_rows(tracking, ROWS), path)
+    assert path.read_bytes() == before
+    assert [file.name for file in tmp_path.iterdir()] == ["projekt.json"]  # nothing half done

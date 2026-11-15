@@ -178,7 +178,20 @@ def load_team(path: Path = TEAM_FILE) -> list[Member]:
 def save_team(team: list[Member], path: Path = TEAM_FILE) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     data = [m.model_dump(mode="json") for m in team]
-    path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    write_whole(path, json.dumps(data, ensure_ascii=False, indent=2))
+
+
+def write_whole(path: Path, text: str) -> None:
+    """Replace a file by `text` as a whole. Written next to it first and then moved over
+    it: a write that fails half way (a full disk, a killed process) leaves the old file, not
+    half of the new one. For files that are the only copy of what was entered."""
+    temporary = path.with_name(path.name + ".tmp")
+    try:
+        temporary.write_text(text, encoding="utf-8")
+        os.replace(temporary, path)
+    except OSError:
+        temporary.unlink(missing_ok=True)
+        raise
 
 
 def saved_runs(log_dir: Path = LOG_DIR) -> list[Path]:

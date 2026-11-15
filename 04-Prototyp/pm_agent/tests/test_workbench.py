@@ -4,6 +4,7 @@ import json
 import os
 import threading
 from datetime import date, datetime
+from pathlib import Path
 
 import pytest
 from test_tools import PROJECT, TEAM, plan_input
@@ -589,3 +590,24 @@ def test_free_days_are_typed_like_absences_and_read_back():
     assert free_days("") == []
     with pytest.raises(InputError, match="'Weihnachten' nicht lesbar"):
         free_days("Weihnachten")
+
+
+@pytest.fixture
+def disk_full(monkeypatch):
+    """Every text file written from now on gets half of its content, then the disk is full."""
+    whole = Path.write_text
+
+    def half(self, data, *args, **kwargs):
+        whole(self, data[: len(data) // 2], *args, **kwargs)
+        raise OSError(28, "No space left on device")
+
+    monkeypatch.setattr(Path, "write_text", half)
+
+
+def test_a_save_that_fails_half_way_leaves_the_saved_team(tmp_path, disk_full):
+    path = tmp_path / "team.json"
+    path.write_bytes(b"[]")
+    with pytest.raises(OSError, match="No space left"):
+        save_team(TEAM, path)
+    assert path.read_bytes() == b"[]"
+    assert [file.name for file in tmp_path.iterdir()] == ["team.json"]
