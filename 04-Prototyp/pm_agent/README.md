@@ -64,8 +64,11 @@ Sechs Schritte als Reiter:
    den Plan, Python prüft ihn und zeigt die Unterschiede zum bisherigen Plan, erst
    „Übernehmen“ macht ihn gültig. Von Hand: Tabelle ändern und erneut prüfen, ohne LLM.
 6. **Export**: Markdown oder CSV. Jeder Export wird mit Dauer und Änderungen in `logs/runs.csv`
-   vermerkt, als Datengrundlage für den Vorher-nachher-Vergleich. Ein Plan ohne Fehler lässt
-   sich hier als Projekt übernehmen.
+   vermerkt, als Datengrundlage für den Vorher-nachher-Vergleich. Die Datei wird nur
+   fortgeschrieben, nie umgeschrieben: Passt sie nicht mehr (andere Spalten, von Hand oder
+   in einem Tabellenprogramm verändert), wird sie unter `logs/runs-bis-<Zeit>.csv`
+   beiseitegelegt, und eine neue beginnt. Ein Plan ohne Fehler lässt sich hier als Projekt
+   übernehmen.
 
 ## Agenten
 
