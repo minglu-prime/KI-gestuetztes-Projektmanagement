@@ -24,7 +24,14 @@ from pm_agent.tracking import (
     percent,
     planned_curve,
 )
-from pm_agent.ui import LEGEND, TASK_AXIS, adopted_project, consent, run_with_progress
+from pm_agent.ui import (
+    LEGEND,
+    TASK_AXIS,
+    adopted_project,
+    consent,
+    on_panel,
+    run_with_progress,
+)
 
 state = st.session_state
 
@@ -148,9 +155,15 @@ if tracking is not None:
             names = marks.mark_text(align="left", baseline="top", dx=4, fontSize=11).encode(
                 x="Tag:T", y=alt.value(0), text="Linie:N"
             )
-            # White like the panel around it; the theme would paint the page colour.
             st.altair_chart(
-                (bars + lines + names).properties(background="#ffffff"), width="stretch"
+                on_panel(
+                    bars + lines + names,
+                    "Balkendiagramm: je unfertiger Aufgabe der Zeitraum laut Plan und der "
+                    "Zeitraum laut Prognose, mit senkrechten Linien für heute und die "
+                    "Deadline. Die Prognose je Aufgabe steht auch in der Spalte „Prognose "
+                    "Ende“ auf der Seite Durchführung.",
+                ),
+                width="stretch",
             )
             st.caption(
                 "Annahme: Die restliche Arbeit beginnt heute. Als Nächstes kommt, was am "
@@ -221,8 +234,15 @@ if tracking is not None:
                 ],
             )
         )
-        # White like the panel around it; the theme would paint the page colour.
-        st.altair_chart((curve + now).properties(background="#ffffff"), width="stretch")
+        st.altair_chart(
+            on_panel(
+                curve + now,
+                "Liniendiagramm: der Planwert in Stunden über die Tage des Projekts, dazu "
+                "als Punkte Fertigstellungswert und Ist-Stunden von heute. Die Werte von "
+                "heute stehen in den Kacheln darüber.",
+            ),
+            width="stretch",
+        )
         st.caption(
             "Die Linie ist der Planwert: was laut Plan bis zum Ende jedes Tages erledigt sein "
             "sollte. Die Punkte zeigen heute. SPI ist Fertigstellungswert durch Planwert, CPI "
@@ -252,17 +272,19 @@ if tracking is not None:
             id_vars="ID", value_vars=["Plan (h)", "Ist (h)"], var_name="Art", value_name="Stunden"
         )
         st.altair_chart(
-            alt.Chart(bars)
-            .mark_bar(cornerRadiusTopLeft=3, cornerRadiusTopRight=3)
-            .encode(
-                x=alt.X("ID:N", sort=None, title="Aufgabe"),
-                xOffset=alt.XOffset("Art:N", sort=["Plan (h)", "Ist (h)"]),
-                y=alt.Y("Stunden:Q"),
-                color=alt.Color("Art:N", sort=["Plan (h)", "Ist (h)"], legend=LEGEND),
-                tooltip=["ID", "Art", "Stunden"],
-            )
-            # White like the panel around it; the theme would paint the page colour.
-            .properties(background="#ffffff"),
+            on_panel(
+                alt.Chart(bars)
+                .mark_bar(cornerRadiusTopLeft=3, cornerRadiusTopRight=3)
+                .encode(
+                    x=alt.X("ID:N", sort=None, title="Aufgabe"),
+                    xOffset=alt.XOffset("Art:N", sort=["Plan (h)", "Ist (h)"]),
+                    y=alt.Y("Stunden:Q"),
+                    color=alt.Color("Art:N", sort=["Plan (h)", "Ist (h)"], legend=LEGEND),
+                    tooltip=["ID", "Art", "Stunden"],
+                ),
+                "Säulendiagramm: je Aufgabe die geplanten und die erfassten Stunden "
+                "nebeneinander. Dieselben Zahlen stehen in der Tabelle darunter.",
+            ),
             width="stretch",
         )
         st.dataframe(per_task, hide_index=True)

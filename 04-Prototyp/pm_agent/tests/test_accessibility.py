@@ -1,4 +1,5 @@
-"""Small text in the stylesheet stays readable (WCAG 2.1 AA: contrast of 4.5 to 1)."""
+"""What a reader with weak sight or a screen reader gets: contrast of small text (WCAG 2.1 AA,
+4.5 to 1) and a description for every chart."""
 
 import re
 from pathlib import Path
@@ -24,3 +25,21 @@ def test_muted_text_is_readable_on_every_background_it_sits_on():
     # (the diagram on the Startseite, the KI-Lab card).
     for back in (PAGE, "#ffffff", COLOURS["sage"]):
         assert _contrast(COLOURS["muted"], back) >= 4.5, back
+
+
+def test_every_chart_on_a_page_says_what_it_shows():
+    # A chart is a picture; ui.on_panel gives it the sentence a screen reader reads out.
+    pages = Path(__file__).parents[1] / "pages"
+    for page in pages.glob("*.py"):
+        source = page.read_text(encoding="utf-8")
+        assert source.count("st.altair_chart(") == source.count("on_panel("), page.name
+
+
+def test_on_panel_sets_the_description_and_the_white_of_the_panel():
+    import altair as alt
+
+    from pm_agent.ui import on_panel
+
+    spec = on_panel(alt.Chart().mark_bar(), "Balken je Aufgabe.").to_dict()
+    assert spec["description"] == "Balken je Aufgabe."
+    assert spec["background"] == "#ffffff"
