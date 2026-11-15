@@ -765,7 +765,7 @@ with tabs[4]:
                     proposal["changes"] = plan_changes(state.plan, proposal["plan"])
                     if proposed is not None:
                         proposal["changes"] += check_changes(
-                            result, proposed, pair_tasks(state.plan, proposal["plan"])
+                            result, proposed, pair_tasks(state.plan, proposal["plan"]), project
                         )
                     if proposal["changes"]:
                         st.markdown("\n".join(f"- {c}" for c in proposal["changes"]))

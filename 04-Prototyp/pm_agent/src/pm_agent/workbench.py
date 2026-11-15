@@ -473,12 +473,16 @@ def plan_changes(before: Plan, after: Plan) -> list[str]:
 
 
 def check_changes(
-    before: CheckResult, after: CheckResult, pairs: dict[str, str] | None = None
+    before: CheckResult,
+    after: CheckResult,
+    pairs: dict[str, str] | None = None,
+    project: Project | None = None,
 ) -> list[str]:
     """What a change of the plan does to its check: end date, warnings, moved dates.
 
     `pairs` (pair_tasks) says which task of before is which task of after. Without it tasks
-    are the same if their IDs are."""
+    are the same if their IDs are. With `project` the end moves in working days of the
+    project; without it, in Mon-Fri days, free days included."""
     if pairs is None:
         kept = {s.task_id for s in after.schedule}
         pairs = {s.task_id: s.task_id for s in before.schedule if s.task_id in kept}
@@ -496,7 +500,10 @@ def check_changes(
         was[kind] = text
     lines = []
     if before.end_date and after.end_date and before.end_date != after.end_date:
-        shift = workday_shift(before.end_date, after.end_date)
+        if project is None:
+            shift = workday_shift(before.end_date, after.end_date)
+        else:
+            shift = working_shift(project, before.end_date, after.end_date)
         days, direction = abs(shift), "später" if shift > 0 else "früher"
         lines.append(
             f"Planende: {_date(before.end_date)} → {_date(after.end_date)} "

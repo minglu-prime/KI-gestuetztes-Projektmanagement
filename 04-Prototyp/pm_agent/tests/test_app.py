@@ -314,6 +314,20 @@ def test_checking_an_untouched_table_keeps_an_open_proposal(app, monkeypatch):
     assert not button(at, "Übernehmen").disabled
 
 
+def test_an_export_writes_one_line_into_the_record(with_plan):
+    # runs.csv is the data of the before/after comparison. The page writes it from the
+    # callback of the download buttons; `local` points the file into the temporary folder.
+    record = workbench.RUNS_CSV
+    assert not record.exists()
+    next(b for b in with_plan.download_button if b.label == "Als CSV herunterladen").click()
+    at = with_plan.run()
+
+    assert not at.exception
+    (line,) = pd.read_csv(record).to_dict("records")
+    assert (line["quelle"], line["format"], line["tasks"]) == ("Agent", "csv", 2)
+    assert (line["runden"], line["angepasst"], line["fehler"]) == (0, False, 0)
+
+
 def test_taking_a_change_keeps_what_the_export_record_needs(with_plan):
     # As after 3 rounds and 90 s of planning and a hand edit confirmed with "Erneut prüfen".
     with_plan.session_state["agent_seconds"] = 90.0
