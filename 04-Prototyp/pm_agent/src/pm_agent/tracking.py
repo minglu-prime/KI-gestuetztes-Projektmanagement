@@ -728,7 +728,7 @@ def control_document(
         f"{t.status}; hält auf: {', '.join(outlook.blocked.get(t.id, [])) or 'nichts'}"
         for t in evaluation.overdue
     ]
-    if rate:
+    if rate is not None:  # 0 € is a rate, as on the Kontrolle page
         cost = (
             f"- Plankosten gesamt: {euro(evaluation.planned_hours * rate)}\n"
             f"- Ist-Kosten bisher: {euro(evaluation.actual_hours * rate)}"

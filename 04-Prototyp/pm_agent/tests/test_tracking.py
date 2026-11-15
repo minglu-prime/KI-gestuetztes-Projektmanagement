@@ -829,3 +829,10 @@ def test_the_week_ahead_keeps_the_order_of_the_work_within_a_day(tmp_path):
     plan = one_person_plan(("B", 2, ["A"]), ("A", 2, []))
     adopted = adopt(PROJECT, TEAM, plan, path=tmp_path / "projekt.json")
     assert [row["ID"] for row in week_ahead(adopted, date(2026, 11, 9))] == ["A", "B"]
+
+
+def test_an_hourly_rate_of_zero_is_a_rate(tracking):
+    # As on the Kontrolle page: 0 € is set, "not set" is no number at all.
+    evaluation = evaluate(tracking, today=date(2026, 11, 10))
+    assert "- Plankosten gesamt: 0,00 €" in control_document(tracking, evaluation, rate=0)
+    assert "- Kosten: kein Stundensatz gesetzt" in control_document(tracking, evaluation)
