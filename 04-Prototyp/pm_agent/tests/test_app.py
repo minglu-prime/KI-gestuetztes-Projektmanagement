@@ -483,6 +483,12 @@ def planned(project, team, on_round=None):
     return PLAN
 
 
+def test_the_site_says_that_it_is_german(site):
+    # Streamlit serves its page as English. A browser then offers to translate the German
+    # texts, and a screen reader reads them with English sounds.
+    assert any('document.documentElement.lang = "de"' in h.value for h in site.html)
+
+
 def test_every_menu_entry_opens_and_explains_its_empty_state(site):
     assert not site.exception
     assert [t.value for t in site.title] == ["Der Agent schlägt vor. *Du entscheidest.*"]

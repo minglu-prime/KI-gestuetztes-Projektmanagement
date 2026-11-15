@@ -22,7 +22,15 @@ from pm_agent.models import Project
 from pm_agent.planning import check_plan
 from pm_agent.tracking import adopt, has_progress, rest_project
 from pm_agent.tracking import load as load_tracking
-from pm_agent.ui import BUSY_HINT, LEGEND, TASK_AXIS, chip, round_printer, strip
+from pm_agent.ui import (
+    BUSY_HINT,
+    LEGEND,
+    TASK_AXIS,
+    chip,
+    on_panel,
+    round_printer,
+    strip,
+)
 from pm_agent.workbench import (
     PLAN_COLUMNS,
     RUNS_CSV,
@@ -501,8 +509,12 @@ with tabs[3]:
                 deadline_label = deadline_data.mark_text(
                     text="Deadline", align="right", baseline="top", dx=-6, fontSize=11
                 ).encode(x="Deadline:T", y=alt.value(0))
-                # White like the panel around it; the theme would paint the page colour.
-                layered = (chart + deadline_rule + deadline_label).properties(background="#ffffff")
+                layered = on_panel(
+                    chart + deadline_rule + deadline_label,
+                    "Gantt-Diagramm: je Aufgabe ein Balken von Start bis Ende, gefärbt nach "
+                    "Person, mit einer senkrechten Linie an der Deadline. Dieselben Termine "
+                    "stehen in der Tabelle des Plans.",
+                )
                 st.altair_chart(layered, width="stretch")
                 arrow = '<span class="chip-arrow">→</span>'
                 path = arrow.join(

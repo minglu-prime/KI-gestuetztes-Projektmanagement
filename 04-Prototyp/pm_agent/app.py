@@ -32,8 +32,14 @@ st.html(ROOT / "assets" / "style.css")
 with st.container(
     key="topbar", horizontal=True, horizontal_alignment="distribute", vertical_alignment="center"
 ):
+    # Streamlit serves every page as English and has no setting for it. Marked as German, a
+    # browser does not offer to translate the page and a screen reader reads it as German.
+    # The script rides with the brand: an element of its own would add a gap above the bar.
     st.html(
-        '<div class="brand">PM-AGENT<small>KI IM PROJEKTMANAGEMENT</small></div>', width="content"
+        '<div class="brand">PM-AGENT<small>KI IM PROJEKTMANAGEMENT</small></div>'
+        '<script>document.documentElement.lang = "de"</script>',
+        width="content",
+        unsafe_allow_javascript=True,
     )
     # The group has no logo yet. Put a file here and it shows; without one the bar says what
     # the site is.

@@ -139,3 +139,10 @@ def run_with_progress(label: str, run: Callable[[Callable[[dict[str, Any]], None
     if failure:
         st.error(failure)
     return result
+
+
+def on_panel(chart: Any, description: str) -> Any:
+    """A chart as it sits in a white panel. The theme would paint the page colour behind it.
+    `description` is what a screen reader reads out instead of the picture: what the chart
+    shows and where the same numbers stand as text."""
+    return chart.properties(background="#ffffff", description=description)
