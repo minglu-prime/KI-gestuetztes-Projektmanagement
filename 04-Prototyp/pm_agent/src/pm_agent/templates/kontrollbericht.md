@@ -28,6 +28,10 @@ $verzug
 |---|---|---|---|
 $personen
 
+## Aus früheren Plänen
+
+$frueher
+
 ## Bewertung und Gegenmaßnahmen
 
 $bewertung

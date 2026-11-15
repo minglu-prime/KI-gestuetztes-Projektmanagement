@@ -23,7 +23,15 @@ from pm_agent.tracking import (
     week_ahead,
     work_packages,
 )
-from pm_agent.ui import adopted_project, chip, consent, heading, run_with_progress, strip
+from pm_agent.ui import (
+    adopted_project,
+    chip,
+    consent,
+    heading,
+    history_table,
+    run_with_progress,
+    strip,
+)
 from pm_agent.workbench import InputError
 
 state = st.session_state
@@ -104,6 +112,7 @@ with st.container(border=True, key="panel-progress"):
         "dem Speichern. „Prognose Ende“ zeigt, wann die Aufgabe nach heutigem Stand fertig "
         "wird."
     )
+    history_table(tracking)
     if st.button("Fortschritt speichern", type="primary", icon=":material/save:"):
         try:
             updated = apply_rows(tracking, edited.to_dict("records"))

@@ -73,6 +73,25 @@ class Progress(BaseModel):
     note: str = ""
 
 
+class Earlier(BaseModel):
+    """Work done under an earlier adopted plan, kept when the rest of the project was adopted
+    as a new plan. A finished task, or the booked part of a task that went on in the new
+    plan under the same ID."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    title: str
+    member: str
+    # A finished task: its estimate. A part: what the booked hours stood for, the estimate
+    # less what was left of it (rest_plan); the new plan has the rest.
+    planned_hours: float = Field(ge=0, allow_inf_nan=False)
+    actual_hours: float = Field(ge=0, allow_inf_nan=False)
+    finished: bool
+    note: str = ""
+    until: date  # the day the next plan was adopted
+
+
 class Tracking(BaseModel):
     """The plan the project lead adopted, and what happened to each task since."""
 
@@ -83,6 +102,7 @@ class Tracking(BaseModel):
     team: list[Member]
     plan: Plan
     progress: dict[str, Progress]
+    history: list[Earlier] = Field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -102,12 +122,16 @@ class TaskState:
 
 @dataclass(frozen=True)
 class Evaluation:
+    """Plan and actual of the adopted plan and of the work kept from earlier plans."""
+
     today: date
     tasks: list[TaskState]
+    history: list[Earlier]
     planned_hours: float
     actual_hours: float
-    progress: float  # planned hours of finished tasks / all planned hours
-    finished_deviation: float  # actual - planned, finished tasks only
+    earned: float  # planned hours of what is finished (0/100 rule, see EarnedValue)
+    progress: float  # earned / all planned hours
+    finished_deviation: float  # actual - planned, finished work only
     by_member: list[dict[str, Any]]
 
     @property
@@ -115,20 +139,76 @@ class Evaluation:
         return [t for t in self.tasks if t.overdue]
 
 
-def adopt(project: Project, team: list[Member], plan: Plan, path: Path | None = None) -> Tracking:
-    """Make the plan the baseline. Replaces an adopted project and its progress."""
+def adopt(
+    project: Project,
+    team: list[Member],
+    plan: Plan,
+    path: Path | None = None,
+    keep: Tracking | None = None,
+) -> Tracking:
+    """Make the plan the baseline. Replaces an adopted project and its progress.
+
+    With `keep`, the project adopted before, its work stays as history: finished tasks, and
+    the booked part of every started task. A started task that is in the new plan under the
+    same ID goes on there "in Arbeit"; its new estimate is what was left (rest_plan)."""
     errors = check_plan(plan, team, project).errors
     if errors:
         raise InputError("Der Plan hat noch Fehler: " + "; ".join(errors))
+    if keep is not None and (again := finished_again(keep, plan)):
+        raise InputError(
+            f"Fertige Aufgabe wieder im Plan: {', '.join(again)}. Sie würde doppelt zählen. "
+            "Behalten passt zum neu geplanten Rest des Projekts"
+        )
+    adopted = datetime.now().astimezone().replace(microsecond=0)
+    progress = {t.id: Progress() for t in plan.tasks}
+    history: list[Earlier] = []
+    if keep is not None:
+        history = [*keep.history, *_closed(keep, adopted.date())]
+        for task_id, done in keep.progress.items():
+            if task_id in progress and done.status == "in Arbeit":
+                progress[task_id] = Progress(status="in Arbeit", note=done.note)
     tracking = Tracking(
-        adopted=datetime.now().astimezone().replace(microsecond=0),
+        adopted=adopted,
         project=project,
         team=team,
         plan=plan,
-        progress={t.id: Progress() for t in plan.tasks},
+        progress=progress,
+        history=history,
     )
     save(tracking, path)
     return tracking
+
+
+def finished_again(tracking: Tracking, plan: Plan) -> list[str]:
+    """IDs of tasks finished under `tracking` that `plan` has again. Kept as history they
+    would count twice; the rest of a project (rest_plan) has none."""
+    return [t.id for t in plan.tasks if tracking.progress.get(t.id, Progress()).status == "fertig"]
+
+
+def _closed(tracking: Tracking, day: date) -> list[Earlier]:
+    """What was done under `tracking`, as history entries closed on `day`."""
+    estimates = {t.id: t for t in tracking.plan.tasks}
+    closed = []
+    for state in evaluate(tracking, day).tasks:
+        finished = state.status == "fertig"
+        if not finished and state.status != "in Arbeit" and not state.actual_hours:
+            continue  # nothing done: the task is simply in the new plan or gone
+        left = _left(estimates[state.id], tracking.progress[state.id])
+        closed.append(
+            Earlier(
+                id=state.id,
+                title=state.title,
+                member=state.member,
+                planned_hours=(
+                    state.planned_hours if finished else max(state.planned_hours - left, 0)
+                ),
+                actual_hours=state.actual_hours,
+                finished=finished,
+                note=state.note,
+                until=day,
+            )
+        )
+    return closed
 
 
 def load(path: Path | None = None) -> Tracking | None:
@@ -159,7 +239,7 @@ def euro(amount: float) -> str:
 
 
 def has_progress(tracking: Tracking) -> bool:
-    return any(p != Progress() for p in tracking.progress.values())
+    return bool(tracking.history) or any(p != Progress() for p in tracking.progress.values())
 
 
 def apply_rows(tracking: Tracking, rows: list[dict[str, Any]]) -> Tracking:
@@ -222,23 +302,33 @@ def evaluate(tracking: Tracking, today: date) -> Evaluation:
                 overdue=planned.end < today and done.status != "fertig",
             )
         )
-    finished = [t for t in tasks if t.status == "fertig"]
-    planned_hours = sum(t.planned_hours for t in tasks)
+    finished_ids = {t.id for t in tasks if t.status == "fertig"}
+    # Plan and actual of every piece of work: the tasks of the plan and the history. A part
+    # in the history is finished once the task it went on as is finished.
+    work = [(t.member, t.planned_hours, t.actual_hours, t.id in finished_ids) for t in tasks]
+    work += [
+        (e.member, e.planned_hours, e.actual_hours, e.finished or e.id in finished_ids)
+        for e in tracking.history
+    ]
+    planned_hours = sum(planned for _, planned, _, _ in work)
+    earned = sum(planned for _, planned, _, done in work if done)
     return Evaluation(
         today=today,
         tasks=tasks,
+        history=tracking.history,
         planned_hours=planned_hours,
-        actual_hours=sum(t.actual_hours for t in tasks),
-        progress=sum(t.planned_hours for t in finished) / planned_hours,
-        finished_deviation=sum(t.actual_hours - t.planned_hours for t in finished),
+        actual_hours=sum(actual for _, _, actual, _ in work),
+        earned=earned,
+        progress=earned / planned_hours,
+        finished_deviation=sum(actual - planned for _, planned, actual, done in work if done),
         by_member=[
             {
                 "Person": member,
-                "Plan (h)": sum(t.planned_hours for t in tasks if t.member == member),
-                "Ist (h)": sum(t.actual_hours for t in tasks if t.member == member),
-                "Fertig (Plan-h)": sum(t.planned_hours for t in finished if t.member == member),
+                "Plan (h)": sum(w[1] for w in work if w[0] == member),
+                "Ist (h)": sum(w[2] for w in work if w[0] == member),
+                "Fertig (Plan-h)": sum(w[1] for w in work if w[0] == member and w[3]),
             }
-            for member in dict.fromkeys(t.member for t in tasks)
+            for member in dict.fromkeys(w[0] for w in work)
         ],
     )
 
@@ -282,9 +372,10 @@ def earned_value(tracking: Tracking, evaluation: Evaluation) -> EarnedValue:
         point["Stunden"] for point in planned_curve(tracking) if point["Tag"] <= evaluation.today
     ]
     return EarnedValue(
-        # Between two kept days the curve is flat or the later day is kept too.
-        planned=reached[-1] if reached else 0.0,
-        earned=sum(t.planned_hours for t in evaluation.tasks if t.status == "fertig"),
+        # Between two kept days the curve is flat or the later day is kept too. The work of
+        # earlier plans was due before this plan began.
+        planned=(reached[-1] if reached else 0.0) + sum(e.planned_hours for e in tracking.history),
+        earned=evaluation.earned,
         actual=evaluation.actual_hours,
     )
 
@@ -326,6 +417,19 @@ class Forecast:
     problem: str | None = None
 
 
+def _left(task: Task, done: Progress) -> float:
+    """What is left of an unfinished task: what the project lead says, else the full estimate
+    of an open task and the estimate minus the booked hours of a started one."""
+    if done.remaining_hours is not None:
+        return done.remaining_hours
+    if done.status == "in Arbeit":
+        left = round(task.estimate_hours - done.actual_hours, 6)
+        # Only when nothing is left by the numbers. A rest under an hour is a rest; and
+        # never more than the task itself, if that is shorter than the hour.
+        return left if left > 0 else min(MIN_REST_HOURS, task.estimate_hours)
+    return task.estimate_hours
+
+
 def rest_plan(tracking: Tracking, reassign: dict[str, str] | None = None) -> Plan | None:
     """The unfinished tasks as a plan of their own; None if every task is finished.
 
@@ -334,18 +438,6 @@ def rest_plan(tracking: Tracking, reassign: dict[str, str] | None = None) -> Pla
     hours. Dependencies on finished tasks are gone. `reassign` (task ID -> member) gives
     tasks to someone else."""
     state = tracking.progress
-
-    def left(task: Task) -> float:
-        done = state[task.id]
-        if done.remaining_hours is not None:
-            return done.remaining_hours
-        if done.status == "in Arbeit":
-            left = round(task.estimate_hours - done.actual_hours, 6)
-            # Only when nothing is left by the numbers. A rest under an hour is a rest;
-            # and never more than the task itself, if that is shorter than the hour.
-            return left if left > 0 else min(MIN_REST_HOURS, task.estimate_hours)
-        return task.estimate_hours
-
     open_ids = {task.id for task in tracking.plan.tasks if state[task.id].status != "fertig"}
     if not open_ids:
         return None
@@ -353,7 +445,7 @@ def rest_plan(tracking: Tracking, reassign: dict[str, str] | None = None) -> Pla
         tasks=[
             task.model_copy(
                 update={
-                    "estimate_hours": left(task),
+                    "estimate_hours": _left(task, state[task.id]),
                     "depends_on": [dep for dep in task.depends_on if dep in open_ids],
                 }
             )
@@ -640,6 +732,43 @@ def progress_rows(tracking: Tracking, today: date | None = None) -> list[dict[st
     ]
 
 
+PART = "Teil, ging weiter"  # a started task whose rest went into the next plan
+
+
+def history_rows(tracking: Tracking) -> list[dict[str, Any]]:
+    """The work of earlier plans, one row per entry, for tables and documents."""
+    return [
+        {
+            "ID": e.id,
+            "Aufgabe": e.title,
+            "Person": e.member,
+            "Stand": "fertig" if e.finished else PART,
+            "Plan (h)": e.planned_hours,
+            "Ist (h)": e.actual_hours,
+            "Notiz": e.note,
+            "Bis": _date(e.until),
+        }
+        for e in tracking.history
+    ]
+
+
+def _history_text(tracking: Tracking) -> str:
+    if not tracking.history:
+        return "Keine: Der Plan wurde nicht neu übernommen."
+    rows = [
+        f"| {_md(r['ID'])} | {_md(r['Aufgabe'])} | {_md(r['Person'])} | {r['Stand']} | "
+        f"{r['Plan (h)']:g} | {r['Ist (h)']:g} | {_md(r['Notiz'])} |"
+        for r in history_rows(tracking)
+    ]
+    head = [
+        "Arbeit aus früheren Plänen, in den Kennzahlen oben mitgezählt.",
+        "",
+        "| ID | Aufgabe | Person | Stand | Plan (h) | Ist (h) | Notiz |",
+        "|---|---|---|---|---|---|---|",
+    ]
+    return "\n".join(head + rows)
+
+
 def status_report(
     tracking: Tracking, evaluation: Evaluation, summary: StatusSummary | None = None
 ) -> str:
@@ -694,6 +823,7 @@ def status_report(
             f"{t.actual_hours:g} | {_md(t.note)} |"
             for t in tasks
         ),
+        frueher=_history_text(tracking),
         risiken="\n".join(f"- {r}" for r in tracking.plan.risks) or "Keine Risiken erfasst.",
     )
 
@@ -780,6 +910,7 @@ def control_document(
             f"{row['Fertig (Plan-h)']:g} |"
             for row in evaluation.by_member
         ),
+        frueher=_history_text(tracking),
         bewertung=judgement,
     )
 

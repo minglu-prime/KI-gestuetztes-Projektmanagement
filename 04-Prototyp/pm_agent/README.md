@@ -68,7 +68,13 @@ Sechs Schritte als Reiter:
    fortgeschrieben, nie umgeschrieben: Passt sie nicht mehr (andere Spalten, von Hand oder
    in einem Tabellenprogramm verändert), wird sie unter `logs/runs-bis-<Zeit>.csv`
    beiseitegelegt, und eine neue beginnt. Ein Plan ohne Fehler lässt sich hier als Projekt
-   übernehmen.
+   übernehmen. Hat das bisher übernommene Projekt schon Fortschritt, wählt die Projektleitung:
+   verwerfen, oder als frühere Arbeit behalten. Behalten passt zum Rest des Projekts, den die
+   Seite Kontrolle mit „Rest mit Claude umplanen“ lädt: Fertige Aufgaben und die gebuchten
+   Stunden begonnener Aufgaben bleiben in allen Kennzahlen und Berichten; eine begonnene
+   Aufgabe geht im neuen Plan „in Arbeit“ weiter, ihr gebuchter Teil zählt als fertig, sobald
+   sie fertig ist. Steht eine fertige Aufgabe wieder im Plan, lehnt das Übernehmen ab: Sie
+   würde doppelt zählen.
 
 ## Agenten
 

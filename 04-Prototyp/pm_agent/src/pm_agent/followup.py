@@ -152,6 +152,9 @@ def facts(tracking: Tracking, evaluation: Evaluation) -> str:
             }
             for t in evaluation.tasks
         ],
+        # Work done under earlier plans, in the numbers above. "finished": False is the
+        # booked part of a task whose rest is in "aufgaben".
+        "frueher": [e.model_dump(mode="json") for e in evaluation.history],
         "je_person": evaluation.by_member,
         "team": [m.model_dump(mode="json") for m in tracking.team],
         "risiken": tracking.plan.risks,
