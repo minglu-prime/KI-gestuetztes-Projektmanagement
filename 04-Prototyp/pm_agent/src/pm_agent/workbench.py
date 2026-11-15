@@ -138,6 +138,14 @@ def rows_to_plan(rows: list[dict[str, Any]], original: Plan, risks: list[str]) -
         raise InputError(_reason(err)) from err
 
 
+def table_plan(plan: Plan) -> Plan:
+    """The plan as the table gives it back when nobody has touched it. The table is not a
+    mirror: assignments come back in task order, and a skill, a dependency or a risk with a
+    separator in it (comma, line break) comes back in pieces. Whether the table was edited
+    is decided against this form, not against the plan itself."""
+    return rows_to_plan(plan_rows(plan), plan, "\n".join(plan.risks).splitlines())
+
+
 def load_team(path: Path = TEAM_FILE) -> list[Member]:
     """An empty team if nothing was saved yet. A damaged file is an error, not an empty team."""
     if not path.exists():
@@ -372,7 +380,12 @@ def plan_changes(before: Plan, after: Plan) -> list[str]:
         was, parts = old[old_id], []
         # The dependencies of before, in the IDs of after. A dependency on a removed task
         # is marked: its ID may have gone to another task, and would then look unchanged.
-        needed = [twin[dep] if dep in twin else f"{dep} [entfernt]" for dep in was.depends_on]
+        # A dependency on an ID that `before` never had is a mistake of the draft, not a
+        # removed task: it stays as it is.
+        needed = [
+            twin[dep] if dep in twin else f"{dep} [entfernt]" if dep in old else dep
+            for dep in was.depends_on
+        ]
         if task.title != was.title:
             parts.append(f"heißt jetzt „{task.title}“")
         if old_owner.get(old_id) != new_owner.get(tid):
@@ -411,18 +424,17 @@ def check_changes(
     if pairs is None:
         pairs = {s.task_id: s.task_id for s in before.schedule}
 
-    def kinds(result: CheckResult, renumber: dict[str, str]) -> dict[str, str]:
-        """Kind -> text of each warning, with task IDs in the IDs of `after`."""
-        named = {}
-        for kind, text in zip(result.warning_kinds, result.warnings, strict=True):
-            topic, _, rest = kind.partition(":")
-            if topic == "skill":
-                task_id, _, skill = rest.partition(":")
-                kind = f"skill:{renumber.get(task_id, task_id)}:{skill}"
-            named[kind] = text
-        return named
-
-    was, now = kinds(before, pairs), kinds(after, {})
+    now = dict(zip(after.warning_kinds, after.warnings, strict=True))
+    # The warnings of before, with task IDs in the IDs of after. A warning about a task that
+    # is gone went with it: plan_changes names the task, and its ID may belong to another
+    # task now.
+    was = {}
+    for kind, text in zip(before.warning_kinds, before.warnings, strict=True):
+        if kind[0] == "skill":
+            if kind[1] not in pairs:
+                continue
+            kind = ("skill", pairs[kind[1]], kind[2])
+        was[kind] = text
     lines = []
     if before.end_date and after.end_date and before.end_date != after.end_date:
         shift = workday_shift(before.end_date, after.end_date)
@@ -437,7 +449,7 @@ def check_changes(
     for kind, text in now.items():
         if kind not in was:
             lines.append(f"Neue Warnung: {text}")
-        elif text != was[kind] and not kind.startswith("skill:"):
+        elif text != was[kind] and kind[0] != "skill":
             lines.append(f"Warnung bleibt: {text}")
     lines += [f"Behoben: {text}" for kind, text in was.items() if kind not in now]
     dates = {pairs[s.task_id]: (s.start, s.end) for s in before.schedule if s.task_id in pairs}
@@ -599,4 +611,5 @@ def _date(day: Any) -> str:
 
 
 def _md(text: str) -> str:
-    return text.replace("|", "\\|").replace("\n", " ")
+    """Text for one table cell or one list item: no column separator, on one line."""
+    return " ".join(text.replace("|", "\\|").split())

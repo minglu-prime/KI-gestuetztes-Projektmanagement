@@ -437,17 +437,18 @@ def test_every_warning_has_a_kind_that_survives_changing_numbers():
     clara = Member(name="Clara", hours_per_week=10)
     p = plan(task("A", 15, skills=["SQL"]), owners={"A": "Clara"})
     result = check_plan(p, [clara], project(deadline=date(2026, 11, 13)))
-    assert result.warning_kinds == ["late", "overload:Clara", "skill:A:SQL"]
+    assert result.warning_kinds == [
+        ("late",),
+        ("overload", "Clara"),
+        ("skill", "A", "SQL"),
+    ]
     assert len(result.warning_kinds) == len(result.warnings)
     on_the_day = check_plan(plan(task("A", 8), owners={"A": "Anna"}), [ANNA], project(deadline=MON))
-    assert on_the_day.warning_kinds == ["buffer"]
+    assert on_the_day.warning_kinds == [("buffer",)]
     gone = away(date(2026, 11, 1), date(2026, 12, 31))
     assert check_plan(
         plan(task("A", 8), owners={"A": "Anna"}), [gone], project()
-    ).warning_kinds == [
-        "late",
-        "away:Anna",
-    ]
+    ).warning_kinds == [("late",), ("away", "Anna")]
 
 
 def test_tasks_can_be_scheduled_in_a_given_order():
@@ -513,3 +514,35 @@ def test_the_last_task_of_the_chain_can_have_a_day_of_slack_when_days_are_not_fu
     # And still the plan has a whole day of room: C a day later ends on Monday noon, when
     # Ben is away anyway. The day is shared: either may slip, not both.
     assert result.slack == {"C": 1, "D": 1}
+
+
+def test_a_task_that_would_slip_into_an_absence_stays_on_the_critical_path():
+    # Anna is away on Tuesday and does A on Monday, B on Wednesday, C on Thursday. A day
+    # later, A falls into the absence and pushes B and C: it has no slack and sets the end.
+    anna = away(date(2026, 11, 10))
+    p = plan(
+        task("A", 8),
+        task("B", 8, deps=["A"]),
+        task("C", 8, deps=["B"]),
+        owners={"A": "Anna", "B": "Anna", "C": "Anna"},
+    )
+    result = check_plan(p, [anna], project())
+    assert result.slack == {"A": 0, "B": 0, "C": 0}
+    assert result.critical_path == ["A", "B", "C"]
+
+    # Ben's A (12 h) ends on Tuesday at noon, Anna does B on Wednesday. A day later, A ends
+    # on Wednesday at noon and B has to wait for it.
+    q = plan(task("A", 12), task("B", 8, deps=["A"]), owners={"A": "Ben", "B": "Anna"})
+    result = check_plan(q, [anna, BEN], project())
+    assert result.slack == {"A": 0, "B": 0}
+    assert result.critical_path == ["A", "B"]
+
+
+def test_the_check_can_leave_out_the_slack():
+    # The forecast only wants dates. The slack is the expensive part of the check.
+    p = plan(task("A", 8), task("B", 8, deps=["A"]), owners={"A": "Anna", "B": "Ben"})
+    full = check_plan(p, [ANNA, BEN], project())
+    assert full.slack == {"A": 0, "B": 0}
+    assert check_plan(p, [ANNA, BEN], project(), with_slack=False) == full.model_copy(
+        update={"slack": {}}
+    )

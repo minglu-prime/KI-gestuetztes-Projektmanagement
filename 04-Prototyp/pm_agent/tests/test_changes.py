@@ -190,3 +190,58 @@ def test_renumbering_alone_changes_nothing_in_the_check():
         check_changes(check_plan(PLAN, TEAM, PROJECT), check_plan(after, TEAM, PROJECT), pairs)
         == []
     )
+
+
+def skilled(*tasks):
+    """A plan of 8 h tasks from (ID, title, member, skills)."""
+    return Plan.model_validate(
+        {
+            "tasks": [
+                {"id": i, "title": title, "estimate_hours": 8, "required_skills": skills}
+                for i, title, _, skills in tasks
+            ],
+            "assignments": [
+                {"task_id": i, "member": member, "reason": "r"} for i, _, member, _ in tasks
+            ],
+        }
+    )
+
+
+def test_a_warning_about_a_removed_task_is_not_taken_for_the_task_with_its_id():
+    team = [*TEAM, BEN]  # Anna has not named SQL, Ben has
+    before = skilled(
+        ("T1", "A", "Anna", []), ("T2", "B", "Anna", ["SQL"]), ("T3", "C", "Ben", ["SQL"])
+    )
+    # B is gone. C has taken its ID and went from Ben to Anna, who has not named SQL.
+    after = skilled(("T1", "A", "Anna", []), ("T2", "C", "Anna", ["SQL"]))
+    pairs = pair_tasks(before, after)
+    assert pairs == {"T1": "T1", "T3": "T2"}
+    lines = check_changes(
+        check_plan(before, team, PROJECT), check_plan(after, team, PROJECT), pairs
+    )
+    assert (
+        "Neue Warnung: Task 'T2' braucht 'SQL', Anna hat diese Fähigkeit nicht angegeben" in lines
+    )
+    # The warning about B went with B ("Entfernt: T2 · B" says so): nobody solved it.
+    assert not any(line.startswith("Behoben") for line in lines)
+
+
+def test_a_colon_in_an_id_or_a_skill_does_not_mix_up_the_warnings():
+    def check(plan):
+        return check_plan(plan, TEAM, PROJECT)
+
+    before = skilled(("A", "Entwurf", "Anna", []), ("A:1", "Abfragen", "Anna", ["SQL"]))
+    after = skilled(("X", "Entwurf", "Anna", []), ("A:1", "Abfragen", "Anna", ["SQL"]))
+    assert check_changes(check(before), check(after), pair_tasks(before, after)) == []
+    # "A" needing "1:SQL" and "A:1" needing "SQL" are two warnings.
+    both = skilled(("A", "Entwurf", "Anna", ["1:SQL"]), ("A:1", "Abfragen", "Anna", ["SQL"]))
+    assert check_changes(check(both), check(before)) == [
+        "Behoben: Task 'A' braucht '1:SQL', Anna hat diese Fähigkeit nicht angegeben"
+    ]
+
+
+def test_a_dependency_on_a_task_that_never_existed_is_not_called_removed():
+    # Two drafts in a row with the same mistake: T2 waits for T9, which is in neither.
+    before = simple(("T1", "A", "Anna", 8, []), ("T2", "B", "Anna", 8, ["T9"]))
+    after = simple(("T1", "A", "Anna", 4, []), ("T2", "B", "Anna", 8, ["T9"]))
+    assert plan_changes(before, after) == ["T1 · A: 8 h → 4 h"]

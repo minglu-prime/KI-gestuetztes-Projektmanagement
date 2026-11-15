@@ -666,3 +666,44 @@ def test_the_progress_table_says_when_each_task_is_expected_to_end(tracking):
     ]
     # The new column is read-only: saving the table as shown changes nothing.
     assert apply_rows(tracking, rows) == tracking
+
+
+def test_a_finished_task_reads_finished_even_when_the_rest_cannot_be_forecast(tracking):
+    absurd = apply_rows(
+        tracking,
+        [
+            {"ID": "A", "Status": "fertig", "Ist (h)": 8},
+            {"ID": "B", "Status": "in Arbeit", "Rest (h)": 20_000_000},
+        ],
+    )
+    assert [r["Prognose Ende"] for r in progress_rows(absurd, today=date(2026, 11, 10))] == [
+        "fertig",
+        "nicht berechenbar",
+    ]
+
+
+def test_the_control_document_keeps_its_shape_whatever_the_report_says(two_people):
+    report = ControlReport(
+        assessment="kritisch",
+        findings=[{"task_ids": ["X"], "observation": "Zeile 1\n\n| a | b |\n# Titel"}],
+        measures=[
+            {"task_ids": ["X"], "action": "Erst klären,\r\ndann bauen", "effect": "Ruhe | Zeit"},
+            {
+                "task_ids": ["Z9"],  # not in the plan
+                "action": "Ben übernimmt.",
+                "effect": "Schneller.",
+                "reassign_to": "Ben",
+            },
+        ],
+    )
+    monday = date(2026, 11, 16)
+    text = control_document(two_people, evaluate(two_people, monday), report=report)
+
+    assert "- **X:** Zeile 1 \\| a \\| b \\| # Titel" in text
+    assert (
+        "| X | Erst klären, dann bauen | Ruhe \\| Zeit | Keine Umverteilung: nicht nachrechenbar |"
+        in text
+    )
+    assert (
+        "| Z9 | Ben übernimmt. | Schneller. | Nicht prüfbar: Aufgabe Z9 ist nicht im Plan |" in text
+    )

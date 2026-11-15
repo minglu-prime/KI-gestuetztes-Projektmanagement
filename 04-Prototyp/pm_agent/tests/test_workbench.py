@@ -23,6 +23,7 @@ from pm_agent.workbench import (
     save_team,
     saved_runs,
     suggested_wishes,
+    table_plan,
     team_rows,
     to_csv,
     to_markdown,
@@ -336,3 +337,14 @@ def test_an_uneven_load_suggests_moving_work_and_a_broken_plan_suggests_nothing(
     )
     broken = Plan.model_validate(plan_input(member="Zoe"))
     assert suggested_wishes(broken, TEAM, check_plan(broken, TEAM, PROJECT), PROJECT) == []
+
+
+def test_the_table_gives_a_plan_back_in_its_own_form():
+    # Claude may list the assignments in another order than the tasks. The table has one row
+    # per task, so they come back in task order: the same plan, written differently.
+    data = plan_input()
+    data["assignments"].reverse()
+    shuffled = Plan.model_validate(data)
+    assert rows_to_plan(plan_rows(shuffled), shuffled, shuffled.risks) != shuffled
+    assert table_plan(shuffled) == PLAN
+    assert table_plan(PLAN) == PLAN

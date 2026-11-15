@@ -20,14 +20,21 @@ _DIGITS = 9
 
 
 def check_plan(
-    plan: Plan, team: list[Member], project: Project, order: list[str] | None = None
+    plan: Plan,
+    team: list[Member],
+    project: Project,
+    order: list[str] | None = None,
+    with_slack: bool = True,
 ) -> CheckResult:
     """Structural errors stop the check. Otherwise the plan is scheduled, and the warnings
     say what the project lead has to decide (deadline, buffer, overload, missing skills).
 
     `order` schedules the tasks in this order instead of scheduling_order(plan). It has to
     name every task once, each after the tasks it depends on (ValueError otherwise). The
-    forecast uses it to keep the order of the plan when finished tasks have dropped out."""
+    forecast uses it to keep the order of the plan when finished tasks have dropped out.
+
+    `with_slack=False` leaves CheckResult.slack empty. The slack schedules the plan again
+    several times per task; who only wants the dates saves most of the time."""
     errors = _structural_errors(plan, team, project)
     if errors:
         return CheckResult(errors=errors)
@@ -67,17 +74,26 @@ def check_plan(
             )
         )
     end_date = max(s.end for s in schedule)
-    slack = {
-        task.id: _slack(task.id, plan, members, owner, away, order, start, end)
-        for task in plan.tasks
-    }
+    slack = {}
+    if with_slack:
+        slack = {
+            task.id: _slack(task.id, plan, members, owner, away, order, start, end)
+            for task in plan.tasks
+        }
 
     # Critical path: walk back from the task that finishes last along whatever set each start.
     node = last
     critical_path = []
     while node is not None:
         critical_path.append(node)
-        node = driver[node]
+        before = driver[node]
+        if before is not None:
+            # Does the task really wait for `before`? Not if it waits for the end of an
+            # absence anyway: then `before` a day later changes nothing for it.
+            later, _, _ = _schedule(plan, members, owner, away, order, held_back=(before, 1))
+            if round(later[node] - start[node], _DIGITS) == 0:
+                before = None
+        node = before
     critical_path.reverse()
 
     window = count_workdays(project.start_date, project.deadline)
@@ -100,14 +116,14 @@ def check_plan(
 
     warnings, kinds = [], []
 
-    def warn(kind: str, text: str) -> None:
+    def warn(kind: tuple[str, ...], text: str) -> None:
         kinds.append(kind)
         warnings.append(text)
 
     if end_date > project.deadline:
         late = count_workdays(project.deadline + timedelta(days=1), end_date)
         warn(
-            "late",
+            ("late",),
             f"Der Plan endet am {_fmt(end_date)}, {late} Arbeitstag{'' if late == 1 else 'e'} "
             f"nach der Deadline ({_fmt(project.deadline)})",
         )
@@ -116,7 +132,7 @@ def check_plan(
     # exist for 31.12.9999.
     elif count_workdays(end_date, project.deadline) == 1:
         warn(
-            "buffer",
+            ("buffer",),
             f"Der Plan endet am {_fmt(end_date)}, bis zur Deadline ({_fmt(project.deadline)}) "
             "bleibt kein Arbeitstag Puffer",
         )
@@ -124,14 +140,14 @@ def check_plan(
         if item.utilization is None:
             if item.assigned_hours:
                 warn(
-                    f"away:{item.member}",
+                    ("away", item.member),
                     f"{item.member} ist bis zur Deadline durchgehend abwesend, hat aber "
                     f"{_hours(item.assigned_hours)} h zugewiesen",
                 )
         elif round(item.utilization, _DIGITS) > 1:
             percent = math.ceil(round(item.utilization * 100, _DIGITS))  # never reads "100%"
             warn(
-                f"overload:{item.member}",
+                ("overload", item.member),
                 f"{item.member} ist überlastet: {_hours(item.assigned_hours)} h zugewiesen, "
                 f"bis zur Deadline sind {_hours(item.capacity_hours)} h verfügbar ({percent}%)",
             )
@@ -141,7 +157,7 @@ def check_plan(
         for skill in task.required_skills:
             if skill.casefold() not in known:
                 warn(
-                    f"skill:{task.id}:{skill}",
+                    ("skill", task.id, skill),
                     f"Task '{task.id}' braucht '{skill}', "
                     f"{member.name} hat diese Fähigkeit nicht angegeben",
                 )
@@ -319,11 +335,11 @@ def _schedule(
     order: list[str],
     held_back: tuple[str, int] | None = None,
 ) -> tuple[dict[str, float], dict[str, float], dict[str, str | None]]:
-    """Start and end of each task in workday offsets, plus the task that set each start: a
-    dependency or the member's previous task. None if nothing before it did: it starts at 0,
-    or it waited for the end of an absence, so that an earlier end of the task before it
-    would not have helped. `held_back` makes one task start that many workdays later than
-    it does, to see what that does."""
+    """Start and end of each task in workday offsets, plus the task it could start after:
+    the dependency or the member's previous task that ends last, None if there is none.
+    Whether the task really waited for that one or for the end of an absence decides
+    check_plan. `held_back` makes one task start that many workdays later than it does, to
+    see what that does."""
     # ponytail: greedy list scheduling in dependency order, not an optimal schedule. A member
     # can sit idle waiting for a dependency while another of their tasks could already run.
     # Upgrade to priority by remaining critical path if plans come out visibly too long.
@@ -346,8 +362,6 @@ def _schedule(
             start[tid], end[tid] = _work(
                 start[tid] + held_back[1], task.estimate_hours, daily_hours, away[member]
             )
-        if math.floor(round(start[tid], _DIGITS)) > math.floor(round(earliest, _DIGITS)):
-            driver[tid] = None  # the absence set the start, not the task before
         free_at[member] = (end[tid], tid)
     return start, end, driver
 

@@ -96,10 +96,11 @@ class CheckResult(_Model):
     errors: list[str] = Field(default_factory=list)  # plan cannot be scheduled until fixed
     warnings: list[str] = Field(default_factory=list)  # schedulable, project lead must decide
     # One entry per warning, in the same order: what it is about, without the numbers in
-    # its text ("late", "buffer", "overload:Anna", "away:Anna", "skill:T1:SQL"). Two checks
-    # of a changed plan are compared by these, so a warning whose numbers moved is not
-    # taken for a new one.
-    warning_kinds: list[str] = Field(default_factory=list)
+    # its text: ("late",), ("buffer",), ("overload", "Anna"), ("away", "Anna"),
+    # ("skill", "T1", "SQL"). Two checks of a changed plan are compared by these, so a
+    # warning whose numbers moved is not taken for a new one. Tuples, not joined strings:
+    # an ID or a skill can contain any separator.
+    warning_kinds: list[tuple[str, ...]] = Field(default_factory=list)
     schedule: list[ScheduledTask] = Field(default_factory=list)
     end_date: date | None = None
     critical_path: list[str] = Field(default_factory=list)

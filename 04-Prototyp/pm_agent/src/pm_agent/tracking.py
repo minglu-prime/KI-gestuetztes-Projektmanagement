@@ -184,7 +184,7 @@ def apply_rows(tracking: Tracking, rows: list[dict[str, Any]]) -> Tracking:
 
 
 def evaluate(tracking: Tracking, today: date) -> Evaluation:
-    schedule = check_plan(tracking.plan, tracking.team, tracking.project).schedule
+    schedule = check_plan(tracking.plan, tracking.team, tracking.project, with_slack=False).schedule
     dates = {s.task_id: s for s in schedule}
     tasks = []
     for task in tracking.plan.tasks:
@@ -312,7 +312,7 @@ def forecast(tracking: Tracking, today: date, reassign: dict[str, str] | None = 
     `reassign` (task ID -> member) answers "what if": the forecast with these unfinished tasks
     given to someone else. The names must be team members."""
     project, plan = tracking.project, tracking.plan
-    planned_end = check_plan(plan, tracking.team, project).end_date
+    planned_end = check_plan(plan, tracking.team, project, with_slack=False).end_date
     rest = rest_plan(tracking, reassign)
     if rest is None:
         return Forecast(
@@ -327,7 +327,7 @@ def forecast(tracking: Tracking, today: date, reassign: dict[str, str] | None = 
     # dependencies on finished tasks are gone, and a project on plan would look late.
     left = {task.id for task in rest.tasks}
     order = [tid for tid in scheduling_order(plan) if tid in left]
-    expected = check_plan(rest, tracking.team, open_end, order=order)
+    expected = check_plan(rest, tracking.team, open_end, order=order, with_slack=False)
     if expected.errors:
         return Forecast(
             planned_end=planned_end,
@@ -367,6 +367,11 @@ def reassignment_effect(tracking: Tracking, today: date, task_ids: list[str], me
     if member not in people:
         return f"Nicht prüfbar: {member} ist nicht im Team"
     tasks = {task.id: task for task in tracking.plan.tasks}
+    unknown = [tid for tid in task_ids if tid not in tasks]
+    if unknown:
+        noun = "Aufgabe" if len(unknown) == 1 else "Aufgaben"
+        verb = "ist" if len(unknown) == 1 else "sind"
+        return f"Nicht prüfbar: {noun} {', '.join(unknown)} {verb} nicht im Plan"
     moved = [tid for tid in task_ids if tracking.progress[tid].status != "fertig"]
     before = forecast(tracking, today)
     if before.problem:
@@ -498,7 +503,6 @@ def progress_rows(tracking: Tracking, today: date | None = None) -> list[dict[st
     today = today or date.today()
     outlook = forecast(tracking, today)
     expected = {s.task_id: _date(s.end) for s in outlook.schedule}
-    missing = "nicht berechenbar" if outlook.problem else "fertig"
     return [
         dict(
             zip(
@@ -509,7 +513,7 @@ def progress_rows(tracking: Tracking, today: date | None = None) -> list[dict[st
                     t.member,
                     t.planned_hours,
                     _date(t.planned_end),
-                    expected.get(t.id, missing),
+                    "fertig" if t.status == "fertig" else expected.get(t.id, "nicht berechenbar"),
                     t.status,
                     t.actual_hours,
                     t.remaining_hours,
@@ -589,7 +593,8 @@ def control_document(
     project, today = tracking.project, evaluation.today
     outlook = forecast(tracking, today)
     overdue = [
-        f"- {t.id} · {t.title} ({t.member}), geplant bis {_date(t.planned_end)}, Status: "
+        f"- {_md(t.id)} · {_md(t.title)} ({_md(t.member)}), geplant bis "
+        f"{_date(t.planned_end)}, Status: "
         f"{t.status}; hält auf: {', '.join(outlook.blocked.get(t.id, [])) or 'nichts'}"
         for t in evaluation.overdue
     ]
@@ -607,12 +612,12 @@ def control_document(
     else:
         findings = "\n".join(
             "- "
-            + (f"**{', '.join(finding.task_ids)}:** " if finding.task_ids else "")
-            + finding.observation
+            + (f"**{_md(', '.join(finding.task_ids))}:** " if finding.task_ids else "")
+            + _md(finding.observation)
             for finding in report.findings
         )
         measures = "\n".join(
-            f"| {', '.join(m.task_ids)} | {_md(m.action)} | {_md(m.effect)} | "
+            f"| {_md(', '.join(m.task_ids))} | {_md(m.action)} | {_md(m.effect)} | "
             f"{_md(measure_effect(tracking, today, m.task_ids, m.reassign_to))} |"
             for m in report.measures
         )
@@ -639,7 +644,7 @@ def control_document(
         kosten=cost,
         verzug="\n".join(overdue) or "Keine Aufgabe im Verzug.",
         personen="\n".join(
-            f"| {row['Person']} | {row['Plan (h)']:g} | {row['Ist (h)']:g} | "
+            f"| {_md(row['Person'])} | {row['Plan (h)']:g} | {row['Ist (h)']:g} | "
             f"{row['Fertig (Plan-h)']:g} |"
             for row in evaluation.by_member
         ),
