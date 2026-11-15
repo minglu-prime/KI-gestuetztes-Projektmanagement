@@ -33,6 +33,9 @@ Studienleitung (Einladungen, Export, Auswertung): `python manage.py --help`.
 python -m unittest discover -s tests -v
 ```
 
+Was darüber hinaus im Browser geprüft ist und was vor dem Formalstart noch fehlt, steht in
+[VERIFIKATION.md](VERIFIKATION.md).
+
 ## Daten
 
 Sitzungen und Antworten liegen in `data/lab.db`, Exporte in `private/`. Beides ist per
