@@ -1,0 +1,7 @@
+# Settings of the GitHub Pages site (built with Jekyll by .github/workflows/static.yml).
+# The theme prints `title` above every page whose own title differs; the start page is
+# titled "PM-Agent" already and shows it once.
+title: PM-Agent
+# The texts are German. Without this the pages say en-US: a browser offers to translate them
+# and a screen reader reads them with English sounds.
+lang: de
