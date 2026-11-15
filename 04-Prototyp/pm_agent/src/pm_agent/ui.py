@@ -44,6 +44,16 @@ def adopted_project() -> Tracking | None:
     return tracking
 
 
+def heading(icon: str, text: str) -> None:
+    """A panel heading with a Material icon in front. Written as ":material/name:" in Markdown,
+    Streamlit labels the icon "name icon", and a screen reader reads that English word before
+    the German heading. The icon only decorates, so here it is hidden from screen readers."""
+    st.markdown(
+        f'#### <span class="icon" aria-hidden="true">{escape(icon)}</span> {escape(text)}',
+        unsafe_allow_html=True,
+    )
+
+
 MARKS = {"on": "✓", "warn": "!", "": "○", "plain": ""}
 
 

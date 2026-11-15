@@ -35,6 +35,30 @@ def test_every_chart_on_a_page_says_what_it_shows():
         assert source.count("st.altair_chart(") == source.count("on_panel("), page.name
 
 
+def test_no_heading_reads_out_the_name_of_its_icon():
+    # Streamlit gives an icon in Markdown role="img" and the English label "<name> icon": a
+    # screen reader said "trending_up icon Prognose". ui.heading hides the icon instead.
+    pages = Path(__file__).parents[1] / "pages"
+    for page in pages.glob("*.py"):
+        source = page.read_text(encoding="utf-8")
+        assert not re.search(r"#+ (\{icon\}|:material/)", source), page.name
+
+
+def test_heading_hides_the_icon_from_screen_readers():
+    from streamlit.testing.v1 import AppTest
+
+    def page():
+        from pm_agent.ui import heading
+
+        heading("trending_up", "Prognose & <Plan>")
+
+    app = AppTest.from_function(page).run()
+    assert not app.exception
+    assert app.markdown[0].value == (
+        '#### <span class="icon" aria-hidden="true">trending_up</span> Prognose &amp; &lt;Plan&gt;'
+    )
+
+
 def test_on_panel_sets_the_description_and_the_white_of_the_panel():
     import altair as alt
 

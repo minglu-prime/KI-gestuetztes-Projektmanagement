@@ -112,6 +112,16 @@
   font-size: 21px;
   letter-spacing: -0.5px;
 }
+/* The icon of ui.heading, drawn like the ones Streamlit draws from ":material/name:". */
+.icon {
+  display: inline-block;
+  font-family: "Material Symbols Rounded";
+  font-weight: 400;
+  user-select: none;
+  vertical-align: bottom;
+  white-space: nowrap;
+  overflow-wrap: normal;
+}
 
 /* ---- Buttons --------------------------------------------------------------------------- */
 
