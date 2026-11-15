@@ -18,9 +18,13 @@ T = TypeVar("T")
 # Charts have to fit a phone as well. The legend goes below the plot, two entries a row. The
 # names of the tasks on the left get a share of the width of the chart: with a fixed 260 px
 # a phone showed the names and no bars. The share is taken from the container, not from the
-# plot, whose width depends on the labels in turn.
+# plot, whose width depends on the labels in turn. "0 * width" changes nothing in the value;
+# it makes Vega work the limit out again when the chart gets another width (a phone turned,
+# a window resized). Without it the limit of the first size stayed.
 LEGEND = alt.Legend(orient="bottom", title=None, columns=2)
-TASK_AXIS = alt.Axis(labelLimit=alt.ExprRef("clamp(containerSize()[0] * 0.35, 90, 260)"))
+TASK_AXIS = alt.Axis(
+    labelLimit=alt.ExprRef("clamp(containerSize()[0] * 0.35 + 0 * width, 90, 260)")
+)
 
 
 def adopted_project() -> Tracking | None:
