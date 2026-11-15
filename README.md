@@ -147,7 +147,8 @@ Verzug behandelt.
 Die Kontrolle sagt auch, was ein Verzug bedeutet. Die **Prognose** plant alles, was noch nicht
 fertig ist, ab heute neu ein und vergleicht das Ende mit Plan und Deadline. Im Beispiel unten
 sind zwei Aufgaben ein bis zwei Tage im Verzug; die Folge ist ein Ende vier Arbeitstage nach
-Plan und einen Tag nach der Deadline.
+Plan und einen Tag nach der Deadline. Die Fortschrittstabelle der Durchführung zeigt dasselbe je
+Aufgabe: „Prognose Ende“ neben dem geplanten Ende.
 
 Von dort geht es zurück in die Planung: „Rest mit Claude umplanen“ lädt die unfertigen Aufgaben
 als Plan ab heute, und das Gespräch mit Claude beginnt mit genau dem Problem, das die Prognose
@@ -164,6 +165,10 @@ flowchart LR
 Schlägt der Kontroll-Agent vor, Aufgaben einer anderen Person zu geben, rechnet Python nach, was
 das für das voraussichtliche Ende bedeutet. Das Ergebnis steht neben der Wirkung, die Claude
 erwartet. Maßnahmen ohne Umverteilung sind als nicht nachrechenbar markiert.
+
+Alles zusammen gibt es als **Kontrollbericht**: ein Markdown-Dokument aus einer Vorlage mit
+Kennzahlen, Prognose, Verzug, Kosten und, wenn erstellt, der Bewertung des Agenten samt
+nachgerechneter Wirkung.
 
 <div align="center">
 <img src="04-Prototyp/pm_agent/assets/screenshots/kontrolle.jpg" width="820" alt="Prognose auf der Seite Kontrolle: voraussichtliches Ende 21.12.2026, vier Arbeitstage nach Plan, Deadline um einen Arbeitstag verpasst; welche Aufgaben die beiden verspäteten aufhalten; Diagramm mit Plan und Prognose je Aufgabe und Linien für heute und die Deadline">
