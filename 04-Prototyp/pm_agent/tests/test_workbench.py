@@ -6,6 +6,7 @@ from datetime import date
 import pytest
 from test_tools import PROJECT, TEAM, plan_input
 
+from pm_agent import workbench
 from pm_agent.models import Member, Plan
 from pm_agent.planning import check_plan
 from pm_agent.workbench import (
@@ -140,6 +141,41 @@ def test_runs_csv_keeps_every_value_under_its_column_when_the_columns_change(tmp
         {"quelle": "agent", "runden": "3", "format": ""},
         {"quelle": "protokoll", "runden": "0", "format": "csv"},
     ]
+
+
+def test_runs_csv_loses_no_line_when_an_old_line_is_longer_than_the_heading(tmp_path):
+    # What an earlier version left behind once a column was added: a line with a cell more
+    # than the heading. Bringing the new column must keep every line, and the surplus cell
+    # is the value of that column.
+    path = tmp_path / "runs.csv"
+    path.write_text("quelle,runden\nagent,3\nagent,5,csv\nagent,7\n", encoding="utf-8")
+    append_run({"quelle": "agent", "runden": 1, "format": "md"}, path)
+    assert list(csv.DictReader(io.StringIO(path.read_text(encoding="utf-8")))) == [
+        {"quelle": "agent", "runden": "3", "format": ""},
+        {"quelle": "agent", "runden": "5", "format": "csv"},
+        {"quelle": "agent", "runden": "7", "format": ""},
+        {"quelle": "agent", "runden": "1", "format": "md"},
+    ]
+    assert not list(tmp_path.glob("*.tmp"))  # the rewrite went through a file of its own
+
+
+def test_runs_csv_is_appended_to_and_left_alone_otherwise(tmp_path):
+    # A file a spreadsheet saved: a byte order mark, Windows encoding, no line end at the
+    # end, a line with a cell too many. None of that is the business of an export: the new
+    # line goes below, and every byte before it stays.
+    path = tmp_path / "runs.csv"
+    before = "\ufeffquelle,runden\r\n".encode() + "geändert,3,x\r\nagent,5".encode("cp1252")
+    path.write_bytes(before)
+    append_run({"runden": 1, "quelle": "agent"}, path)
+    assert path.read_bytes() == before + b"\r\nagent,1\r\n"
+
+
+def test_runs_csv_is_found_where_the_tests_point_it(tmp_path, monkeypatch):
+    # The page calls append_run without a path. Bound at import, the default would be the
+    # real logs/runs.csv whatever a test sets.
+    monkeypatch.setattr(workbench, "RUNS_CSV", tmp_path / "runs.csv")
+    append_run({"quelle": "agent"})
+    assert (tmp_path / "runs.csv").read_bytes() == b"quelle\r\nagent\r\n"
 
 
 def test_round_summary_counts_check_messages_and_names_rejections():

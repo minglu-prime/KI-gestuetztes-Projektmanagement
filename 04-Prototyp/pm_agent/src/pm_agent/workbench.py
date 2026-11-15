@@ -9,6 +9,7 @@ import csv
 import io
 import json
 import math
+import os
 import re
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -200,21 +201,47 @@ def load_run(path: Path) -> tuple[Project, list[Member], Plan, dict[str, Any]]:
     )
 
 
-def append_run(row: dict[str, Any], path: Path = RUNS_CSV) -> None:
-    """One line per exported plan in runs.csv: the data for the before/after comparison."""
+def append_run(row: dict[str, Any], path: Path | None = None) -> None:
+    """One line per exported plan in runs.csv: the data for the before/after comparison.
+
+    The line is appended, under the heading of the file and in its order. Only when the row
+    brings a column the file does not have is the file written anew, with the columns it had
+    plus the new ones. Not in place: into a file of its own, which then replaces the old
+    one, so that nothing is lost if the writing fails half way."""
+    path = path or RUNS_CSV  # read at call time: tests point it to a temporary folder
     path.parent.mkdir(parents=True, exist_ok=True)
-    rows = []
+    # Bytes that are not UTF-8 (a spreadsheet saved the file) pass through as they are.
+    mode = {"errors": "surrogateescape", "newline": ""}
+    heading: list[str] = []
     if path.exists():
-        with path.open(encoding="utf-8", newline="") as file:
-            rows = list(csv.DictReader(file))
-    # The columns of the file, then what this row has on top. Written as a whole each time:
-    # appending a line under a heading with other columns would put values under the wrong
-    # name, and nobody would notice. The file has one line per export, so it stays small.
-    columns = list(dict.fromkeys([*(rows[0] if rows else []), *row]))
-    with path.open("w", encoding="utf-8", newline="") as file:
-        writer = csv.DictWriter(file, fieldnames=columns, restval="")
-        writer.writeheader()
-        writer.writerows([*rows, row])
+        with path.open(encoding="utf-8-sig", **mode) as file:
+            heading = next(csv.reader(file), [])
+
+    if heading and set(row) <= set(heading):
+        open_end = path.read_bytes()[-1:] not in (b"\n", b"\r")
+        with path.open("a", encoding="utf-8", **mode) as file:
+            if open_end:  # the last line has no end: the new one must not continue it
+                file.write("\r\n")
+            csv.DictWriter(file, fieldnames=heading, restval="").writerow(row)
+        return
+
+    lines: list[list[str]] = []
+    if heading:
+        with path.open(encoding="utf-8-sig", **mode) as file:
+            lines = list(csv.reader(file))[1:]
+    columns = [*heading, *(key for key in row if key not in heading)]
+    # A line longer than the old heading was written by a version that already had more
+    # columns: its surplus cells are the new columns, in their order. What goes beyond even
+    # those keeps a column, without a name anybody gave it.
+    width = max(len(columns), *(len(line) for line in lines), 0)
+    columns += [f"unbenannt_{number}" for number in range(1, width - len(columns) + 1)]
+    temporary = path.with_name(path.name + ".tmp")
+    with temporary.open("w", encoding="utf-8", **mode) as file:
+        writer = csv.writer(file)
+        writer.writerow(columns)
+        writer.writerows(line + [""] * (width - len(line)) for line in lines)
+        writer.writerow([row.get(column, "") for column in columns])
+    os.replace(temporary, path)
 
 
 def round_summary(number: int, record: dict[str, Any]) -> tuple[str, list[str]]:
