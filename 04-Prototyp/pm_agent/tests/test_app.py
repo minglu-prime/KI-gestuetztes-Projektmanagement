@@ -382,6 +382,24 @@ def test_an_absence_in_the_team_table_moves_the_plan(local, monkeypatch):
     assert {m.label: m.value for m in at.metric}["Planende"] == "12.11.2026"
 
 
+def test_free_days_of_the_project_move_the_plan(app, monkeypatch):
+    monkeypatch.setattr(agent, "run_planning", lambda project, team, on_round=None: PLAN)
+    at = fill_project(app)
+    at.text_input(key="free_days").input("09.11.2026").run()
+    button(at, "Plan mit Claude erstellen").click()
+    at.run()
+
+    assert not at.exception
+    # Without the free Monday the plan ends on 11.11.
+    assert {m.label: m.value for m in at.metric}["Planende"] == "12.11.2026"
+
+    # Not readable: the project is not complete, and the page says what is wrong.
+    at.text_input(key="free_days").input("Weihnachten").run()
+    assert not at.exception
+    assert any("'Weihnachten' nicht lesbar" in e.value for e in at.error)
+    assert button(at, "Plan mit Claude erstellen").disabled
+
+
 def test_an_agent_error_is_shown_to_the_project_lead(app, monkeypatch):
     def failing_run(project, team, on_round=None):
         raise PlanningError("Kein Zugang zur Claude API: ANTHROPIC_API_KEY ist nicht gesetzt.")

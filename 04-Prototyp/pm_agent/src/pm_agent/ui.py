@@ -4,6 +4,7 @@ from collections.abc import Callable
 from html import escape
 from typing import Any, TypeVar
 
+import altair as alt
 import streamlit as st
 from anthropic import APIError
 
@@ -13,6 +14,13 @@ from pm_agent.tracking import Tracking, load
 from pm_agent.workbench import InputError, describe_round, round_summary
 
 T = TypeVar("T")
+
+# Charts have to fit a phone as well. The legend goes below the plot, two entries a row. The
+# names of the tasks on the left get a share of the width of the chart: with a fixed 260 px
+# a phone showed the names and no bars. The share is taken from the container, not from the
+# plot, whose width depends on the labels in turn.
+LEGEND = alt.Legend(orient="bottom", title=None, columns=2)
+TASK_AXIS = alt.Axis(labelLimit=alt.ExprRef("clamp(containerSize()[0] * 0.35, 90, 260)"))
 
 
 def adopted_project() -> Tracking | None:

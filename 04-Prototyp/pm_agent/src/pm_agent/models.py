@@ -21,7 +21,7 @@ class _Model(BaseModel):
 
 
 class Absence(_Model):
-    """Days on which a member does not work, both ends included."""
+    """Days on which a member, or the whole project, does not work, both ends included."""
 
     first: date
     last: date
@@ -47,6 +47,8 @@ class Project(_Model):
     idea: NonEmpty
     start_date: date
     deadline: date
+    # Days on which nobody works: public holidays, a break. Mon-Fri days only count.
+    free_days: list[Absence] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _deadline_not_before_start(self) -> "Project":
@@ -101,7 +103,9 @@ class CheckResult(_Model):
     # warning whose numbers moved is not taken for a new one. Tuples, not joined strings:
     # an ID or a skill can contain any separator.
     warning_kinds: list[tuple[str, ...]] = Field(default_factory=list)
-    schedule: list[ScheduledTask] = Field(default_factory=list)
+    schedule: list[ScheduledTask] = Field(default_factory=list)  # in the order of the plan
+    # Task IDs in the order they were scheduled: whatever could start earliest, next.
+    order: list[str] = Field(default_factory=list)
     end_date: date | None = None
     critical_path: list[str] = Field(default_factory=list)
     # Task ID -> whole workdays the task can start later without moving the end of the plan.

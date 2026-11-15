@@ -50,14 +50,24 @@ def team_rows(team: list[Member]) -> list[dict[str, Any]]:
             "Name": m.name,
             "Skills": ", ".join(f"{skill} {level}" for skill, level in m.skills.items()),
             "Stunden/Woche": m.hours_per_week,
-            "Abwesend": ", ".join(
-                _date(a.first) if a.first == a.last else f"{_date(a.first)}–{_date(a.last)}"
-                for a in m.absences
-            ),
+            "Abwesend": free_days_text(m.absences),
             "Notiz": m.note,
         }
         for m in team
     ]
+
+
+def free_days(text: str) -> list[Absence]:
+    """Days or ranges as typed: "24.12.2026–01.01.2027, 06.01.2027". The free days of the
+    project in step 2 and the column "Abwesend" of the team are written the same way."""
+    return _absences(text, what="")
+
+
+def free_days_text(days: list[Absence]) -> str:
+    """The way free_days reads them."""
+    return ", ".join(
+        _date(a.first) if a.first == a.last else f"{_date(a.first)}–{_date(a.last)}" for a in days
+    )
 
 
 def rows_to_team(rows: list[dict[str, Any]]) -> list[Member]:
@@ -193,12 +203,18 @@ def load_run(path: Path) -> tuple[Project, list[Member], Plan, dict[str, Any]]:
 def append_run(row: dict[str, Any], path: Path = RUNS_CSV) -> None:
     """One line per exported plan in runs.csv: the data for the before/after comparison."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    new = not path.exists()
-    with path.open("a", encoding="utf-8", newline="") as file:
-        writer = csv.DictWriter(file, fieldnames=list(row))
-        if new:
-            writer.writeheader()
-        writer.writerow(row)
+    rows = []
+    if path.exists():
+        with path.open(encoding="utf-8", newline="") as file:
+            rows = list(csv.DictReader(file))
+    # The columns of the file, then what this row has on top. Written as a whole each time:
+    # appending a line under a heading with other columns would put values under the wrong
+    # name, and nobody would notice. The file has one line per export, so it stays small.
+    columns = list(dict.fromkeys([*(rows[0] if rows else []), *row]))
+    with path.open("w", encoding="utf-8", newline="") as file:
+        writer = csv.DictWriter(file, fieldnames=columns, restval="")
+        writer.writeheader()
+        writer.writerows([*rows, row])
 
 
 def round_summary(number: int, record: dict[str, Any]) -> tuple[str, list[str]]:
@@ -416,6 +432,14 @@ def plan_changes(before: Plan, after: Plan) -> list[str]:
     if renumbered:
         subject = "Eine Aufgabe hat" if renumbered == 1 else f"{renumbered} Aufgaben haben"
         lines.append(f"{subject} eine neue ID")
+    # The tasks that are in both plans, in the IDs of after: do they stand in the same order?
+    if [twin[t.id] for t in before.tasks if t.id in twin] != [
+        t.id for t in after.tasks if t.id in origin
+    ]:
+        lines.append(
+            "Reihenfolge der Aufgaben geändert: Können zwei Aufgaben gleichzeitig beginnen, "
+            "wird zuerst eingeplant, was weiter oben steht"
+        )
     lines += [f"Neues Risiko: {risk}" for risk in after.risks if risk not in before.risks]
     lines += [f"Risiko entfällt: {risk}" for risk in before.risks if risk not in after.risks]
     return lines
@@ -582,7 +606,7 @@ def _skills(text: str) -> dict[str, int]:
     return skills
 
 
-def _absences(text: str) -> list[Absence]:
+def _absences(text: str, what: str = "Abwesenheit ") -> list[Absence]:
     absences = []
     for part in filter(None, (p.strip() for p in text.split(","))):
         match = _ABSENCE.match(part)
@@ -590,7 +614,7 @@ def _absences(text: str) -> list[Absence]:
             days = [datetime.strptime(day, "%d.%m.%Y").date() for day in match.groups() if day]
         except (AttributeError, ValueError):  # no match, or a date like 31.02.
             raise InputError(
-                f"Abwesenheit '{part}' nicht lesbar, erwartet zum Beispiel "
+                f"{what}'{part}' nicht lesbar, erwartet zum Beispiel "
                 "'01.12.2026–05.12.2026' oder '23.12.2026'"
             ) from None
         absences.append(Absence(first=days[0], last=days[-1]))

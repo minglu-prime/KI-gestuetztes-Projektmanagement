@@ -13,6 +13,8 @@ from pm_agent.workbench import (
     append_run,
     bar_end,
     explain_task,
+    free_days,
+    free_days_text,
     gantt,
     load_run,
     load_team,
@@ -125,6 +127,18 @@ def test_runs_csv_gets_one_header_and_one_line_per_export(tmp_path):
     assert list(csv.DictReader(io.StringIO(path.read_text(encoding="utf-8")))) == [
         {"quelle": "agent", "runden": "3"},
         {"quelle": "protokoll", "runden": "0"},
+    ]
+
+
+def test_runs_csv_keeps_every_value_under_its_column_when_the_columns_change(tmp_path):
+    # A later version of the site records one thing more, or names the columns in another
+    # order. The lines written before must not end up under the wrong heading.
+    path = tmp_path / "logs" / "runs.csv"
+    append_run({"quelle": "agent", "runden": 3}, path)
+    append_run({"runden": 0, "format": "csv", "quelle": "protokoll"}, path)
+    assert list(csv.DictReader(io.StringIO(path.read_text(encoding="utf-8")))) == [
+        {"quelle": "agent", "runden": "3", "format": ""},
+        {"quelle": "protokoll", "runden": "0", "format": "csv"},
     ]
 
 
@@ -358,3 +372,15 @@ def test_a_plan_the_table_cannot_give_back_is_its_own_table_form():
     with pytest.raises(InputError):
         rows_to_plan(plan_rows(odd), odd, odd.risks)
     assert table_plan(odd) == odd
+
+
+def test_free_days_are_typed_like_absences_and_read_back():
+    days = free_days("24.12.2026–01.01.2027, 06.01.2027")
+    assert [(d.first, d.last) for d in days] == [
+        (date(2026, 12, 24), date(2027, 1, 1)),
+        (date(2027, 1, 6), date(2027, 1, 6)),
+    ]
+    assert free_days_text(days) == "24.12.2026–01.01.2027, 06.01.2027"
+    assert free_days("") == []
+    with pytest.raises(InputError, match="'Weihnachten' nicht lesbar"):
+        free_days("Weihnachten")

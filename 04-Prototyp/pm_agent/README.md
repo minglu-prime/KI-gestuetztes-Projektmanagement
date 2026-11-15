@@ -50,7 +50,8 @@ Sechs Schritte als Reiter:
    (z. B. `01.12.2026–05.12.2026, 23.12.2026`: an diesen Tagen wird für die Person keine
    Arbeit eingeplant); lokal speichern
    in `data/team.json`. Ohne Zustimmung des Teams startet keine Planung.
-2. **Projekt**: Idee, Start, Deadline.
+2. **Projekt**: Idee, Start, Deadline und, wenn es welche gibt, freie Tage für alle
+   (Feiertage, eine Pause), an denen niemand eingeplant wird.
 3. **Planung**: Claude plant, jede Runde erscheint sofort. Alternativ einen protokollierten Lauf
    aus `logs/` öffnen, ohne Claude erneut aufzurufen (z. B. für Vorführungen).
 4. **Ergebnis**: Planende, Fehler, Warnungen, Gantt-Diagramm, Auslastung, Begründungen, Risiken.

@@ -251,12 +251,17 @@ Was der Prototyp bewusst vereinfacht:
 
 - **Kalender:** Arbeitstage Montag bis Freitag. Abwesenheiten trägt die Projektleitung je
   Person ein; an diesen Tagen wird keine Arbeit eingeplant. Feiertage kennt der Kalender
-  nicht: Sie lassen sich als Abwesenheit bei allen Personen eintragen.
+  nicht von selbst: Die Projektleitung trägt sie beim Projekt als freie Tage für alle ein.
 - **Arbeit:** eine Person arbeitet an einer Aufgabe zur selben Zeit; eine Aufgabe gehört einer
   Person.
-- **Terminierung:** Aufgaben werden in der Reihenfolge ihrer Abhängigkeiten eingeplant, nicht
-  optimiert. Ein Plan kann deshalb länger ausfallen als nötig.
-- **Prognose:** Die restliche Arbeit beginnt heute und läuft in der Reihenfolge des Plans.
+- **Terminierung:** Als Nächstes wird eingeplant, was am frühesten beginnen kann; bei
+  Gleichstand, was im Plan weiter oben steht. Niemand wartet auf eine Aufgabe, solange eine
+  andere von ihm laufen könnte. Das ist eine Regel, keine Optimierung: Ein Plan kann länger
+  ausfallen als nötig.
+- **Prognose:** Die restliche Arbeit beginnt heute und wird nach derselben Regel eingeplant,
+  bei Gleichstand Begonnenes vor Offenem. Ein Projekt genau im Plan bekommt deshalb seinen
+  Plan als Prognose, und
+  „Rest mit Claude umplanen“ zeigt in der Planung dasselbe Ende wie die Prognose.
   Ohne eingetragenen Rest zählt eine begonnene Aufgabe mit Schätzung minus Ist-Stunden.
 - **Kosten:** Stunden mal Stundensatz. Token-Kosten der Agenten werden gezählt, aber nicht in
   Euro umgerechnet.
