@@ -22,7 +22,7 @@ from pm_agent.models import Project
 from pm_agent.planning import check_plan
 from pm_agent.tracking import adopt, has_progress, rest_project
 from pm_agent.tracking import load as load_tracking
-from pm_agent.ui import BUSY_HINT, chip, round_printer, strip
+from pm_agent.ui import BUSY_HINT, LEGEND, TASK_AXIS, chip, round_printer, strip
 from pm_agent.workbench import (
     PLAN_COLUMNS,
     RUNS_CSV,
@@ -447,8 +447,8 @@ with tabs[3]:
                     .encode(
                         x=alt.X("Start:T", title=None, axis=alt.Axis(format="%d.%m.")),
                         x2="Ende:T",
-                        y=alt.Y("Aufgabe:N", sort=None, title=None, axis=alt.Axis(labelLimit=260)),
-                        color="Person:N",
+                        y=alt.Y("Aufgabe:N", sort=None, title=None, axis=TASK_AXIS),
+                        color=alt.Color("Person:N", legend=LEGEND),
                         # A dark outline for the tasks without slack.
                         stroke=alt.condition(
                             "datum.Kritisch", alt.value("#18352d"), alt.value("transparent")

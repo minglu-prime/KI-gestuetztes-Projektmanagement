@@ -24,7 +24,7 @@ from pm_agent.tracking import (
     percent,
     planned_curve,
 )
-from pm_agent.ui import adopted_project, consent, run_with_progress
+from pm_agent.ui import LEGEND, TASK_AXIS, adopted_project, consent, run_with_progress
 
 state = st.session_state
 
@@ -124,12 +124,12 @@ if tracking is not None:
                 .encode(
                     x=alt.X("Start:T", title=None, axis=alt.Axis(format="%d.%m.")),
                     x2="Ende:T",
-                    y=alt.Y("Aufgabe:N", sort=None, title=None, axis=alt.Axis(labelLimit=260)),
+                    y=alt.Y("Aufgabe:N", sort=None, title=None, axis=TASK_AXIS),
                     yOffset=alt.YOffset("Art:N", sort=kinds),
                     color=alt.Color(
                         "Art:N",
                         sort=kinds,
-                        title=None,
+                        legend=LEGEND,
                         scale=alt.Scale(domain=kinds, range=["#b9cdbd", "#23654c"]),
                     ),
                     tooltip=["Aufgabe", "Art", "Zeitraum"],
@@ -179,7 +179,7 @@ if tracking is not None:
         colour = alt.Color(
             "Wert:N",
             sort=kinds,
-            title=None,
+            legend=LEGEND,
             scale=alt.Scale(domain=kinds, range=["#90ad9a", "#23654c", "#ba8d42"]),
         )
         curve = (
@@ -256,7 +256,7 @@ if tracking is not None:
                 x=alt.X("ID:N", sort=None, title="Aufgabe"),
                 xOffset=alt.XOffset("Art:N", sort=["Plan (h)", "Ist (h)"]),
                 y=alt.Y("Stunden:Q"),
-                color=alt.Color("Art:N", sort=["Plan (h)", "Ist (h)"], title=None),
+                color=alt.Color("Art:N", sort=["Plan (h)", "Ist (h)"], legend=LEGEND),
                 tooltip=["ID", "Art", "Stunden"],
             )
             # White like the panel around it; the theme would paint the page colour.
