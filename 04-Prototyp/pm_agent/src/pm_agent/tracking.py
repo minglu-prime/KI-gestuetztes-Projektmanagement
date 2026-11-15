@@ -378,7 +378,7 @@ def rest_project(tracking: Tracking, today: date) -> tuple[Project, Plan]:
             "lässt sich nichts mehr planen"
         )
     start = max(today, project.start_date)
-    return Project(idea=project.idea, start_date=start, deadline=project.deadline), rest
+    return project.model_copy(update={"start_date": start}), rest
 
 
 def forecast(tracking: Tracking, today: date, reassign: dict[str, str] | None = None) -> Forecast:
@@ -397,8 +397,8 @@ def forecast(tracking: Tracking, today: date, reassign: dict[str, str] | None = 
         )
     # The last possible date as deadline: only the dates are wanted here. Today can lie
     # behind the real deadline, and check_plan would then find no workday to plan in.
-    open_end = Project(
-        idea=project.idea, start_date=max(today, project.start_date), deadline=date.max
+    open_end = project.model_copy(
+        update={"start_date": max(today, project.start_date), "deadline": date.max}
     )
     # Scheduled like any plan: the Planung says the same about the rest when it is
     # loaded there ("Rest mit Claude umplanen").

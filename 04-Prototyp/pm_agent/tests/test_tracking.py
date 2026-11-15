@@ -969,3 +969,15 @@ def test_the_planned_value_counts_the_hours_of_the_schedule_not_of_whole_days(tm
         {"Tag": date(2026, 11, 9), "Stunden": 10},
         {"Tag": date(2026, 11, 10), "Stunden": 14},
     ]
+
+
+def test_the_forecast_and_the_rest_keep_the_free_days_of_the_project(tmp_path):
+    # Wednesday 11.11. is free for everybody. Nothing is done on Tuesday: A takes Tuesday,
+    # B Thursday and Friday.
+    project = PROJECT.model_copy(
+        update={"free_days": [Absence(first=date(2026, 11, 11), last=date(2026, 11, 11))]}
+    )
+    adopted = adopt(project, TEAM, PLAN, path=tmp_path / "projekt.json")
+    tuesday = date(2026, 11, 10)
+    assert forecast(adopted, tuesday).end == date(2026, 11, 13)
+    assert rest_project(adopted, tuesday)[0].free_days == project.free_days

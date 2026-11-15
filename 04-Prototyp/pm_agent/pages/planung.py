@@ -32,6 +32,8 @@ from pm_agent.workbench import (
     append_run,
     check_changes,
     explain_task,
+    free_days,
+    free_days_text,
     gantt,
     load_run,
     load_team,
@@ -62,7 +64,7 @@ def init() -> None:
         team, state.team_file_error = [], str(err)
     state.team_df = pd.DataFrame(team_rows(team), columns=TEAM_COLUMNS)
     # Widget defaults live in the session state, so open_run can overwrite them.
-    state.update(idea="", start=date.today(), deadline=None, consent=False)
+    state.update(idea="", start=date.today(), deadline=None, free_days="", consent=False)
     state.update(
         plan=None,
         original=None,
@@ -153,7 +155,12 @@ def open_run(path) -> None:
     state.team_df = pd.DataFrame(team_rows(team), columns=TEAM_COLUMNS)
     state.team_current = None
     state.team_version += 1
-    state.update(idea=project.idea, start=project.start_date, deadline=project.deadline)
+    state.update(
+        idea=project.idea,
+        start=project.start_date,
+        deadline=project.deadline,
+        free_days=free_days_text(project.free_days),
+    )
     show_plan(plan, record["rounds"], f"Protokoll {path.name}", record.get("seconds"))
     forget_conversation()
     state.step = STEPS[3]  # straight to the result
@@ -170,7 +177,12 @@ def load_rest() -> None:
     state.team_df = pd.DataFrame(team_rows(adopted.team), columns=TEAM_COLUMNS)
     state.team_current = None
     state.team_version += 1
-    state.update(idea=project.idea, start=project.start_date, deadline=project.deadline)
+    state.update(
+        idea=project.idea,
+        start=project.start_date,
+        deadline=project.deadline,
+        free_days=free_days_text(project.free_days),
+    )
     show_plan(plan, [], "Rest des übernommenen Projekts", None)
     forget_conversation()
     state.step = STEPS[4]  # straight to the step with the conversation
@@ -319,12 +331,25 @@ with tabs[1]:
     deadline = right.date_input(
         "Deadline", key="deadline", format="DD.MM.YYYY", persist_state="session"
     )
+    days_off = st.text_input(
+        "Freie Tage für alle (optional)",
+        key="free_days",
+        persist_state="session",
+        placeholder="z. B. 24.12.2026–01.01.2027, 06.01.2027",
+        help="Feiertage oder eine Pause: An diesen Tagen plant die Prüfung für niemanden "
+        "Arbeit ein. Einzelne Tage oder Zeiträume, getrennt durch Komma. Abwesenheiten "
+        "einzelner Personen stehen in der Teamtabelle.",
+    )
     project = None
     if not idea.strip() or deadline is None:
         st.info("Beschreibe die Projektidee und wähle eine Deadline.")
     else:
         try:
-            project = Project(idea=idea, start_date=start, deadline=deadline)
+            project = Project(
+                idea=idea, start_date=start, deadline=deadline, free_days=free_days(days_off)
+            )
+        except InputError as err:
+            st.error(f"Freie Tage: {err}")
         except ValidationError as err:
             st.error("; ".join(e["msg"].removeprefix("Value error, ") for e in err.errors()))
     next_step("Weiter zur Planung", STEPS[2], project is not None, "to_planning")

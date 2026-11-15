@@ -50,14 +50,24 @@ def team_rows(team: list[Member]) -> list[dict[str, Any]]:
             "Name": m.name,
             "Skills": ", ".join(f"{skill} {level}" for skill, level in m.skills.items()),
             "Stunden/Woche": m.hours_per_week,
-            "Abwesend": ", ".join(
-                _date(a.first) if a.first == a.last else f"{_date(a.first)}–{_date(a.last)}"
-                for a in m.absences
-            ),
+            "Abwesend": free_days_text(m.absences),
             "Notiz": m.note,
         }
         for m in team
     ]
+
+
+def free_days(text: str) -> list[Absence]:
+    """Days or ranges as typed: "24.12.2026–01.01.2027, 06.01.2027". The free days of the
+    project in step 2 and the column "Abwesend" of the team are written the same way."""
+    return _absences(text, what="")
+
+
+def free_days_text(days: list[Absence]) -> str:
+    """The way free_days reads them."""
+    return ", ".join(
+        _date(a.first) if a.first == a.last else f"{_date(a.first)}–{_date(a.last)}" for a in days
+    )
 
 
 def rows_to_team(rows: list[dict[str, Any]]) -> list[Member]:
@@ -596,7 +606,7 @@ def _skills(text: str) -> dict[str, int]:
     return skills
 
 
-def _absences(text: str) -> list[Absence]:
+def _absences(text: str, what: str = "Abwesenheit ") -> list[Absence]:
     absences = []
     for part in filter(None, (p.strip() for p in text.split(","))):
         match = _ABSENCE.match(part)
@@ -604,7 +614,7 @@ def _absences(text: str) -> list[Absence]:
             days = [datetime.strptime(day, "%d.%m.%Y").date() for day in match.groups() if day]
         except (AttributeError, ValueError):  # no match, or a date like 31.02.
             raise InputError(
-                f"Abwesenheit '{part}' nicht lesbar, erwartet zum Beispiel "
+                f"{what}'{part}' nicht lesbar, erwartet zum Beispiel "
                 "'01.12.2026–05.12.2026' oder '23.12.2026'"
             ) from None
         absences.append(Absence(first=days[0], last=days[-1]))
