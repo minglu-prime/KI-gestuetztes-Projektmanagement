@@ -9,6 +9,7 @@ from pm_agent.planning import (
     add_workdays,
     check_plan,
     count_workdays,
+    planned_work,
     workday_shift,
 )
 
@@ -600,3 +601,18 @@ def test_slack_keeps_the_sequence_of_the_plan():
     result = check_plan(p, [ANNA, BEN, clara], project())
     assert result.end_date == date(2026, 11, 13)
     assert result.slack["X"] == 1
+
+
+def test_planned_work_is_the_hours_done_by_the_end_of_each_workday():
+    # Anna is away on Tuesday: A (12 h) takes Monday and Wednesday morning, B the rest of
+    # Wednesday and Thursday morning.
+    anna = away(date(2026, 11, 10))
+    p = plan(task("A", 12), task("B", 8, deps=["A"]), owners={"A": "Anna", "B": "Anna"})
+    assert planned_work(p, [anna], project()) == [
+        (MON, 8),
+        (date(2026, 11, 10), 8),
+        (date(2026, 11, 11), 16),
+        (date(2026, 11, 12), 20),
+    ]
+    # A plan with errors has no schedule.
+    assert planned_work(plan(task("A", 8), owners={"A": "Zoe"}), [ANNA], project()) == []

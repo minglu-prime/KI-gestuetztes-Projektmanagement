@@ -737,7 +737,7 @@ def test_earned_value_has_no_index_without_a_basis(tracking):
 
 
 def test_the_planned_curve_has_one_point_per_workday_of_the_plan(tracking):
-    assert planned_curve(tracking, evaluate(tracking, today=date(2026, 11, 10))) == [
+    assert planned_curve(tracking) == [
         {"Tag": date(2026, 11, 9), "Stunden": 8},
         {"Tag": date(2026, 11, 10), "Stunden": 16},
         {"Tag": date(2026, 11, 11), "Stunden": 24},
@@ -817,7 +817,7 @@ def test_the_planned_value_follows_the_hours_the_plan_puts_on_each_day(tmp_path)
         update={"absences": [Absence(first=date(2026, 11, 10), last=date(2026, 11, 20))]}
     )
     away = adopt(PROJECT, [anna], one_person_plan(("A", 16, [])), path=tmp_path / "projekt.json")
-    assert planned_curve(away, evaluate(away, today=date(2026, 11, 9))) == [
+    assert planned_curve(away) == [
         {"Tag": date(2026, 11, 9), "Stunden": 8},
         {"Tag": date(2026, 11, 20), "Stunden": 8},
         {"Tag": date(2026, 11, 23), "Stunden": 16},
@@ -945,3 +945,27 @@ def test_what_waits_for_a_late_task_is_listed_in_the_order_of_the_plan(tmp_path)
     late = apply_rows(adopted, [{"ID": "C", "Status": "in Arbeit", "Ist (h)": 2}])
     assert [task.id for task in rest_plan(late).tasks] == ["C", "A", "B"]
     assert forecast(late, date(2026, 11, 12)).blocked["A"] == ["B", "C"]
+
+
+def test_the_planned_value_counts_the_hours_of_the_schedule_not_of_whole_days(tmp_path):
+    # Ben's B takes Monday morning. Anna does Y (2 h) first, waits for B, and begins X (8 h)
+    # at noon. By Monday evening the plan has 4 + 2 + 4 hours done; X ends on Tuesday.
+    ben = Member(name="Ben", hours_per_week=40)
+    plan = Plan.model_validate(
+        {
+            "tasks": [
+                {"id": "B", "title": "b", "estimate_hours": 4},
+                {"id": "X", "title": "x", "estimate_hours": 8, "depends_on": ["B"]},
+                {"id": "Y", "title": "y", "estimate_hours": 2},
+            ],
+            "assignments": [
+                {"task_id": tid, "member": member, "reason": "r"}
+                for tid, member in [("B", "Ben"), ("X", "Anna"), ("Y", "Anna")]
+            ],
+        }
+    )
+    adopted = adopt(PROJECT, [*TEAM, ben], plan, path=tmp_path / "projekt.json")
+    assert planned_curve(adopted) == [
+        {"Tag": date(2026, 11, 9), "Stunden": 10},
+        {"Tag": date(2026, 11, 10), "Stunden": 14},
+    ]

@@ -26,10 +26,9 @@ from pm_agent.models import (
     Task,
 )
 from pm_agent.planning import (
-    WORKDAYS_PER_WEEK,
     add_workdays,
     check_plan,
-    count_workdays,
+    planned_work,
     workday_shift,
 )
 from pm_agent.workbench import DATA_DIR, InputError, _cell, _date, _md, _reason, bar_end
@@ -256,43 +255,11 @@ class EarnedValue:
         return self.earned / self.actual if self.actual else None
 
 
-def planned_curve(tracking: Tracking, evaluation: Evaluation) -> list[dict[str, Any]]:
+def planned_curve(tracking: Tracking) -> list[dict[str, Any]]:
     """The planned value over the plan: the hours the plan wanted done by the end of a
-    workday. Only the days where the curve bends, and the first and the last one.
-
-    Each person works their daily hours on their tasks in planned order, a task not before
-    its planned start and not while the person is away. That is the plan day by day; spread
-    evenly over a task's days, hours would count on days the plan gives to another task or
-    to an absence."""
-    people = {member.name: member for member in tracking.team}
-    queue: dict[str, list[TaskState]] = {}
-    for task in sorted(evaluation.tasks, key=lambda t: t.planned_start):  # stable
-        queue.setdefault(task.member, []).append(task)
-    left = {task.id: task.planned_hours for task in evaluation.tasks}
-    first = min(t.planned_start for t in evaluation.tasks)
-    last = max(t.planned_end for t in evaluation.tasks)
-    total, values = 0.0, []
-    # ponytail: one step per workday of the plan. A plan that ends in the year 9999 takes
-    # seconds; skip the stretches where nobody works if that ever matters.
-    for number in range(count_workdays(first, last)):
-        day = add_workdays(first, number)
-        for name, tasks in queue.items():
-            if any(a.first <= day <= a.last for a in people[name].absences):
-                continue
-            budget = people[name].hours_per_week / WORKDAYS_PER_WEEK
-            for task in tasks:
-                if task.planned_start <= day and left[task.id] > 0:
-                    done = min(budget, left[task.id])
-                    left[task.id] -= done
-                    budget -= done
-                    total += done
-        for task in evaluation.tasks:
-            # The plan has the task done on its last day, whatever the walk above made of
-            # a day shared with other tasks.
-            if task.planned_end <= day and left[task.id] > 0:
-                total += left[task.id]
-                left[task.id] = 0.0
-        values.append((day, round(total, 6)))
+    workday (planning.planned_work). Only the days where the curve bends, and the first and
+    the last one."""
+    values = planned_work(tracking.plan, tracking.team, tracking.project)
     return [
         {"Tag": day, "Stunden": hours}
         for number, (day, hours) in enumerate(values)
@@ -304,9 +271,7 @@ def planned_curve(tracking: Tracking, evaluation: Evaluation) -> list[dict[str, 
 
 def earned_value(tracking: Tracking, evaluation: Evaluation) -> EarnedValue:
     reached = [
-        point["Stunden"]
-        for point in planned_curve(tracking, evaluation)
-        if point["Tag"] <= evaluation.today
+        point["Stunden"] for point in planned_curve(tracking) if point["Tag"] <= evaluation.today
     ]
     return EarnedValue(
         # Between two kept days the curve is flat or the later day is kept too.

@@ -185,7 +185,7 @@ if tracking is not None:
             scale=alt.Scale(domain=kinds, range=["#90ad9a", "#23654c", "#ba8d42"]),
         )
         curve = (
-            alt.Chart(pd.DataFrame(planned_curve(tracking, result)).assign(Wert=kinds[0]))
+            alt.Chart(pd.DataFrame(planned_curve(tracking)).assign(Wert=kinds[0]))
             # With points: a plan of one day has no line to draw.
             .mark_line(point=True)
             .encode(

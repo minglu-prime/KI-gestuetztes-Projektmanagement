@@ -164,6 +164,35 @@ def check_plan(
     )
 
 
+def planned_work(plan: Plan, team: list[Member], project: Project) -> list[tuple[date, float]]:
+    """The hours of work the plan has done by the end of each workday, from the first day of
+    the project to the last day of the plan. From the schedule itself, so a task that begins
+    at noon counts with half a day. Empty for a plan check_plan would refuse."""
+    if check_plan(plan, team, project, dates_only=True).errors:
+        return []
+    members = {m.name: m for m in team}
+    owner = {a.task_id: a.member for a in plan.assignments}
+    away = {m.name: _away(m, project.start_date) for m in team}
+    start, end, _, _ = _schedule(plan, members, owner, away)
+    last_day = max(_days(start[t.id], end[t.id])[1] for t in plan.tasks)
+    done = []
+    # ponytail: one step per workday of the plan. A plan that ends in the year 9999 takes
+    # seconds; skip the stretches where nobody works if that ever matters.
+    for day in range(last_day + 1):
+        total = 0.0
+        for task in plan.tasks:
+            member = owner[task.id]
+            until = min(end[task.id], day + 1)
+            worked = until - start[task.id]
+            if worked <= 0:
+                continue
+            for first, last in away[member]:  # no task starts or ends inside an absence
+                worked -= max(0.0, min(until, last + 1) - max(start[task.id], first))
+            total += worked * members[member].hours_per_week / WORKDAYS_PER_WEEK
+        done.append((add_workdays(project.start_date, day), round(total, 6)))
+    return done
+
+
 def add_workdays(start: date, n: int) -> date:
     """Date of workday n, where workday 0 is the first Mon-Fri on or after start."""
     day = _next_workday(start)
