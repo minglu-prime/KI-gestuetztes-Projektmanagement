@@ -11,7 +11,15 @@ from collections import Counter
 from datetime import date, timedelta
 from graphlib import CycleError, TopologicalSorter
 
-from pm_agent.models import CheckResult, Member, MemberLoad, Plan, Project, ScheduledTask
+from pm_agent.models import (
+    Absence,
+    CheckResult,
+    Member,
+    MemberLoad,
+    Plan,
+    Project,
+    ScheduledTask,
+)
 
 WORKDAYS_PER_WEEK = 5
 # Workday offsets are floats. Round before floor/ceil so noise like 0.9999999999999999
@@ -50,7 +58,8 @@ def check_plan(
 
     members = {m.name: m for m in team}
     owner = {a.task_id: a.member for a in plan.assignments}
-    away = {m.name: _away(m, project.start_date) for m in team}
+    # A free day of the project is an absence of everybody.
+    away = {m.name: _away([*m.absences, *project.free_days], project.start_date) for m in team}
     start, end, waits_for = _schedule(plan, members, owner, away, order)
     last = max(plan.tasks, key=lambda t: end[t.id]).id
     # Dates end on 31.12.9999. Written as "not <=" so that an infinite offset fails too.
@@ -286,12 +295,12 @@ def _slack(
     return harmless
 
 
-def _away(member: Member, start: date) -> list[tuple[int, int]]:
-    """The member's absences as ranges of workday offsets (first, last), sorted and merged.
+def _away(absences: list[Absence], start: date) -> list[tuple[int, int]]:
+    """Absences as ranges of workday offsets (first, last), sorted and merged.
     Ranges, not single days: an absence can be as long as the calendar."""
     day0 = _next_workday(start)
     ranges = []
-    for absence in member.absences:
+    for absence in absences:
         first = (
             0 if absence.first <= day0 else count_workdays(day0, absence.first - timedelta(days=1))
         )

@@ -563,3 +563,21 @@ def test_the_critical_path_follows_whatever_really_holds_a_task():
         result = check_plan(p, [anna, BEN], project())
         assert result.slack == {own: 0, other: 1, "N": 0}
         assert result.critical_path == [own, "N"]
+
+
+def test_on_a_free_day_of_the_project_nobody_works():
+    # Tuesday 10.11. is free for everybody. Anna's and Ben's two-day tasks take Monday and
+    # Wednesday, and the free day is not counted as time until the deadline.
+    free = Project(
+        idea="Lernplattform für Erstsemester",
+        start_date=MON,
+        deadline=date(2026, 11, 13),
+        free_days=[{"first": date(2026, 11, 10), "last": date(2026, 11, 10)}],
+    )
+    p = plan(task("A", 16), task("B", 16), owners={"A": "Anna", "B": "Ben"})
+    result = check_plan(p, [ANNA, BEN], free)
+    assert [(s.start, s.end) for s in result.schedule] == [(MON, date(2026, 11, 11))] * 2
+    assert [item.capacity_hours for item in result.load] == [32, 32]  # four days, not five
+    # A person's own absence and a free day add up.
+    anna = away(date(2026, 11, 11))
+    assert by_id(check_plan(p, [anna, BEN], free))["A"].end == date(2026, 11, 12)

@@ -854,3 +854,15 @@ def test_the_status_report_says_who_does_what_in_the_next_five_workdays(tracking
     assert "Ohne Prognose lässt sich nicht sagen, was ansteht." in status_report(
         absurd, evaluate(absurd, today=thursday)
     )
+
+
+def test_the_forecast_and_the_rest_keep_the_free_days_of_the_project(tmp_path):
+    # Wednesday 11.11. is free for everybody. Nothing is done on Tuesday: A takes Tuesday,
+    # B Thursday and Friday.
+    project = PROJECT.model_copy(
+        update={"free_days": [Absence(first=date(2026, 11, 11), last=date(2026, 11, 11))]}
+    )
+    adopted = adopt(project, TEAM, PLAN, path=tmp_path / "projekt.json")
+    tuesday = date(2026, 11, 10)
+    assert forecast(adopted, tuesday).end == date(2026, 11, 13)
+    assert rest_project(adopted, tuesday)[0].free_days == project.free_days

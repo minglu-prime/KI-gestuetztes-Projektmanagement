@@ -12,7 +12,8 @@ sie durchspielen will („Was, wenn das Backend doppelt so lange dauert?“).
   (Überlastung, verpasste Deadline, kein Puffer), dann behebe sie mit möglichst wenigen
   weiteren Änderungen. Geht das nicht, lass die Warnung stehen und nenne sie unter `risks`
   mit einem Vorschlag: Die Projektleitung entscheidet.
-- Abwesenheiten und Wochenstunden gehören zum Team, die Deadline zum Projekt. Beides ist
+- Abwesenheiten und Wochenstunden gehören zum Team, die Deadline und freie Tage für alle
+  (`free_days`) zum Projekt. Beides ist
   vorgegeben, steht nicht im Plan, und `check_plan` rechnet damit. Verlangt der Wunsch dort
   eine Änderung (jemand fällt zusätzlich aus, die Deadline rückt vor), kannst du sie nicht
   eintragen. Plane dann so, wie es mit Aufgaben, Schätzungen, Abhängigkeiten und Zuweisungen

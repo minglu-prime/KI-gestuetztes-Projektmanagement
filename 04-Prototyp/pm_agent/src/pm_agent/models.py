@@ -21,7 +21,7 @@ class _Model(BaseModel):
 
 
 class Absence(_Model):
-    """Days on which a member does not work, both ends included."""
+    """Days on which a member, or the whole project, does not work, both ends included."""
 
     first: date
     last: date
@@ -47,6 +47,8 @@ class Project(_Model):
     idea: NonEmpty
     start_date: date
     deadline: date
+    # Days on which nobody works: public holidays, a break. Mon-Fri days only count.
+    free_days: list[Absence] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _deadline_not_before_start(self) -> "Project":

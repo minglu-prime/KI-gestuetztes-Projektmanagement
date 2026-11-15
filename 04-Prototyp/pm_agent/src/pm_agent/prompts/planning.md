@@ -24,7 +24,8 @@ ihn und entscheidet.
 
 1. Entwirf den Plan und prüfe ihn mit `check_plan`. Das Werkzeug rechnet mit Arbeitstagen
    Mo–Fr, Wochenstunden / 5 pro Arbeitstag und einem Task pro Person zur selben Zeit; an
-   Abwesenheitstagen plant es für die Person keine Arbeit ein. Es liefert Fehler, Warnungen,
+   Abwesenheitstagen plant es für die Person keine Arbeit ein, an freien Tagen des Projekts
+   (`free_days`) für niemanden. Es liefert Fehler, Warnungen,
    Enddatum, kritischen Pfad und die Auslastung je Person bis zur Deadline (`utilization` über
    1 heißt überlastet, `null` heißt bis zur Deadline abwesend).
 2. Behebe alle Fehler. Behebe auch Warnungen (Überlastung, verpasste Deadline, kein Puffer
