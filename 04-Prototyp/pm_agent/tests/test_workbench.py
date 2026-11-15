@@ -1,6 +1,7 @@
 import csv
 import io
 import json
+import os
 import threading
 from datetime import date, datetime
 
@@ -247,6 +248,30 @@ def test_putting_aside_moves_the_file_that_is_there(tmp_path, monkeypatch):
     append_run({"quelle": "agent", "runden": 3, "format": "csv"}, path)
     (aside,) = put_aside(path)
     assert (tmp_path / aside).read_bytes() == b"quelle,runden\r\nagent,1\r\nnebenan,2\r\n"
+
+
+@pytest.mark.parametrize(
+    "move",
+    [
+        pytest.param(
+            workbench._rename,
+            marks=pytest.mark.skipif(os.name != "nt", reason="refuses only on Windows"),
+        ),
+        workbench._link_and_unlink,
+    ],
+)
+def test_both_ways_to_move_a_file_refuse_a_name_that_exists(tmp_path, move):
+    # Windows and the other systems each have one move that does not write over a file.
+    # On Windows both run: its file system has hard links too.
+    source, free, taken = tmp_path / "runs.csv", tmp_path / "frei.csv", tmp_path / "belegt.csv"
+    source.write_bytes(b"alt")
+    taken.write_bytes(b"von nebenan")
+    with pytest.raises(FileExistsError):
+        move(source, taken)
+    assert (source.read_bytes(), taken.read_bytes()) == (b"alt", b"von nebenan")
+    move(source, free)
+    assert not source.exists()
+    assert free.read_bytes() == b"alt"
 
 
 def test_no_list_of_files_put_aside_without_the_folder(tmp_path):

@@ -289,14 +289,25 @@ def _put_aside(path: Path) -> None:
         count = "" if number == 1 else f"-{number}"
         aside = path.with_name(f"{path.stem}-bis-{stamp}{count}{path.suffix}")
         try:
-            if os.name == "nt":
-                os.rename(path, aside)  # on Windows a rename refuses an existing name
-            else:
-                os.link(path, aside)  # elsewhere it would write over it; a link refuses
-                path.unlink()
+            _move(path, aside)
             return
         except FileExistsError:
             number += 1
+
+
+def _rename(source: Path, target: Path) -> None:
+    """Windows only: there a rename refuses a name that exists."""
+    os.rename(source, target)
+
+
+def _link_and_unlink(source: Path, target: Path) -> None:
+    """Elsewhere a rename writes over an existing file. A hard link refuses the name."""
+    os.link(source, target)
+    source.unlink()
+
+
+# The move of _put_aside: never onto a name that exists.
+_move = _rename if os.name == "nt" else _link_and_unlink
 
 
 def put_aside(path: Path | None = None) -> list[str]:
