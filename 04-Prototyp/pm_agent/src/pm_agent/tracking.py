@@ -30,7 +30,6 @@ from pm_agent.planning import (
     add_workdays,
     check_plan,
     count_workdays,
-    scheduling_order,
     workday_shift,
 )
 from pm_agent.workbench import DATA_DIR, InputError, _cell, _date, _md, _reason, bar_end
@@ -196,7 +195,7 @@ def apply_rows(tracking: Tracking, rows: list[dict[str, Any]]) -> Tracking:
 
 
 def evaluate(tracking: Tracking, today: date) -> Evaluation:
-    schedule = check_plan(tracking.plan, tracking.team, tracking.project, with_slack=False).schedule
+    schedule = check_plan(tracking.plan, tracking.team, tracking.project, dates_only=True).schedule
     dates = {s.task_id: s for s in schedule}
     tasks = []
     for task in tracking.plan.tasks:
@@ -340,14 +339,15 @@ MIN_REST_HOURS = 1.0
 
 @dataclass(frozen=True)
 class Forecast:
-    """Where the project ends if the remaining work starts today, in the order of the plan."""
+    """Where the project ends if the remaining work starts today."""
 
     planned_end: date
     end: date | None  # None: every task is finished
     shift: int  # workdays the end lies behind the planned end; negative: ahead of it
     deadline_gap: int  # workdays the end lies behind the deadline; negative: buffer left
     blocked: dict[str, list[str]]  # overdue task -> unfinished tasks that wait for it
-    schedule: list[ScheduledTask]  # the forecast dates of the unfinished tasks
+    # The forecast dates of the unfinished tasks, in the order they are worked on.
+    schedule: list[ScheduledTask]
     # Why there is no forecast although tasks are unfinished: what is left does not fit
     # the calendar, or cannot be scheduled as asked. `end` is None then as well.
     problem: str | None = None
@@ -383,7 +383,9 @@ def rest_plan(tracking: Tracking, reassign: dict[str, str] | None = None) -> Pla
                     "depends_on": [dep for dep in task.depends_on if dep in open_ids],
                 }
             )
-            for task in tracking.plan.tasks
+            # What is started comes first: of two tasks a person could work on, the one
+            # in progress goes on. (sorted is stable: otherwise the order of the plan.)
+            for task in sorted(tracking.plan.tasks, key=lambda t: state[t.id].status != "in Arbeit")
             if task.id in open_ids
         ],
         assignments=[
@@ -419,7 +421,7 @@ def forecast(tracking: Tracking, today: date, reassign: dict[str, str] | None = 
     `reassign` (task ID -> member) answers "what if": the forecast with these unfinished tasks
     given to someone else. The names must be team members."""
     project, plan = tracking.project, tracking.plan
-    planned_end = check_plan(plan, tracking.team, project, with_slack=False).end_date
+    planned_end = check_plan(plan, tracking.team, project, dates_only=True).end_date
     rest = rest_plan(tracking, reassign)
     if rest is None:
         return Forecast(
@@ -430,11 +432,9 @@ def forecast(tracking: Tracking, today: date, reassign: dict[str, str] | None = 
     open_end = Project(
         idea=project.idea, start_date=max(today, project.start_date), deadline=date.max
     )
-    # In the order of the plan. On its own the rest can sort differently, because the
-    # dependencies on finished tasks are gone, and a project on plan would look late.
-    left = {task.id for task in rest.tasks}
-    order = [tid for tid in scheduling_order(plan) if tid in left]
-    expected = check_plan(rest, tracking.team, open_end, order=order, with_slack=False)
+    # Scheduled like any plan: the Planung says the same about the rest when it is
+    # loaded there ("Rest mit Claude umplanen").
+    expected = check_plan(rest, tracking.team, open_end, dates_only=True)
     if expected.errors:
         return Forecast(
             planned_end=planned_end,
@@ -463,7 +463,7 @@ def forecast(tracking: Tracking, today: date, reassign: dict[str, str] | None = 
         shift=workday_shift(planned_end, end),
         deadline_gap=workday_shift(project.deadline, end),
         blocked=waiting,
-        schedule=expected.schedule,
+        schedule=sorted(expected.schedule, key=lambda s: expected.order.index(s.task_id)),
     )
 
 
@@ -478,8 +478,6 @@ def week_ahead(tracking: Tracking, today: date, days: int = 5) -> list[dict[str,
     has a problem; forecast() says which."""
     horizon = add_workdays(today, days - 1)
     titles = {task.id: task.title for task in tracking.plan.tasks}
-    # Two tasks of one person on the same day: in the order they are worked on.
-    turn = {tid: number for number, tid in enumerate(scheduling_order(tracking.plan))}
     ahead = [s for s in forecast(tracking, today).schedule if s.start <= horizon]
     return [
         {
@@ -490,7 +488,9 @@ def week_ahead(tracking: Tracking, today: date, days: int = 5) -> list[dict[str,
             "Ende": _date(s.end),
             "Status": tracking.progress[s.task_id].status,
         }
-        for s in sorted(ahead, key=lambda s: (s.member, s.start, turn[s.task_id]))
+        # Stable: two tasks of one person on the same day stay in the order they are
+        # worked on, which is the order of the forecast's schedule.
+        for s in sorted(ahead, key=lambda s: (s.member, s.start))
     ]
 
 

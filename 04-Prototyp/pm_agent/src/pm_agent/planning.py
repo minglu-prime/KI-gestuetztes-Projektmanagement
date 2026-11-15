@@ -23,35 +23,21 @@ def check_plan(
     plan: Plan,
     team: list[Member],
     project: Project,
-    order: list[str] | None = None,
-    with_slack: bool = True,
+    dates_only: bool = False,
 ) -> CheckResult:
     """Structural errors stop the check. Otherwise the plan is scheduled, and the warnings
     say what the project lead has to decide (deadline, buffer, overload, missing skills).
 
-    `order` schedules the tasks in this order instead of scheduling_order(plan). It has to
-    name every task once, each after the tasks it depends on (ValueError otherwise). The
-    forecast uses it to keep the order of the plan when finished tasks have dropped out.
-
-    `with_slack=False` leaves CheckResult.slack empty. The slack schedules the plan again
-    several times per task; who only wants the dates saves most of the time."""
+    `dates_only=True` leaves CheckResult.slack and critical_path empty. Both schedule the
+    plan again and again; who only wants the dates saves most of the time."""
     errors = _structural_errors(plan, team, project)
     if errors:
         return CheckResult(errors=errors)
-    if order is None:
-        order = scheduling_order(plan)
-    else:
-        position = {tid: number for number, tid in enumerate(order)}
-        complete = sorted(order) == sorted(task.id for task in plan.tasks)
-        if not complete or any(
-            position[dep] > position[task.id] for task in plan.tasks for dep in task.depends_on
-        ):
-            raise ValueError("order must name every task once, after the tasks it depends on")
 
     members = {m.name: m for m in team}
     owner = {a.task_id: a.member for a in plan.assignments}
     away = {m.name: _away(m, project.start_date) for m in team}
-    start, end, waits_for = _schedule(plan, members, owner, away, order)
+    start, end, waits_for, order = _schedule(plan, members, owner, away)
     last = max(plan.tasks, key=lambda t: end[t.id]).id
     # Dates end on 31.12.9999. Written as "not <=" so that an infinite offset fails too.
     if not end[last] <= count_workdays(project.start_date, date.max):
@@ -75,14 +61,16 @@ def check_plan(
         )
     end_date = max(s.end for s in schedule)
     slack = {}
-    if with_slack:
+    # ponytail: the slack schedules the whole plan a few times per task. 30 tasks take
+    # 12 ms, 100 tasks 0.3 s; schedule only from the held-back task on if that matters.
+    if not dates_only:
         slack = {
             task.id: _slack(task.id, plan, members, owner, away, order, start, end)
             for task in plan.tasks
         }
 
     # Critical path: walk back from the task that finishes last along whatever set each start.
-    node = last
+    node = None if dates_only else last
     critical_path = []
     while node is not None:
         critical_path.append(node)
@@ -90,7 +78,7 @@ def check_plan(
         # latest end on, that moves its start when held back a day. None of them if the
         # task waits for the end of an absence anyway.
         for before in waits_for[node]:
-            later, _, _ = _schedule(plan, members, owner, away, order, held_back=(before, 1))
+            later = _schedule(plan, members, owner, away, order, (before, 1))[0]
             if round(later[node] - start[node], _DIGITS) != 0:
                 node = before
                 break
@@ -168,6 +156,7 @@ def check_plan(
         warnings=warnings,
         warning_kinds=kinds,
         schedule=schedule,
+        order=order,
         end_date=end_date,
         critical_path=critical_path,
         slack=slack,
@@ -265,8 +254,10 @@ def _slack(
     end: dict[str, float],
 ) -> int:
     """Whole workdays task `tid` can start later before the last day of the plan moves.
-    Found by scheduling again with the task held back: a later start never ends the plan
-    earlier, so the largest harmless delay can be searched by halving."""
+    Found by scheduling again in the same sequence (`order`) with the task held back: a
+    later start never ends the plan earlier then, so the largest harmless delay can be
+    searched by halving. In the same sequence, because the question is what a delay does
+    to this plan, not which other plan would be better then."""
 
     def final(first: dict[str, float], last: dict[str, float]) -> int:
         return max(_days(first[t], last[t])[1] for t in last)
@@ -276,13 +267,25 @@ def _slack(
     # bound from the room behind the task is wrong: a delay can fall into the person's absence
     # or into the rest of a day and cost nothing.
     harmless, harmful = 0, planned + 1
+
+    def moves_the_end(days: int) -> bool:
+        first, last, _, _ = _schedule(plan, members, owner, away, order, (tid, days))
+        return final(first, last) != planned
+
+    # Most tasks have little slack: double the delay until it hurts, then halve the gap.
+    # A task without slack costs one schedule this way, not one per halving of the plan.
+    step = 1
+    while step < harmful:
+        if moves_the_end(step):
+            harmful = step
+        else:
+            harmless, step = step, step * 2
     while harmful - harmless > 1:
         middle = (harmless + harmful) // 2
-        first, last, _ = _schedule(plan, members, owner, away, order, held_back=(tid, middle))
-        if final(first, last) == planned:
-            harmless = middle
-        else:
+        if moves_the_end(middle):
             harmful = middle
+        else:
+            harmless = middle
     return harmless
 
 
@@ -334,46 +337,79 @@ def _schedule(
     members: dict[str, Member],
     owner: dict[str, str],
     away: dict[str, list[tuple[int, int]]],
-    order: list[str],
+    fixed: list[str] | None = None,
     held_back: tuple[str, int] | None = None,
-) -> tuple[dict[str, float], dict[str, float], dict[str, list[str]]]:
-    """Start and end of each task in workday offsets, plus the tasks it could start after:
-    its dependencies and the member's previous task, the one that ends last first. Whether
-    the task really waited for one of them or for the end of an absence decides check_plan.
-    `held_back` makes one task start that many workdays later than it does, to see what
-    that does."""
-    # ponytail: greedy list scheduling in dependency order, not an optimal schedule. A member
-    # can sit idle waiting for a dependency while another of their tasks could already run.
-    # Upgrade to priority by remaining critical path if plans come out visibly too long.
+) -> tuple[dict[str, float], dict[str, float], dict[str, list[str]], list[str]]:
+    """Start and end of each task in workday offsets; the tasks it could start after (its
+    dependencies and the member's previous task, the one that ends last first); and the
+    order in which the tasks were scheduled.
+
+    Of the tasks whose dependencies are scheduled, the one that can start earliest goes
+    next; of two that can start at the same time, the one listed first in the plan. So
+    nobody waits for a task while another of their tasks could run. Whether a task really
+    waited for one of the tasks before it or for the end of an absence decides check_plan.
+
+    `fixed` schedules the tasks in this sequence instead: the one a first run returned.
+    `held_back` makes one task start that many workdays later than it could. Together they
+    answer what a delay does to the plan as it stands."""
+    # ponytail: a dispatch rule, not an optimal schedule. It never looks ahead, so a short
+    # task can go before the one a long chain waits for. Upgrade to a priority by the work
+    # behind a task if plans come out visibly too long.
     tasks = {t.id: t for t in plan.tasks}
+    position = {t.id: number for number, t in enumerate(plan.tasks)}
+    open_deps = {t.id: set(t.depends_on) for t in plan.tasks}
+    followers: dict[str, list[str]] = {t.id: [] for t in plan.tasks}
+    for t in plan.tasks:
+        for dep in open_deps[t.id]:
+            followers[dep].append(t.id)
     free_at: dict[str, tuple[float, str]] = {}  # member -> (offset, task that ends there)
     start: dict[str, float] = {}
     end: dict[str, float] = {}
     waits_for: dict[str, list[str]] = {}
-    for tid in order:
+    order: list[str] = []
+
+    def option(tid: str) -> tuple[tuple[float, int], float, float, list[tuple[float, str]]]:
+        """When the task could run if it were scheduled now, and what it would wait for."""
         task, member = tasks[tid], owner[tid]
         candidates = [(end[dep], dep) for dep in task.depends_on]
         if member in free_at:
             candidates.append(free_at[member])
         earliest = max(candidates, default=(0.0, None))[0]
-        waits_for[tid] = list(dict.fromkeys(c for _, c in sorted(candidates, reverse=True)))
         daily_hours = members[member].hours_per_week / WORKDAYS_PER_WEEK
-        start[tid], end[tid] = _work(earliest, task.estimate_hours, daily_hours, away[member])
+        first, last = _work(earliest, task.estimate_hours, daily_hours, away[member])
         if held_back and held_back[0] == tid:
             # Later than its real start. Counted from `earliest`, a task that waits for the
             # end of an absence anyway would seem free to slip for as long as that lasts.
-            start[tid], end[tid] = _work(
-                start[tid] + held_back[1], task.estimate_hours, daily_hours, away[member]
+            first, last = _work(
+                first + held_back[1], task.estimate_hours, daily_hours, away[member]
             )
-        free_at[member] = (end[tid], tid)
-    return start, end, waits_for
+        return (round(first, _DIGITS), position[tid]), first, last, candidates
 
+    def place(tid: str, first: float, last: float, candidates: list[tuple[float, str]]) -> None:
+        start[tid], end[tid] = first, last
+        waits_for[tid] = list(dict.fromkeys(c for _, c in sorted(candidates, reverse=True)))
+        free_at[owner[tid]] = (last, tid)
+        order.append(tid)
 
-def scheduling_order(plan: Plan) -> list[str]:
-    """The order in which check_plan schedules the tasks: every task after the tasks it
-    depends on. For a plan with a cycle this raises graphlib.CycleError; check_plan reports
-    that as an error before it gets here."""
-    return _topo_order(plan)
+    if fixed:
+        for tid in fixed:
+            place(tid, *option(tid)[1:])
+        return start, end, waits_for, order
+
+    # The tasks whose dependencies are scheduled. An option changes only when its person
+    # gets another task, so only those are computed again.
+    options = {t.id: option(t.id) for t in plan.tasks if not t.depends_on}
+    while options:
+        tid = min(options, key=lambda ready: options[ready][0])
+        place(tid, *options.pop(tid)[1:])
+        for other in options:
+            if owner[other] == owner[tid]:
+                options[other] = option(other)
+        for follower in followers[tid]:
+            open_deps[follower].remove(tid)
+            if not open_deps[follower]:
+                options[follower] = option(follower)
+    return start, end, waits_for, order
 
 
 def _topo_order(plan: Plan) -> list[str]:

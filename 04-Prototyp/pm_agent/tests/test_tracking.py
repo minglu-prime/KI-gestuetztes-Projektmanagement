@@ -557,8 +557,9 @@ def test_a_reassignment_that_cannot_be_scheduled_is_not_checkable(two_people):
     )
 
 
-def test_the_forecast_keeps_the_order_of_the_plan_when_a_finished_task_drops_out(tmp_path):
-    # Anna: T1, then T2 (after T1) and T3. Ben: T4 after T3. The plan puts T3 before T2.
+def test_a_project_on_plan_forecasts_its_plan_when_a_finished_task_drops_out(tmp_path):
+    # Anna: T1, then T2 (after T1) and T3. Ben: T4 after T3. Without T1 the rest has other
+    # dependencies than the plan; its dates must stay the same.
     ben = Member(name="Ben", hours_per_week=40)
     plan = Plan.model_validate(
         {
@@ -576,7 +577,6 @@ def test_the_forecast_keeps_the_order_of_the_plan_when_a_finished_task_drops_out
     )
     team = [*TEAM, ben]
     planned = {s.task_id: (s.start, s.end) for s in check_plan(plan, team, PROJECT).schedule}
-    assert planned["T3"][0] < planned["T2"][0]  # the case this test is about
     adopted = adopt(PROJECT, team, plan, path=tmp_path / "projekt.json")
     on_plan = apply_rows(adopted, [{"ID": "T1", "Status": "fertig", "Ist (h)": 8}])
 
@@ -854,3 +854,57 @@ def test_the_status_report_says_who_does_what_in_the_next_five_workdays(tracking
     assert "Ohne Prognose lässt sich nicht sagen, was ansteht." in status_report(
         absurd, evaluate(absurd, today=thursday)
     )
+
+
+def test_the_forecast_and_the_rest_in_the_planung_end_on_the_same_day(tmp_path):
+    # "Rest mit Claude umplanen" loads the rest into the Planung. What the Planung says
+    # about it, untouched, is what the forecast said on the Kontrolle page.
+    ben = Member(name="Ben", skills={"SQL": 3}, hours_per_week=40)
+    plan = Plan.model_validate(
+        {
+            "tasks": [
+                {"id": "T1", "title": "Eins", "estimate_hours": 8},
+                {"id": "T2", "title": "Zwei", "estimate_hours": 16, "depends_on": ["T1"]},
+                {"id": "T3", "title": "Drei", "estimate_hours": 8},
+                {"id": "T4", "title": "Vier", "estimate_hours": 8, "depends_on": ["T3"]},
+            ],
+            "assignments": [
+                {"task_id": "T1", "member": "Anna", "reason": "r"},
+                {"task_id": "T2", "member": "Anna", "reason": "r"},
+                {"task_id": "T3", "member": "Anna", "reason": "r"},
+                {"task_id": "T4", "member": "Ben", "reason": "r"},
+            ],
+        }
+    )
+    team = [*TEAM, ben]
+    adopted = adopt(PROJECT, team, plan, path=tmp_path / "projekt.json")
+    today = PROJECT.start_date
+    started = apply_rows(adopted, [{"ID": "T1", "Status": "fertig", "Ist (h)": 8}])
+    project, rest = rest_project(started, today)
+    assert check_plan(rest, team, project).end_date == forecast(started, today).end
+
+
+def test_what_is_started_goes_on_before_what_is_open(tmp_path):
+    # Anna has P and Q (8 h each), Ben's R waits for Q. The plan: P on Monday, Q on Tuesday,
+    # R on Wednesday. On Monday Anna has begun with Q instead (4 h). She goes on with it:
+    # Q is done at noon, R can begin, and the project ends a day earlier than planned.
+    ben = Member(name="Ben", hours_per_week=40)
+    plan = Plan.model_validate(
+        {
+            "tasks": [
+                {"id": "P", "title": "p", "estimate_hours": 8},
+                {"id": "Q", "title": "q", "estimate_hours": 8},
+                {"id": "R", "title": "r", "estimate_hours": 8, "depends_on": ["Q"]},
+            ],
+            "assignments": [
+                {"task_id": tid, "member": member, "reason": "r"}
+                for tid, member in [("P", "Anna"), ("Q", "Anna"), ("R", "Ben")]
+            ],
+        }
+    )
+    adopted = adopt(PROJECT, [*TEAM, ben], plan, path=tmp_path / "projekt.json")
+    started = apply_rows(adopted, [{"ID": "Q", "Status": "in Arbeit", "Ist (h)": 4}])
+
+    assert [task.id for task in rest_plan(started).tasks] == ["Q", "P", "R"]
+    outlook = forecast(started, date(2026, 11, 9))
+    assert (outlook.planned_end, outlook.end) == (date(2026, 11, 11), date(2026, 11, 10))

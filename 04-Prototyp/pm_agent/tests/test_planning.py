@@ -9,7 +9,6 @@ from pm_agent.planning import (
     add_workdays,
     check_plan,
     count_workdays,
-    scheduling_order,
     workday_shift,
 )
 
@@ -451,19 +450,6 @@ def test_every_warning_has_a_kind_that_survives_changing_numbers():
     ).warning_kinds == [("late",), ("away", "Anna")]
 
 
-def test_tasks_can_be_scheduled_in_a_given_order():
-    # Both orders are valid: A and B do not depend on each other and are both Anna's.
-    p = plan(task("A", 8), task("B", 16), owners={"A": "Anna", "B": "Anna"})
-    assert scheduling_order(p) == ["A", "B"]
-    swapped = by_id(check_plan(p, [ANNA], project(), order=["B", "A"]))
-    assert (swapped["B"].start, swapped["A"].start) == (MON, date(2026, 11, 11))
-    with pytest.raises(ValueError, match="order"):
-        check_plan(p, [ANNA], project(), order=["A"])
-    chain = plan(task("A", 8), task("B", 8, deps=["A"]), owners={"A": "Anna", "B": "Anna"})
-    with pytest.raises(ValueError, match="order"):
-        check_plan(chain, [ANNA], project(), order=["B", "A"])
-
-
 def test_on_random_plans_with_absences_nothing_is_planned_into_an_absence():
     # The same seed every time: 200 small plans, two people who are sometimes away.
     rng = random.Random(7)
@@ -538,13 +524,15 @@ def test_a_task_that_would_slip_into_an_absence_stays_on_the_critical_path():
     assert result.critical_path == ["A", "B"]
 
 
-def test_the_check_can_leave_out_the_slack():
-    # The forecast only wants dates. The slack is the expensive part of the check.
+def test_the_check_can_give_the_dates_alone():
+    # The forecast only wants dates. Slack and critical path are the expensive part of the
+    # check: both schedule the plan again and again.
     p = plan(task("A", 8), task("B", 8, deps=["A"]), owners={"A": "Anna", "B": "Ben"})
     full = check_plan(p, [ANNA, BEN], project())
     assert full.slack == {"A": 0, "B": 0}
-    assert check_plan(p, [ANNA, BEN], project(), with_slack=False) == full.model_copy(
-        update={"slack": {}}
+    assert full.critical_path == ["A", "B"]
+    assert check_plan(p, [ANNA, BEN], project(), dates_only=True) == full.model_copy(
+        update={"slack": {}, "critical_path": []}
     )
 
 
@@ -563,3 +551,52 @@ def test_the_critical_path_follows_whatever_really_holds_a_task():
         result = check_plan(p, [anna, BEN], project())
         assert result.slack == {own: 0, other: 1, "N": 0}
         assert result.critical_path == [own, "N"]
+
+
+def test_whatever_can_start_earliest_is_scheduled_next():
+    # Anna has A, B (after A) and C; Ben's D waits for B. After A, both B and C can start:
+    # the one listed first goes first. Scheduled level by level (A, C, B), Anna would do C
+    # before B and hold Ben up for a day.
+    p = plan(
+        task("A", 8),
+        task("B", 8, deps=["A"]),
+        task("C", 8),
+        task("D", 8, deps=["B"]),
+        owners={"A": "Anna", "B": "Anna", "C": "Anna", "D": "Ben"},
+    )
+    result = check_plan(p, [ANNA, BEN], project())
+    assert result.order == ["A", "B", "C", "D"]
+    assert result.end_date == date(2026, 11, 11)
+    assert result.slack == {"A": 0, "B": 0, "C": 0, "D": 0}
+
+
+def test_nobody_waits_for_a_task_while_another_one_could_run():
+    # Anna's X waits for Ben's B (three days). Y is listed after X but can start at once.
+    p = plan(
+        task("B", 24),
+        task("X", 8, deps=["B"]),
+        task("Y", 16),
+        owners={"B": "Ben", "X": "Anna", "Y": "Anna"},
+    )
+    result = check_plan(p, [ANNA, BEN], project())
+    assert result.order == ["B", "Y", "X"]
+    assert by_id(result)["Y"].start == MON
+    assert by_id(result)["X"].start == date(2026, 11, 12)
+
+
+def test_slack_keeps_the_sequence_of_the_plan():
+    # Anna does X on Monday and Y (three days) after it; Ben's Z (two days) waits for X;
+    # Clara's long task ends the plan on Friday. X can slip a day: X on Tuesday, Y until
+    # Friday. The question is not what happens if Anna then does Y first: that would be
+    # another plan, in which Z ends on Monday.
+    clara = Member(name="Clara", hours_per_week=40)
+    p = plan(
+        task("X", 8),
+        task("Y", 24),
+        task("Z", 16, deps=["X"]),
+        task("L", 40),
+        owners={"X": "Anna", "Y": "Anna", "Z": "Ben", "L": "Clara"},
+    )
+    result = check_plan(p, [ANNA, BEN, clara], project())
+    assert result.end_date == date(2026, 11, 13)
+    assert result.slack["X"] == 1

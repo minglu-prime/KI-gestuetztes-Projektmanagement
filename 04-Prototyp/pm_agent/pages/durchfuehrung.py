@@ -74,7 +74,7 @@ with st.container(border=True, key="panel-ahead"):
         st.dataframe(pd.DataFrame(ahead), hide_index=True)
         st.caption(
             "Was laut Prognose bis in fünf Arbeitstagen beginnt, je Person in der Reihenfolge "
-            "des Plans. Die Prognose plant alles Unfertige ab heute neu ein."
+            "der Arbeit. Die Prognose plant alles Unfertige ab heute neu ein, Begonnenes zuerst."
         )
 
 with st.container(border=True, key="panel-progress"):
