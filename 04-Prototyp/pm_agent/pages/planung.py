@@ -43,6 +43,7 @@ from pm_agent.workbench import (
     save_team,
     saved_runs,
     suggested_wishes,
+    table_plan,
     team_rows,
     to_csv,
     to_markdown,
@@ -121,7 +122,8 @@ def forget_conversation() -> None:
 
 def table_matches_plan() -> bool:
     """Whether the table of step 5, as the editor last returned it, says what the current
-    plan says. False while hand edits wait for "Erneut prüfen"."""
+    plan says. False while hand edits wait for "Erneut prüfen". Compared in the form the
+    table gives a plan back (table_plan): an untouched table is never an edit."""
     if state.get("plan_current") is None:  # not shown since the plan changed
         return True
     try:
@@ -132,7 +134,7 @@ def table_matches_plan() -> bool:
         )
     except InputError:  # unreadable as it stands: certainly not the current plan
         return False
-    return typed == state.plan
+    return typed == table_plan(state.plan)
 
 
 def reset_table() -> None:
@@ -606,7 +608,45 @@ with tabs[4]:
     if state.plan is None:
         st.info("Noch kein Plan zum Anpassen.")
     else:
-        with st.container(border=True, key="panel-chat"):
+        # The conversation stands above the table but runs after it: it has to know
+        # what the table says in this run, not in the one before.
+        chat_panel = st.container(border=True, key="panel-chat")
+        st.markdown("#### :material/edit: Von Hand ändern")
+        st.caption(
+            "Ändere Personen, Stunden oder Abhängigkeiten. „Erneut prüfen“ rechnet nur "
+            "deterministisch nach, Claude wird nicht aufgerufen."
+        )
+        edited_plan = st.data_editor(
+            state.plan_df,
+            key=f"plan_editor_{state.editor_version}",
+            num_rows="dynamic",
+            width="stretch",
+            column_config={
+                "Stunden": st.column_config.NumberColumn(min_value=0.5),
+                "Abhängig von": st.column_config.TextColumn(help="IDs, getrennt durch Komma"),
+                "Skills": st.column_config.TextColumn(help="getrennt durch Komma"),
+            },
+        )
+        state.plan_current = edited_plan
+        risks = st.text_area("Risiken (eins pro Zeile)", key="risks_text", persist_state="session")
+        if st.button("Erneut prüfen", type="primary", icon=":material/fact_check:"):
+            try:
+                new = rows_to_plan(
+                    edited_plan.to_dict("records"), state.original, risks.splitlines()
+                )
+            except InputError as err:
+                st.error(f"Bitte korrigieren:\n\n{err}")
+            else:
+                changed = new != table_plan(state.original)
+                state.update(
+                    plan=new,
+                    edited=changed,
+                    hand_edited=state.get("hand_edited", False) or changed,
+                )
+                st.rerun()
+        next_step("Ergebnis ansehen", STEPS[3], False, "back_to_result")
+
+        with chat_panel:
             st.markdown("#### :material/forum: Mit Claude ändern")
             st.caption(
                 "Sag, was sich ändern soll, oder spiel eine Annahme durch: „Clara übernimmt die "
@@ -636,7 +676,8 @@ with tabs[4]:
                 if not ok
             ]
             # Claude gets the current plan, and taking its proposal replaces the table. Hand
-            # edits that were not checked would be ignored first and overwritten then.
+            # edits that were not checked would be ignored first and overwritten then: no
+            # wish and no "Übernehmen" while they wait.
             unchecked = not table_matches_plan()
             wish = state.pop("asked", None)  # set by the chat input at the end of the panel
             # A second wish must not replace a proposal that is still open.
@@ -707,7 +748,7 @@ with tabs[4]:
                             icon=":material/check:",
                             on_click=decide,
                             args=(True,),
-                            disabled=proposed is None or not proposal["changes"],
+                            disabled=proposed is None or not proposal["changes"] or unchecked,
                         )
                         st.button(
                             "Verwerfen", icon=":material/close:", on_click=decide, args=(False,)
@@ -727,8 +768,6 @@ with tabs[4]:
             # the run that follows, which answers it above.
             if blocked:
                 st.caption("Für eine Änderung mit Claude fehlt noch: " + ", ".join(blocked) + ".")
-            elif proposal is not None:
-                st.caption("Entscheide erst über den offenen Vorschlag.")
             elif unchecked:
                 st.warning(
                     "In der Tabelle unten stehen Änderungen, die noch nicht geprüft sind. Claude "
@@ -737,6 +776,8 @@ with tabs[4]:
                     + (" Dein Wunsch wurde nicht gestellt." if wish else "")
                 )
                 st.button("Tabelle zurücksetzen", icon=":material/undo:", on_click=reset_table)
+            elif proposal is not None:
+                st.caption("Entscheide erst über den offenen Vorschlag.")
             else:
                 suggestions = suggested_wishes(state.plan, team, result, project)
                 if suggestions:
@@ -755,41 +796,6 @@ with tabs[4]:
                 on_submit=ask,
                 disabled=bool(blocked) or proposal is not None or unchecked,
             )
-
-        st.markdown("#### :material/edit: Von Hand ändern")
-        st.caption(
-            "Ändere Personen, Stunden oder Abhängigkeiten. „Erneut prüfen“ rechnet nur "
-            "deterministisch nach, Claude wird nicht aufgerufen."
-        )
-        edited_plan = st.data_editor(
-            state.plan_df,
-            key=f"plan_editor_{state.editor_version}",
-            num_rows="dynamic",
-            width="stretch",
-            column_config={
-                "Stunden": st.column_config.NumberColumn(min_value=0.5),
-                "Abhängig von": st.column_config.TextColumn(help="IDs, getrennt durch Komma"),
-                "Skills": st.column_config.TextColumn(help="getrennt durch Komma"),
-            },
-        )
-        state.plan_current = edited_plan
-        risks = st.text_area("Risiken (eins pro Zeile)", key="risks_text", persist_state="session")
-        if st.button("Erneut prüfen", type="primary", icon=":material/fact_check:"):
-            try:
-                new = rows_to_plan(
-                    edited_plan.to_dict("records"), state.original, risks.splitlines()
-                )
-            except InputError as err:
-                st.error(f"Bitte korrigieren:\n\n{err}")
-            else:
-                changed = new != state.original
-                state.update(
-                    plan=new,
-                    edited=changed,
-                    hand_edited=state.get("hand_edited", False) or changed,
-                )
-                st.rerun()
-        next_step("Ergebnis ansehen", STEPS[3], False, "back_to_result")
 
 # 6 · Export -------------------------------------------------------------------------------
 with tabs[5]:

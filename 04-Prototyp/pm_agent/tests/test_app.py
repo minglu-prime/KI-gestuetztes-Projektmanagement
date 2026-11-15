@@ -234,11 +234,11 @@ def test_a_suggested_wish_is_asked_with_one_click(with_plan, monkeypatch):
 
 
 def test_claude_is_not_asked_while_the_table_holds_edits_that_were_not_checked(with_plan):
-    # What the table editor returned after the project lead changed the hours of A by hand,
-    # without "Erneut prüfen": the current plan still says 8 h.
+    # The table as after the project lead changed the hours of A by hand, without "Erneut
+    # prüfen": the current plan still says 8 h. (AppTest cannot type into the editor.)
     rows = workbench.plan_rows(PLAN)
     rows[0]["Stunden"] = 40
-    with_plan.session_state["plan_current"] = pd.DataFrame(rows, columns=workbench.PLAN_COLUMNS)
+    with_plan.session_state["plan_df"] = pd.DataFrame(rows, columns=workbench.PLAN_COLUMNS)
     with_plan.session_state["asked"] = WISH  # a wish typed in the same moment
     at = with_plan.run()
 
@@ -250,6 +250,41 @@ def test_claude_is_not_asked_while_the_table_holds_edits_that_were_not_checked(w
     assert at.session_state["proposal"] is None
     assert at.session_state["plan"] == PLAN
     assert "Tabelle zurücksetzen" in [b.label for b in at.button]
+
+
+def test_a_proposal_cannot_be_taken_over_edits_that_were_not_checked(with_plan):
+    at = with_plan.chat_input(key="wish").set_value(WISH).run()
+    assert not button(at, "Übernehmen").disabled
+    # While the proposal is open, the project lead changes the hours of B in the table.
+    rows = workbench.plan_rows(PLAN)
+    rows[1]["Stunden"] = 80
+    at.session_state["plan_df"] = pd.DataFrame(rows, columns=workbench.PLAN_COLUMNS)
+    at = at.run()
+
+    assert not at.exception
+    # Taking the proposal would replace the table and lose the 80 h without a word.
+    assert button(at, "Übernehmen").disabled
+    assert any("noch nicht geprüft" in w.value for w in at.warning)
+
+
+def test_a_table_nobody_touched_never_counts_as_edited(app, monkeypatch):
+    # Claude lists the assignments in another order than the tasks; the table sorts them.
+    data = plan_input()
+    data["assignments"].reverse()
+    shuffled = Plan.model_validate(data)
+    monkeypatch.setattr(agent, "run_planning", lambda project, team, on_round=None: shuffled)
+    at = fill_project(app)
+    button(at, "Plan mit Claude erstellen").click()
+    at.run()
+    at = at.run()  # the table has been drawn once
+
+    assert not at.exception
+    assert not at.chat_input(key="wish").disabled
+    assert not any("noch nicht geprüft" in w.value for w in at.warning)
+    button(at, "Erneut prüfen").click()
+    at.run()
+    assert at.session_state["plan"] == PLAN  # as the table writes it
+    assert at.session_state["hand_edited"] is False  # runs.csv: nobody changed the plan
 
 
 def test_taking_a_change_keeps_what_the_export_record_needs(with_plan):
