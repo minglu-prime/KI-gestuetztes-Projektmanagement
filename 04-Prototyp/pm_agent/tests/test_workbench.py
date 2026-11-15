@@ -348,3 +348,13 @@ def test_the_table_gives_a_plan_back_in_its_own_form():
     assert rows_to_plan(plan_rows(shuffled), shuffled, shuffled.risks) != shuffled
     assert table_plan(shuffled) == PLAN
     assert table_plan(PLAN) == PLAN
+
+
+def test_a_plan_the_table_cannot_give_back_is_its_own_table_form():
+    # Pydantic keeps a title made of a control character, the table reads it as empty.
+    data = plan_input()
+    data["tasks"][0]["title"] = "\x1c"
+    odd = Plan.model_validate(data)
+    with pytest.raises(InputError):
+        rows_to_plan(plan_rows(odd), odd, odd.risks)
+    assert table_plan(odd) == odd

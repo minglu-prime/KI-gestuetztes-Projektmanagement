@@ -4,7 +4,7 @@ from datetime import date
 import pytest
 from test_tools import PROJECT, TEAM, plan_input
 
-from pm_agent.models import ControlReport, Member, Plan, StatusSummary
+from pm_agent.models import Absence, ControlReport, Member, Plan, StatusSummary
 from pm_agent.planning import check_plan
 from pm_agent.tracking import (
     Progress,
@@ -716,26 +716,28 @@ def test_the_control_document_keeps_its_shape_whatever_the_report_says(two_peopl
 def test_earned_value_compares_what_is_done_with_what_the_plan_wanted_done(tracking):
     # Tue 10.11.: the plan wanted A (8 h) done and B (16 h, two days) half done.
     updated = apply_rows(tracking, ROWS)  # A finished with 10 h, B started with 4 h
-    value = earned_value(evaluate(updated, today=date(2026, 11, 10)))
+    value = earned_value(updated, evaluate(updated, today=date(2026, 11, 10)))
 
     assert (value.planned, value.earned, value.actual) == (16, 8, 14)
     assert (hours_text(41.64), hours_text(8.0)) == ("41,6", "8")
+    assert (hours_text(1234567.84), hours_text(-0.04)) == ("1234567,8", "0")
     assert value.schedule_index == 0.5  # half of what was planned is done
     assert value.cost_index == pytest.approx(8 / 14)  # 14 h booked for 8 h of finished work
 
 
 def test_earned_value_has_no_index_without_a_basis(tracking):
     # Fri 06.11., before the first planned day: nothing was planned yet, nothing is booked.
-    early = earned_value(evaluate(tracking, today=date(2026, 11, 6)))
+    early = earned_value(tracking, evaluate(tracking, today=date(2026, 11, 6)))
     assert (early.planned, early.earned, early.actual) == (0, 0, 0)
     assert early.schedule_index is None
     assert early.cost_index is None
     # After the plan's last day the planned value stays at the whole plan.
-    assert earned_value(evaluate(tracking, today=date(2026, 12, 1))).planned == 24
+    late = evaluate(tracking, today=date(2026, 12, 1))
+    assert earned_value(tracking, late).planned == 24
 
 
 def test_the_planned_curve_has_one_point_per_workday_of_the_plan(tracking):
-    assert planned_curve(evaluate(tracking, today=date(2026, 11, 10))) == [
+    assert planned_curve(tracking, evaluate(tracking, today=date(2026, 11, 10))) == [
         {"Tag": date(2026, 11, 9), "Stunden": 8},
         {"Tag": date(2026, 11, 10), "Stunden": 16},
         {"Tag": date(2026, 11, 11), "Stunden": 24},
@@ -782,3 +784,48 @@ def test_the_week_ahead_lists_what_the_forecast_starts_in_the_next_workdays(trac
     assert week_ahead(progressed(tracking, A="fertig", B="fertig"), tuesday) == []
     absurd = apply_rows(tracking, [{"ID": "B", "Status": "in Arbeit", "Rest (h)": 20_000_000}])
     assert week_ahead(absurd, tuesday) == []
+
+
+def one_person_plan(*tasks):
+    """A plan for Anna from (ID, hours, depends_on)."""
+    return Plan.model_validate(
+        {
+            "tasks": [
+                {"id": i, "title": f"Aufgabe {i}", "estimate_hours": hours, "depends_on": deps}
+                for i, hours, deps in tasks
+            ],
+            "assignments": [{"task_id": i, "member": "Anna", "reason": "r"} for i, _, _ in tasks],
+        }
+    )
+
+
+def test_the_planned_value_follows_the_hours_the_plan_puts_on_each_day(tmp_path):
+    # Anna has 8 h a day. A (15 h) fills Monday and Tuesday but for one hour; B (17 h) gets
+    # that hour and ends on Thursday. On Tuesday evening the plan has 16 h done, not a third
+    # of B on top of A.
+    plan = one_person_plan(("A", 15, []), ("B", 17, ["A"]))
+    on_plan = apply_rows(
+        adopt(PROJECT, TEAM, plan, path=tmp_path / "projekt.json"),
+        [{"ID": "A", "Status": "fertig", "Ist (h)": 15}],
+    )
+    value = earned_value(on_plan, evaluate(on_plan, today=date(2026, 11, 10)))
+    assert (value.planned, value.earned) == (16, 15)
+
+    # Nobody works during an absence: the planned value stands still. The curve keeps the
+    # days where it bends.
+    anna = TEAM[0].model_copy(
+        update={"absences": [Absence(first=date(2026, 11, 10), last=date(2026, 11, 20))]}
+    )
+    away = adopt(PROJECT, [anna], one_person_plan(("A", 16, [])), path=tmp_path / "projekt.json")
+    assert planned_curve(away, evaluate(away, today=date(2026, 11, 9))) == [
+        {"Tag": date(2026, 11, 9), "Stunden": 8},
+        {"Tag": date(2026, 11, 20), "Stunden": 8},
+        {"Tag": date(2026, 11, 23), "Stunden": 16},
+    ]
+
+
+def test_the_week_ahead_keeps_the_order_of_the_work_within_a_day(tmp_path):
+    # B is listed first but waits for A; both fit into Monday.
+    plan = one_person_plan(("B", 2, ["A"]), ("A", 2, []))
+    adopted = adopt(PROJECT, TEAM, plan, path=tmp_path / "projekt.json")
+    assert [row["ID"] for row in week_ahead(adopted, date(2026, 11, 9))] == ["A", "B"]

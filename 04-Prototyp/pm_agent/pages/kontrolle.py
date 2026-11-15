@@ -161,7 +161,7 @@ if tracking is not None:
 
     with st.container(border=True, key="panel-earned"):
         st.markdown("#### :material/monitoring: Earned Value")
-        value = earned_value(result)
+        value = earned_value(tracking, result)
         # Two rows: five tiles in one row cut their labels off.
         pv, ev, ac = st.columns(3)
         pv.metric("Planwert bis heute", f"{hours_text(value.planned)} h")
@@ -183,13 +183,18 @@ if tracking is not None:
             scale=alt.Scale(domain=kinds, range=["#90ad9a", "#23654c", "#ba8d42"]),
         )
         curve = (
-            alt.Chart(pd.DataFrame(planned_curve(result)).assign(Wert=kinds[0]))
-            .mark_line()
+            alt.Chart(pd.DataFrame(planned_curve(tracking, result)).assign(Wert=kinds[0]))
+            # With points: a plan of one day has no line to draw.
+            .mark_line(point=True)
             .encode(
                 x=alt.X("Tag:T", title=None, axis=alt.Axis(format="%d.%m.")),
                 y=alt.Y("Stunden:Q", title="Stunden"),
                 color=colour,
-                tooltip=[alt.Tooltip("Tag:T", format="%d.%m.%Y"), "Wert", "Stunden"],
+                tooltip=[
+                    alt.Tooltip("Tag:T", format="%d.%m.%Y"),
+                    "Wert",
+                    alt.Tooltip("Stunden:Q", format=".1f"),
+                ],
             )
         )
         now = (
@@ -207,7 +212,11 @@ if tracking is not None:
                 x="Tag:T",
                 y="Stunden:Q",
                 color=colour,
-                tooltip=[alt.Tooltip("Tag:T", format="%d.%m.%Y"), "Wert", "Stunden"],
+                tooltip=[
+                    alt.Tooltip("Tag:T", format="%d.%m.%Y"),
+                    "Wert",
+                    alt.Tooltip("Stunden:Q", format=".1f"),
+                ],
             )
         )
         # White like the panel around it; the theme would paint the page colour.

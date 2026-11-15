@@ -51,7 +51,7 @@ def check_plan(
     members = {m.name: m for m in team}
     owner = {a.task_id: a.member for a in plan.assignments}
     away = {m.name: _away(m, project.start_date) for m in team}
-    start, end, driver = _schedule(plan, members, owner, away, order)
+    start, end, waits_for = _schedule(plan, members, owner, away, order)
     last = max(plan.tasks, key=lambda t: end[t.id]).id
     # Dates end on 31.12.9999. Written as "not <=" so that an infinite offset fails too.
     if not end[last] <= count_workdays(project.start_date, date.max):
@@ -86,14 +86,16 @@ def check_plan(
     critical_path = []
     while node is not None:
         critical_path.append(node)
-        before = driver[node]
-        if before is not None:
-            # Does the task really wait for `before`? Not if it waits for the end of an
-            # absence anyway: then `before` a day later changes nothing for it.
+        # Which task before it does the task really wait for? The first one, from the
+        # latest end on, that moves its start when held back a day. None of them if the
+        # task waits for the end of an absence anyway.
+        for before in waits_for[node]:
             later, _, _ = _schedule(plan, members, owner, away, order, held_back=(before, 1))
-            if round(later[node] - start[node], _DIGITS) == 0:
-                before = None
-        node = before
+            if round(later[node] - start[node], _DIGITS) != 0:
+                node = before
+                break
+        else:
+            node = None
     critical_path.reverse()
 
     window = count_workdays(project.start_date, project.deadline)
@@ -334,12 +336,12 @@ def _schedule(
     away: dict[str, list[tuple[int, int]]],
     order: list[str],
     held_back: tuple[str, int] | None = None,
-) -> tuple[dict[str, float], dict[str, float], dict[str, str | None]]:
-    """Start and end of each task in workday offsets, plus the task it could start after:
-    the dependency or the member's previous task that ends last, None if there is none.
-    Whether the task really waited for that one or for the end of an absence decides
-    check_plan. `held_back` makes one task start that many workdays later than it does, to
-    see what that does."""
+) -> tuple[dict[str, float], dict[str, float], dict[str, list[str]]]:
+    """Start and end of each task in workday offsets, plus the tasks it could start after:
+    its dependencies and the member's previous task, the one that ends last first. Whether
+    the task really waited for one of them or for the end of an absence decides check_plan.
+    `held_back` makes one task start that many workdays later than it does, to see what
+    that does."""
     # ponytail: greedy list scheduling in dependency order, not an optimal schedule. A member
     # can sit idle waiting for a dependency while another of their tasks could already run.
     # Upgrade to priority by remaining critical path if plans come out visibly too long.
@@ -347,13 +349,14 @@ def _schedule(
     free_at: dict[str, tuple[float, str]] = {}  # member -> (offset, task that ends there)
     start: dict[str, float] = {}
     end: dict[str, float] = {}
-    driver: dict[str, str | None] = {}
+    waits_for: dict[str, list[str]] = {}
     for tid in order:
         task, member = tasks[tid], owner[tid]
         candidates = [(end[dep], dep) for dep in task.depends_on]
         if member in free_at:
             candidates.append(free_at[member])
-        earliest, driver[tid] = max(candidates, default=(0.0, None))
+        earliest = max(candidates, default=(0.0, None))[0]
+        waits_for[tid] = list(dict.fromkeys(c for _, c in sorted(candidates, reverse=True)))
         daily_hours = members[member].hours_per_week / WORKDAYS_PER_WEEK
         start[tid], end[tid] = _work(earliest, task.estimate_hours, daily_hours, away[member])
         if held_back and held_back[0] == tid:
@@ -363,7 +366,7 @@ def _schedule(
                 start[tid] + held_back[1], task.estimate_hours, daily_hours, away[member]
             )
         free_at[member] = (end[tid], tid)
-    return start, end, driver
+    return start, end, waits_for
 
 
 def scheduling_order(plan: Plan) -> list[str]:

@@ -245,3 +245,10 @@ def test_a_dependency_on_a_task_that_never_existed_is_not_called_removed():
     before = simple(("T1", "A", "Anna", 8, []), ("T2", "B", "Anna", 8, ["T9"]))
     after = simple(("T1", "A", "Anna", 4, []), ("T2", "B", "Anna", 8, ["T9"]))
     assert plan_changes(before, after) == ["T1 · A: 8 h → 4 h"]
+
+
+def test_without_pairs_a_removed_task_takes_its_warning_along_as_well():
+    before = skilled(("A", "Entwurf", "Anna", []), ("B", "Abfragen", "Anna", ["SQL"]))
+    after = skilled(("A", "Entwurf", "Anna", []))
+    lines = check_changes(check_plan(before, TEAM, PROJECT), check_plan(after, TEAM, PROJECT))
+    assert not any(line.startswith("Behoben") for line in lines)

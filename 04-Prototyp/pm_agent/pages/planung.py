@@ -661,7 +661,9 @@ with tabs[4]:
                     st.markdown("\n".join(f"- {c}" for c in turn["changes"]) or "Keine Änderung.")
 
             proposal = state.proposal
-            if proposal is not None and proposal["basis"] != state.plan:
+            # In the form of the table: "Erneut prüfen" writes an untouched plan anew in
+            # that form, and nobody has changed it then.
+            if proposal is not None and table_plan(proposal["basis"]) != table_plan(state.plan):
                 state.proposal = proposal = None
                 st.info(
                     "Der Plan wurde seit dem Vorschlag von Hand geändert. Der Vorschlag passt "

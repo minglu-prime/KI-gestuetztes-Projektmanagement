@@ -546,3 +546,20 @@ def test_the_check_can_leave_out_the_slack():
     assert check_plan(p, [ANNA, BEN], project(), with_slack=False) == full.model_copy(
         update={"slack": {}}
     )
+
+
+def test_the_critical_path_follows_whatever_really_holds_a_task():
+    # Anna (away on Tuesday) does her first task on Monday and N on Wednesday. N also waits
+    # for Ben's task, done on Monday too. Ben's task a day later changes nothing for N; Anna's
+    # first task a day later falls into the absence and moves N. Whatever the IDs are.
+    anna = away(date(2026, 11, 10))
+    for own, other in [("A", "Z"), ("P", "D")]:
+        p = plan(
+            task(own, 8),
+            task(other, 8),
+            task("N", 8, deps=[other]),
+            owners={own: "Anna", other: "Ben", "N": "Anna"},
+        )
+        result = check_plan(p, [anna, BEN], project())
+        assert result.slack == {own: 0, other: 1, "N": 0}
+        assert result.critical_path == [own, "N"]

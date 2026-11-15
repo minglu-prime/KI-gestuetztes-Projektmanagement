@@ -26,6 +26,7 @@ from pm_agent.models import (
     Task,
 )
 from pm_agent.planning import (
+    WORKDAYS_PER_WEEK,
     add_workdays,
     check_plan,
     count_workdays,
@@ -256,37 +257,70 @@ class EarnedValue:
         return self.earned / self.actual if self.actual else None
 
 
-def planned_value(evaluation: Evaluation, day: date) -> float:
-    """The hours the plan wanted done by the end of `day`. Inside a task the hours count
-    evenly over its workdays."""
-    total = 0.0
-    for task in evaluation.tasks:
-        if day >= task.planned_start:
-            passed = count_workdays(task.planned_start, min(day, task.planned_end))
-            span = count_workdays(task.planned_start, task.planned_end)  # at least one day
-            total += task.planned_hours * passed / span
-    return total
+def planned_curve(tracking: Tracking, evaluation: Evaluation) -> list[dict[str, Any]]:
+    """The planned value over the plan: the hours the plan wanted done by the end of a
+    workday. Only the days where the curve bends, and the first and the last one.
+
+    Each person works their daily hours on their tasks in planned order, a task not before
+    its planned start and not while the person is away. That is the plan day by day; spread
+    evenly over a task's days, hours would count on days the plan gives to another task or
+    to an absence."""
+    people = {member.name: member for member in tracking.team}
+    queue: dict[str, list[TaskState]] = {}
+    for task in sorted(evaluation.tasks, key=lambda t: t.planned_start):  # stable
+        queue.setdefault(task.member, []).append(task)
+    left = {task.id: task.planned_hours for task in evaluation.tasks}
+    first = min(t.planned_start for t in evaluation.tasks)
+    last = max(t.planned_end for t in evaluation.tasks)
+    total, values = 0.0, []
+    # ponytail: one step per workday of the plan. A plan that ends in the year 9999 takes
+    # seconds; skip the stretches where nobody works if that ever matters.
+    for number in range(count_workdays(first, last)):
+        day = add_workdays(first, number)
+        for name, tasks in queue.items():
+            if any(a.first <= day <= a.last for a in people[name].absences):
+                continue
+            budget = people[name].hours_per_week / WORKDAYS_PER_WEEK
+            for task in tasks:
+                if task.planned_start <= day and left[task.id] > 0:
+                    done = min(budget, left[task.id])
+                    left[task.id] -= done
+                    budget -= done
+                    total += done
+        for task in evaluation.tasks:
+            # The plan has the task done on its last day, whatever the walk above made of
+            # a day shared with other tasks.
+            if task.planned_end <= day and left[task.id] > 0:
+                total += left[task.id]
+                left[task.id] = 0.0
+        values.append((day, round(total, 6)))
+    return [
+        {"Tag": day, "Stunden": hours}
+        for number, (day, hours) in enumerate(values)
+        if number in (0, len(values) - 1)
+        or hours != values[number - 1][1]
+        or hours != values[number + 1][1]
+    ]
 
 
-def earned_value(evaluation: Evaluation) -> EarnedValue:
+def earned_value(tracking: Tracking, evaluation: Evaluation) -> EarnedValue:
+    reached = [
+        point["Stunden"]
+        for point in planned_curve(tracking, evaluation)
+        if point["Tag"] <= evaluation.today
+    ]
     return EarnedValue(
-        planned=planned_value(evaluation, evaluation.today),
+        # Between two kept days the curve is flat or the later day is kept too.
+        planned=reached[-1] if reached else 0.0,
         earned=sum(t.planned_hours for t in evaluation.tasks if t.status == "fertig"),
         actual=evaluation.actual_hours,
     )
 
 
-def planned_curve(evaluation: Evaluation) -> list[dict[str, Any]]:
-    """The planned value at the end of each workday of the plan, for the chart."""
-    first = min(t.planned_start for t in evaluation.tasks)
-    last = max(t.planned_end for t in evaluation.tasks)
-    days = [add_workdays(first, n) for n in range(count_workdays(first, last))]
-    return [{"Tag": day, "Stunden": planned_value(evaluation, day)} for day in days]
-
-
 def hours_text(value: float) -> str:
     """Hours with at most one decimal, the German way: 41.6 -> "41,6", 8.0 -> "8"."""
-    return f"{round(value, 1):g}".replace(".", ",")
+    # "+ 0.0" turns a rounded -0.0 into 0.0.
+    return f"{round(value, 1) + 0.0:.1f}".removesuffix(".0").replace(".", ",")
 
 
 def index_text(value: float | None, missing: str) -> str:
@@ -439,6 +473,8 @@ def week_ahead(tracking: Tracking, today: date, days: int = 5) -> list[dict[str,
     has a problem; forecast() says which."""
     horizon = add_workdays(today, days - 1)
     titles = {task.id: task.title for task in tracking.plan.tasks}
+    # Two tasks of one person on the same day: in the order they are worked on.
+    turn = {tid: number for number, tid in enumerate(scheduling_order(tracking.plan))}
     ahead = [s for s in forecast(tracking, today).schedule if s.start <= horizon]
     return [
         {
@@ -449,7 +485,7 @@ def week_ahead(tracking: Tracking, today: date, days: int = 5) -> list[dict[str,
             "Ende": _date(s.end),
             "Status": tracking.progress[s.task_id].status,
         }
-        for s in sorted(ahead, key=lambda s: (s.member, s.start))
+        for s in sorted(ahead, key=lambda s: (s.member, s.start, turn[s.task_id]))
     ]
 
 
@@ -685,7 +721,7 @@ def control_document(
     rate for the cost lines; both can be missing."""
     project, today = tracking.project, evaluation.today
     outlook = forecast(tracking, today)
-    value = earned_value(evaluation)
+    value = earned_value(tracking, evaluation)
     overdue = [
         f"- {_md(t.id)} · {_md(t.title)} ({_md(t.member)}), geplant bis "
         f"{_date(t.planned_end)}, Status: "

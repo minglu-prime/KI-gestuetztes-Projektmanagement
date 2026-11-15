@@ -142,8 +142,15 @@ def table_plan(plan: Plan) -> Plan:
     """The plan as the table gives it back when nobody has touched it. The table is not a
     mirror: assignments come back in task order, and a skill, a dependency or a risk with a
     separator in it (comma, line break) comes back in pieces. Whether the table was edited
-    is decided against this form, not against the plan itself."""
-    return rows_to_plan(plan_rows(plan), plan, "\n".join(plan.risks).splitlines())
+    is decided against this form, not against the plan itself.
+
+    A plan the table cannot give back at all (a title that reads as empty there) is its own
+    form: every readable table then differs from it, and reading the table as it stands
+    reports the row."""
+    try:
+        return rows_to_plan(plan_rows(plan), plan, "\n".join(plan.risks).splitlines())
+    except InputError:
+        return plan
 
 
 def load_team(path: Path = TEAM_FILE) -> list[Member]:
@@ -422,7 +429,8 @@ def check_changes(
     `pairs` (pair_tasks) says which task of before is which task of after. Without it tasks
     are the same if their IDs are."""
     if pairs is None:
-        pairs = {s.task_id: s.task_id for s in before.schedule}
+        kept = {s.task_id for s in after.schedule}
+        pairs = {s.task_id: s.task_id for s in before.schedule if s.task_id in kept}
 
     now = dict(zip(after.warning_kinds, after.warnings, strict=True))
     # The warnings of before, with task IDs in the IDs of after. A warning about a task that

@@ -287,6 +287,30 @@ def test_a_table_nobody_touched_never_counts_as_edited(app, monkeypatch):
     assert at.session_state["hand_edited"] is False  # runs.csv: nobody changed the plan
 
 
+def test_checking_an_untouched_table_keeps_an_open_proposal(app, monkeypatch):
+    # The plan's assignments are in another order than its tasks, so "Erneut prüfen" writes
+    # the plan anew in the form of the table. Nobody changed it: the proposal still fits.
+    data = plan_input()
+    data["assignments"].reverse()
+    shuffled = Plan.model_validate(data)
+    doubled = Plan.model_validate(plan_input(hours=16))
+    monkeypatch.setattr(agent, "run_planning", lambda project, team, on_round=None: shuffled)
+    monkeypatch.setattr(
+        agent, "run_replanning", lambda project, team, plan, wish, on_round=None: doubled
+    )
+    at = fill_project(app)
+    button(at, "Plan mit Claude erstellen").click()
+    at.run()
+    at = at.chat_input(key="wish").set_value(WISH).run()
+    assert at.session_state["proposal"] is not None
+    button(at, "Erneut prüfen").click()
+    at = at.run()
+
+    assert not at.exception
+    assert at.session_state["proposal"] is not None
+    assert not button(at, "Übernehmen").disabled
+
+
 def test_taking_a_change_keeps_what_the_export_record_needs(with_plan):
     # As after 3 rounds and 90 s of planning and a hand edit confirmed with "Erneut prüfen".
     with_plan.session_state["agent_seconds"] = 90.0
