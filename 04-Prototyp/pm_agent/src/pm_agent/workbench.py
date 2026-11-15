@@ -193,12 +193,18 @@ def load_run(path: Path) -> tuple[Project, list[Member], Plan, dict[str, Any]]:
 def append_run(row: dict[str, Any], path: Path = RUNS_CSV) -> None:
     """One line per exported plan in runs.csv: the data for the before/after comparison."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    new = not path.exists()
-    with path.open("a", encoding="utf-8", newline="") as file:
-        writer = csv.DictWriter(file, fieldnames=list(row))
-        if new:
-            writer.writeheader()
-        writer.writerow(row)
+    rows = []
+    if path.exists():
+        with path.open(encoding="utf-8", newline="") as file:
+            rows = list(csv.DictReader(file))
+    # The columns of the file, then what this row has on top. Written as a whole each time:
+    # appending a line under a heading with other columns would put values under the wrong
+    # name, and nobody would notice. The file has one line per export, so it stays small.
+    columns = list(dict.fromkeys([*(rows[0] if rows else []), *row]))
+    with path.open("w", encoding="utf-8", newline="") as file:
+        writer = csv.DictWriter(file, fieldnames=columns, restval="")
+        writer.writeheader()
+        writer.writerows([*rows, row])
 
 
 def round_summary(number: int, record: dict[str, Any]) -> tuple[str, list[str]]:
