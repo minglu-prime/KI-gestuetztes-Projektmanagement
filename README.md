@@ -252,7 +252,7 @@ Einzelheiten zu Seiten, Agenten und Entwicklung:
 | Erster Plan mit Claude | gegen die echte API gelaufen (Protokoll vom 11.11.2026) |
 | Plan im Gespräch ändern | gebaut und ohne Netz getestet; **noch nicht gegen die echte API gelaufen** |
 | Agenten für Durchführung und Kontrolle | Gerüst mit je einem Werkzeug und einer Prüfung; **noch nicht gegen die echte API gelaufen** |
-| KI-Lab | eingebettet; Runden ohne KI funktionieren, KI-Runden sind ohne Schlüssel nicht geprüft |
+| KI-Lab | eingebettet; Ablauf, Zeitlimit und Export im Browser geprüft, ein erfolgreicher KI-Aufruf noch nicht ([Prüfprotokoll](04-Prototyp/ki_lab/VERIFIKATION.md)) |
 | Vergleich mit Versuchspersonen | steht aus |
 
 Was der Prototyp bewusst vereinfacht:
