@@ -128,6 +128,18 @@ def test_runs_csv_gets_one_header_and_one_line_per_export(tmp_path):
     ]
 
 
+def test_runs_csv_keeps_every_value_under_its_column_when_the_columns_change(tmp_path):
+    # A later version of the site records one thing more, or names the columns in another
+    # order. The lines written before must not end up under the wrong heading.
+    path = tmp_path / "logs" / "runs.csv"
+    append_run({"quelle": "agent", "runden": 3}, path)
+    append_run({"runden": 0, "format": "csv", "quelle": "protokoll"}, path)
+    assert list(csv.DictReader(io.StringIO(path.read_text(encoding="utf-8")))) == [
+        {"quelle": "agent", "runden": "3", "format": ""},
+        {"quelle": "protokoll", "runden": "0", "format": "csv"},
+    ]
+
+
 def test_round_summary_counts_check_messages_and_names_rejections():
     report = check_plan(PLAN, TEAM, PROJECT).model_dump_json(include={"errors", "warnings"})
     checked = {"tool_results": [{"tool": "check_plan", "is_error": False, "content": report}]}
