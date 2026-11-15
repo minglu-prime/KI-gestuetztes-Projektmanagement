@@ -72,7 +72,7 @@ if tracking is not None:
     else:
         st.success("Keine Aufgabe im Verzug.")
     if st.button("Fortschritt erfassen", icon=":material/edit_note:"):
-        st.switch_page("pages/durchfuehrung.py")
+        st.switch_page("views/durchfuehrung.py")
 
     with st.container(border=True, key="panel-forecast"):
         heading("trending_up", "Prognose")
@@ -117,7 +117,7 @@ if tracking is not None:
                 type="primary" if outlook.deadline_gap > 0 else "secondary",
             ):
                 state.rest_requested = True
-                st.switch_page("pages/planung.py")
+                st.switch_page("views/planung.py")
             st.caption(
                 "Lädt die unfertigen Aufgaben als Plan ab heute in die Planung. Dort lässt er "
                 "sich im Gespräch mit Claude ändern und wieder als Projekt übernehmen. Das "

@@ -42,7 +42,7 @@ def adopted_project() -> Tracking | None:
             "und wähle dort im Schritt Export „Plan als Projekt übernehmen“."
         )
         if st.button("Zur Planung", type="primary", icon=":material/arrow_forward:"):
-            st.switch_page("pages/planung.py")
+            st.switch_page("views/planung.py")
     return tracking
 
 

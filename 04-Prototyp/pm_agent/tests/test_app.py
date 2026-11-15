@@ -19,7 +19,8 @@ from pm_agent.agent import AgentError, PlanningError
 from pm_agent.models import Absence, ControlReport, Plan, StatusSummary
 
 SITE = Path(__file__).parents[1] / "app.py"
-PLANUNG = "pages/planung.py"
+PAGES = "views"
+PLANUNG = f"{PAGES}/planung.py"
 PLAN = Plan.model_validate(plan_input())
 
 
@@ -50,6 +51,16 @@ def site(local):
     at = AppTest.from_file(str(SITE), default_timeout=30)
     at.run()
     return at
+
+
+def test_a_link_to_a_page_as_first_visit_goes_through_the_menu(local):
+    # While a folder named pages/ sits next to app.py, a fresh Streamlit server works in its
+    # old multipage mode until app.py has run once: a link to /kontrolle as the first request
+    # ran that page alone, without menu, style and the state the pages share.
+    at = AppTest.from_file(str(SITE), default_timeout=30)
+    at.switch_page(f"{PAGES}/kontrolle.py").run()
+    assert not at.exception
+    assert "page" in at.session_state and at.session_state["page"] == "kontrolle"
 
 
 def fill_project(at):
@@ -497,9 +508,9 @@ def test_every_menu_entry_opens_and_explains_its_empty_state(site):
 
     expected = {
         PLANUNG: ("Planung", "Für die Planung fehlt noch"),
-        "pages/durchfuehrung.py": ("Durchführung", "Noch kein Projekt übernommen."),
-        "pages/kontrolle.py": ("Kontrolle", "Noch kein Projekt übernommen."),
-        "pages/ki_lab.py": ("KI-Lab", "Das KI-Lab läuft noch nicht."),
+        "views/durchfuehrung.py": ("Durchführung", "Noch kein Projekt übernommen."),
+        "views/kontrolle.py": ("Kontrolle", "Noch kein Projekt übernommen."),
+        "views/ki_lab.py": ("KI-Lab", "Das KI-Lab läuft noch nicht."),
     }
     for path, (header, info) in expected.items():
         at = site.switch_page(path).run()
@@ -507,11 +518,11 @@ def test_every_menu_entry_opens_and_explains_its_empty_state(site):
         assert at.header[0].value == header
         assert any(info in i.value for i in at.info), path
 
-    at = site.switch_page("pages/kontrolle.py").run()
+    at = site.switch_page("views/kontrolle.py").run()
     captions = [c.value for c in at.caption]
     assert "Noch keine protokollierten Läufe." in captions
     assert "Noch kein Plan exportiert." in captions
-    for path, header in [("pages/ueber_uns.py", "Über uns"), ("pages/impressum.py", "Impressum")]:
+    for path, header in [("views/ueber_uns.py", "Über uns"), ("views/impressum.py", "Impressum")]:
         at = site.switch_page(path).run()
         assert not at.exception, path
         assert at.header[0].value == header
@@ -528,7 +539,7 @@ def test_the_buttons_on_the_startseite_open_the_pages_they_name(site):
 def test_startseite_and_ueber_uns_describe_all_three_agents(site):
     # Durchführung and Kontrolle have an agent too: no page may still call them "ohne LLM".
     start = " ".join(m.value for m in site.markdown)
-    about = " ".join(m.value for m in site.switch_page("pages/ueber_uns.py").run().markdown)
+    about = " ".join(m.value for m in site.switch_page("views/ueber_uns.py").run().markdown)
     assert "ohne LLM" not in start and "ohne LLM" not in about
     assert "Aufwand der Agenten" in start and "Planungsagenten" not in start
 
@@ -543,7 +554,7 @@ def test_project_and_team_survive_a_visit_to_another_page(site):
     )
     at.session_state["team_current"] = edited
 
-    at = at.switch_page("pages/kontrolle.py").run()
+    at = at.switch_page("views/kontrolle.py").run()
     at = at.switch_page(PLANUNG).run()
 
     assert not at.exception
@@ -556,7 +567,7 @@ def test_project_and_team_survive_a_visit_to_another_page(site):
 
 @pytest.fixture
 def flow_site(site, monkeypatch):
-    """Fix business evaluations, not the wall clock; keep real pages/storage/calculations."""
+    """Fix business evaluations, not the wall clock; keep real pages, storage and calculations."""
     evaluate = tracking.evaluate
     download_button = st.download_button
     downloads = {}
@@ -628,14 +639,14 @@ def test_flow_pages_use_fixed_evaluation_date_despite_host_today(flow_site, monk
     monkeypatch.setattr(datetime, "date", HostDate)
     evaluate = Mock(wraps=tracking.evaluate)  # observe, but delegate to the existing date fixture
     monkeypatch.setattr(tracking, "evaluate", evaluate)
-    for page in ("pages/durchfuehrung.py", "pages/kontrolle.py"):
+    for page in ("views/durchfuehrung.py", "views/kontrolle.py"):
         evaluate.reset_mock()
         at.switch_page(page).run()
         assert not at.exception
         # Each page's first evaluation receives its own date.today(), before
         # document/table helpers run. This exercises the page's imported alias.
         assert evaluate.call_args_list[0].args == (saved, host_day)
-        if page == "pages/durchfuehrung.py":
+        if page == "views/durchfuehrung.py":
             assert "! 1 im Verzug<" in chips(at)
             report = downloads["Statusbericht als Markdown herunterladen"]
             assert "**Stand:** 12.11.2026" in report
@@ -651,7 +662,7 @@ def test_nonzero_progress_survives_reopen_and_reaches_control_and_documents(flow
     baseline = tracking.load()
     before_save = tracking.PROJECT_FILE.read_bytes()
 
-    at = at.switch_page("pages/durchfuehrung.py").run()
+    at = at.switch_page("views/durchfuehrung.py").run()
     at = edit_progress(
         at,
         {
@@ -697,7 +708,7 @@ def test_nonzero_progress_survives_reopen_and_reaches_control_and_documents(flow
 
     # A new AppTest has no cached page state: the page must restore the saved file.
     at = AppTest.from_file(str(SITE), default_timeout=30).run()
-    at = at.switch_page("pages/durchfuehrung.py").run()
+    at = at.switch_page("views/durchfuehrung.py").run()
     assert not at.exception
     (editor,) = [
         frame.value
@@ -770,7 +781,7 @@ def test_nonzero_progress_survives_reopen_and_reaches_control_and_documents(flow
     ]
 
     # Target subsequent AppTest reruns at the page reached by the in-app button.
-    at.switch_page("pages/kontrolle.py")
+    at.switch_page("views/kontrolle.py")
     next(n for n in at.number_input if n.label == "Stundensatz (€)").set_value(50).run()
     assert not at.exception
     metrics = {m.label: m.value for m in at.metric}
@@ -789,7 +800,7 @@ def test_control_costs_for_zero_and_nonzero_hours_and_rates(flow_site, actual_ho
     tracking.save(
         tracking.apply_rows(baseline, [{"ID": "A", "Status": "in Arbeit", "Ist (h)": actual_hours}])
     )
-    at = at.switch_page("pages/kontrolle.py").run()
+    at = at.switch_page("views/kontrolle.py").run()
     if rate is not None:
         next(n for n in at.number_input if n.label == "Stundensatz (€)").set_value(rate).run()
     assert not at.exception
@@ -809,7 +820,7 @@ def test_control_costs_for_zero_and_nonzero_hours_and_rates(flow_site, actual_ho
 def test_an_adopted_project_with_progress_requires_explicit_overwrite(flow_site, monkeypatch):
     at, _ = flow_site
     at = adopt_from_planning(at)
-    at = at.switch_page("pages/durchfuehrung.py").run()
+    at = at.switch_page("views/durchfuehrung.py").run()
     at = edit_progress(at, {0: {"Status": "fertig", "Ist (h)": 10, "Notiz": "Behalten"}})
     button(at, "Fortschritt speichern").click()
     at.run()
@@ -870,21 +881,21 @@ def tracked(site):
 
 
 def test_without_a_project_durchfuehrung_and_kontrolle_lead_to_the_planung(site):
-    for path in ["pages/durchfuehrung.py", "pages/kontrolle.py"]:
+    for path in ["views/durchfuehrung.py", "views/kontrolle.py"]:
         at = site.switch_page(path).run()
         assert not button(at, "Zur Planung").disabled, path
 
 
 def test_durchfuehrung_says_where_the_project_stands(tracked):
     # Only what does not depend on today's date: nothing is finished or started yet.
-    at = tracked.switch_page("pages/durchfuehrung.py").run()
+    at = tracked.switch_page("views/durchfuehrung.py").run()
     assert not at.exception
     for text in ["○ 0 von 2 Aufgaben fertig<", "○ 0 in Arbeit<"]:
         assert text in chips(at)
 
 
 def test_durchfuehrung_shows_who_does_what_next(tracked):
-    at = tracked.switch_page("pages/durchfuehrung.py").run()
+    at = tracked.switch_page("views/durchfuehrung.py").run()
     assert not at.exception
     tables = [t.value for t in at.dataframe]
     # Whatever today is: nothing is done, so both tasks are still ahead, A first.
@@ -901,7 +912,7 @@ def test_progress_that_cannot_be_saved_is_said_not_thrown(tracked, monkeypatch):
         raise PermissionError(13, "Zugriff verweigert")
 
     monkeypatch.setattr(tracking, "save", locked)
-    at = tracked.switch_page("pages/durchfuehrung.py").run()
+    at = tracked.switch_page("views/durchfuehrung.py").run()
     button(at, "Fortschritt speichern").click()
     at = at.run()
     assert not at.exception
@@ -918,7 +929,7 @@ def test_the_rest_of_the_project_goes_from_kontrolle_into_the_planung(site):
     tracking.adopt(open_end, TEAM, PLAN)
     tracking.save(tracking.apply_rows(tracking.load(), [{"ID": "A", "Status": "fertig"}]))
 
-    at = site.switch_page("pages/kontrolle.py").run()
+    at = site.switch_page("views/kontrolle.py").run()
     button(at, "Rest mit Claude umplanen").click()
     at.run()
 
@@ -942,13 +953,13 @@ def test_the_rest_of_the_project_goes_from_kontrolle_into_the_planung(site):
     assert [t.id for t in again.plan.tasks] == ["B"]
     assert [(e.id, e.finished) for e in again.history] == [("A", True)]
 
-    at = at.switch_page("pages/durchfuehrung.py").run()
+    at = at.switch_page("views/durchfuehrung.py").run()
     assert not at.exception
     assert "Aus früheren Plänen (1)" in [e.label for e in at.expander]
 
 
 def test_kontrolle_shows_the_earned_value(tracked):
-    at = tracked.switch_page("pages/kontrolle.py").run()
+    at = tracked.switch_page("views/kontrolle.py").run()
     assert not at.exception
     labels = [m.label for m in at.metric]
     for label in ["Planwert bis heute", "Fertigstellungswert", "SPI", "CPI"]:
@@ -959,7 +970,7 @@ def test_kontrolle_survives_a_record_it_cannot_read(tracked):
     # A line with a cell too many, as a hand edit or an old version leaves it.
     workbench.RUNS_CSV.write_bytes(b"quelle,runden\r\nagent,3\r\nagent,5,csv,x\r\n")
     (workbench.RUNS_CSV.parent / "runs-bis-20261115-120000.csv").write_bytes(b"alt\r\n1\r\n")
-    at = tracked.switch_page("pages/kontrolle.py").run()
+    at = tracked.switch_page("views/kontrolle.py").run()
 
     assert not at.exception
     assert any("runs.csv konnte nicht gelesen werden" in e.value for e in at.error)
@@ -970,7 +981,7 @@ def test_kontrolle_shows_no_table_with_cells_left_out(tracked):
     # The first data line has a cell more than the heading. Read as it is, pandas would
     # leave the surplus cells out and show the rest as if nothing were wrong.
     workbench.RUNS_CSV.write_bytes(b"quelle,runden\r\nagent,5,csv\r\nagent,3,md\r\n")
-    at = tracked.switch_page("pages/kontrolle.py").run()
+    at = tracked.switch_page("views/kontrolle.py").run()
     assert not at.exception
     assert any("runs.csv konnte nicht gelesen werden" in e.value for e in at.error)
     assert not any("quelle" in frame.value.columns for frame in at.dataframe)
@@ -979,7 +990,7 @@ def test_kontrolle_shows_no_table_with_cells_left_out(tracked):
 def test_kontrolle_opens_before_there_is_a_logs_folder(tracked, monkeypatch, tmp_path):
     # A fresh clone: logs/ is git-ignored and made by the first run or export.
     monkeypatch.setattr(workbench, "RUNS_CSV", tmp_path / "noch-nicht-da" / "runs.csv")
-    at = tracked.switch_page("pages/kontrolle.py").run()
+    at = tracked.switch_page("views/kontrolle.py").run()
     assert not at.exception and not at.error
     assert "Noch kein Plan exportiert." in [c.value for c in at.caption]
 
@@ -988,7 +999,7 @@ def test_kontrolle_promises_nothing_about_a_record_it_cannot_open(tracked):
     # Not a damaged record: something that cannot be opened at all (here a folder). The
     # next export cannot open it either, so it will not put it aside.
     workbench.RUNS_CSV.mkdir()
-    at = tracked.switch_page("pages/kontrolle.py").run()
+    at = tracked.switch_page("views/kontrolle.py").run()
     assert not at.exception
     (message,) = [e.value for e in at.error if "runs.csv konnte nicht gelesen werden" in e.value]
     assert "legt sie beiseite" not in message
@@ -1002,13 +1013,13 @@ def test_kontrolle_promises_nothing_about_a_record_it_cannot_open(tracked):
 
 def test_kontrolle_takes_an_empty_record_for_no_export_yet(tracked):
     workbench.RUNS_CSV.write_bytes(b"")
-    at = tracked.switch_page("pages/kontrolle.py").run()
+    at = tracked.switch_page("views/kontrolle.py").run()
     assert not at.exception and not at.error
     assert "Noch kein Plan exportiert." in [c.value for c in at.caption]
 
 
 def test_kontrolle_offers_the_control_document(tracked):
-    at = tracked.switch_page("pages/kontrolle.py").run()
+    at = tracked.switch_page("views/kontrolle.py").run()
     assert not at.exception
     assert any(m.value.startswith("# Kontrollbericht") for m in at.markdown)
 
@@ -1030,7 +1041,7 @@ def test_kontrolle_forecasts_the_end_from_the_recorded_progress(tracked):
     # Whatever today is: with every task finished there is nothing left to forecast.
     done = [{"ID": "A", "Status": "fertig", "Ist (h)": 8}, {"ID": "B", "Status": "fertig"}]
     tracking.save(tracking.apply_rows(tracking.load(), done))
-    at = tracked.switch_page("pages/kontrolle.py").run()
+    at = tracked.switch_page("views/kontrolle.py").run()
     assert not at.exception
     assert "Alle Aufgaben sind fertig." in [s.value for s in at.success]
     assert "Voraussichtliches Ende" not in {m.label for m in at.metric}
@@ -1059,7 +1070,7 @@ def test_the_execution_agent_needs_consent_and_its_proposal_goes_into_the_report
         return summary
 
     monkeypatch.setattr(followup, "run_status_summary", proposing)
-    at = tracked.switch_page("pages/durchfuehrung.py").run()
+    at = tracked.switch_page("views/durchfuehrung.py").run()
     start = "Zusammenfassung mit Claude vorschlagen"
     assert button(at, start).disabled
     assert any("Noch nicht erstellt. Der Durchführungs-Agent" in m.value for m in at.markdown)
@@ -1091,7 +1102,7 @@ def test_the_control_agent_shows_assessment_findings_and_measures(tracked, monke
         ],
     )
     monkeypatch.setattr(followup, "run_control_report", lambda *args, **kwargs: report)
-    at = tracked.switch_page("pages/kontrolle.py").run()
+    at = tracked.switch_page("views/kontrolle.py").run()
     assert button(at, "Stand mit Claude bewerten").disabled
 
     at.checkbox(key="consent_kontrolle").check()
@@ -1121,7 +1132,7 @@ def test_a_failing_agent_shows_the_reason_and_no_result(tracked, monkeypatch):
         raise AgentError("Kein Zugang zur Claude API: ANTHROPIC_API_KEY ist nicht gesetzt.")
 
     monkeypatch.setattr(followup, "run_control_report", failing)
-    at = tracked.switch_page("pages/kontrolle.py").run()
+    at = tracked.switch_page("views/kontrolle.py").run()
     at.checkbox(key="consent_kontrolle").check()
     at.run()
     button(at, "Stand mit Claude bewerten").click()

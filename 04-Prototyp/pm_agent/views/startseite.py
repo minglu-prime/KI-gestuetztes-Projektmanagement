@@ -31,7 +31,7 @@ AGENTS = [
         "Planung",
         "Aus Projektidee und Team entsteht ein geprüfter Plan: Aufgaben, Aufwand, Zuweisung, "
         "Termine und Risiken. Claude plant, die Projektleitung passt an.",
-        "pages/planung.py",
+        "views/planung.py",
     ),
     (
         "durchfuehrung",
@@ -40,7 +40,7 @@ AGENTS = [
         "Fortschritt und Ist-Stunden je Aufgabe erfassen. Claude schlägt Zusammenfassung und "
         "nächste Schritte vor. Statusbericht und Arbeitspaketbeschreibungen werden aus Vorlagen "
         "gefüllt.",
-        "pages/durchfuehrung.py",
+        "views/durchfuehrung.py",
     ),
     (
         "kontrolle",
@@ -49,7 +49,7 @@ AGENTS = [
         "Plan und Ist vergleichen: Fortschritt, Abweichung, Verzug, Kosten bei gesetztem "
         "Stundensatz. Claude bewertet den Stand und schlägt Gegenmaßnahmen vor. Dazu der "
         "Aufwand der Agenten.",
-        "pages/kontrolle.py",
+        "views/kontrolle.py",
     ),
 ]
 
@@ -65,9 +65,9 @@ with st.container(key="hero"):
         )
         with st.container(horizontal=True):
             if st.button("Projekt planen", type="primary", icon=":material/arrow_forward:"):
-                st.switch_page("pages/planung.py")
+                st.switch_page("views/planung.py")
             if st.button("KI-Lab öffnen", icon=":material/science:"):
-                st.switch_page("pages/ki_lab.py")
+                st.switch_page("views/ki_lab.py")
     diagram.html(FLOW)
 
 with st.container(key="agents"):
@@ -90,7 +90,7 @@ with st.container(key="lab"):
             "Kontrollierter Vergleich: dieselbe Art von Planungsaufgabe einmal ohne und einmal "
             "mit KI-Hilfe, mit Zeitlimit und Protokoll."
         )
-        st.page_link("pages/ki_lab.py", label="KI-Lab öffnen", icon=":material/arrow_forward:")
+        st.page_link("views/ki_lab.py", label="KI-Lab öffnen", icon=":material/arrow_forward:")
 
 with st.container(key="project"):
     st.subheader("Aktuelles Projekt")
@@ -130,10 +130,10 @@ with st.container(key="project"):
                     icon=":material/task_alt:",
                     type="primary" if where == "durchfuehrung" else "secondary",
                 ):
-                    st.switch_page("pages/durchfuehrung.py")
+                    st.switch_page("views/durchfuehrung.py")
                 if st.button(
                     "Stand prüfen",
                     icon=":material/monitoring:",
                     type="primary" if where == "kontrolle" else "secondary",
                 ):
-                    st.switch_page("pages/kontrolle.py")
+                    st.switch_page("views/kontrolle.py")

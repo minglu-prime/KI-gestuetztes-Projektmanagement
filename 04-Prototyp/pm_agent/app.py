@@ -1,4 +1,6 @@
-"""PM-Agent website: name, logo and the menu. Every menu entry is a script in pages/.
+"""PM-Agent website: name, logo and the menu. Every menu entry is a script in views/. Not in
+pages/: Streamlit treats that folder as its old kind of multipage app (see the test about a
+link to a page as first visit in tests/test_app.py).
 
 Run from 04-Prototyp/pm_agent:  uv run --env-file .env streamlit run app.py
 """
@@ -13,16 +15,16 @@ st.set_page_config(page_title="PM-Agent", page_icon=":material/view_timeline:", 
 state = st.session_state
 
 MENU = {
-    "": [st.Page("pages/startseite.py", title="Startseite", icon=":material/home:")],
+    "": [st.Page("views/startseite.py", title="Startseite", icon=":material/home:")],
     "Agenten": [
-        st.Page("pages/planung.py", title="Planung", icon=":material/view_timeline:"),
-        st.Page("pages/durchfuehrung.py", title="Durchführung", icon=":material/task_alt:"),
-        st.Page("pages/kontrolle.py", title="Kontrolle", icon=":material/monitoring:"),
+        st.Page("views/planung.py", title="Planung", icon=":material/view_timeline:"),
+        st.Page("views/durchfuehrung.py", title="Durchführung", icon=":material/task_alt:"),
+        st.Page("views/kontrolle.py", title="Kontrolle", icon=":material/monitoring:"),
     ],
-    "Experiment": [st.Page("pages/ki_lab.py", title="KI-Lab", icon=":material/science:")],
+    "Experiment": [st.Page("views/ki_lab.py", title="KI-Lab", icon=":material/science:")],
     "Info": [
-        st.Page("pages/ueber_uns.py", title="Über uns", icon=":material/groups:"),
-        st.Page("pages/impressum.py", title="Impressum", icon=":material/gavel:"),
+        st.Page("views/ueber_uns.py", title="Über uns", icon=":material/groups:"),
+        st.Page("views/impressum.py", title="Impressum", icon=":material/gavel:"),
     ],
 }
 page = st.navigation(MENU)

@@ -27,10 +27,17 @@ def test_muted_text_is_readable_on_every_background_it_sits_on():
         assert _contrast(COLOURS["muted"], back) >= 4.5, back
 
 
+VIEWS = sorted((Path(__file__).parents[1] / "views").glob("*.py"))
+
+
+def test_the_checks_below_find_the_pages():
+    # A moved folder would leave them checking nothing.
+    assert "kontrolle.py" in [page.name for page in VIEWS]
+
+
 def test_every_chart_on_a_page_says_what_it_shows():
     # A chart is a picture; ui.on_panel gives it the sentence a screen reader reads out.
-    pages = Path(__file__).parents[1] / "pages"
-    for page in pages.glob("*.py"):
+    for page in VIEWS:
         source = page.read_text(encoding="utf-8")
         assert source.count("st.altair_chart(") == source.count("on_panel("), page.name
 
@@ -40,7 +47,7 @@ def test_no_text_reads_out_the_name_of_an_icon():
     # screen reader said "trending_up icon Prognose". As the icon= of a button, link or page
     # it is hidden from screen readers; in a heading ui.heading hides it.
     root = Path(__file__).parents[1]
-    for source in (*root.glob("*.py"), *root.glob("pages/*.py"), *root.glob("src/**/*.py")):
+    for source in (*root.glob("*.py"), *VIEWS, *root.glob("src/**/*.py")):
         for number, line in enumerate(source.read_text(encoding="utf-8").splitlines(), 1):
             if ":material/" in line:
                 assert "icon=" in line.split(":material/")[0], f"{source.name}:{number}"
