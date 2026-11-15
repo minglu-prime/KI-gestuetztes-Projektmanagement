@@ -304,10 +304,16 @@ with tabs[0]:
             "Noch kein Teammitglied. Trage pro Zeile eine Person mit Skills und Wochenstunden ein."
         )
     if team and st.button("Team lokal speichern", icon=":material/save:"):
-        save_team(team)
-        st.success(
-            f"Gespeichert in {TEAM_FILE.parent.name}/{TEAM_FILE.name} (lokal, nicht im Repository)."
-        )
+        place = f"{TEAM_FILE.parent.name}/{TEAM_FILE.name}"
+        try:
+            save_team(team)
+        except OSError as err:
+            st.error(
+                f"{place} konnte nicht gespeichert werden: {err}. Die gespeicherte Datei "
+                "bleibt, wie sie ist."
+            )
+        else:
+            st.success(f"Gespeichert in {place} (lokal, nicht im Repository).")
     consent = st.checkbox(
         "Alle eingetragenen Personen haben zugestimmt, dass ihre Angaben (Name, Skills, Stunden, "
         "Notiz) zur Planung an die Anthropic API gesendet werden.",
@@ -913,8 +919,15 @@ with tabs[5]:
                 icon=":material/flag:",
                 disabled=bool(result.errors) or not overwrite,
             ):
-                adopt(project, team, state.plan)
-                st.success("Übernommen. Weiter auf den Seiten Durchführung und Kontrolle.")
+                try:
+                    adopt(project, team, state.plan)
+                except OSError as err:
+                    st.error(
+                        f"data/projekt.json konnte nicht gespeichert werden: {err}. Das "
+                        "bisher übernommene Projekt bleibt, wie es ist."
+                    )
+                else:
+                    st.success("Übernommen. Weiter auf den Seiten Durchführung und Kontrolle.")
 
         with st.expander("Vorschau Markdown"):
             st.markdown(to_markdown(project, state.plan, result))

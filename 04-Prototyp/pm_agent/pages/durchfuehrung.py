@@ -110,10 +110,18 @@ with st.container(border=True, key="panel-progress"):
         except InputError as err:
             st.error(f"Bitte korrigieren:\n\n{err}")
         else:
-            save(updated)
-            state.progress_saved = True
-            state.progress_version = state.get("progress_version", 0) + 1
-            st.rerun()
+            try:
+                save(updated)
+            except OSError as err:
+                st.error(
+                    f"Der Fortschritt konnte nicht gespeichert werden: {err}. Die Tabelle bleibt, "
+                    "wie sie ist; die gespeicherte Datei auch. Ist data/projekt.json in einem "
+                    "anderen Programm geöffnet?"
+                )
+            else:
+                state.progress_saved = True
+                state.progress_version = state.get("progress_version", 0) + 1
+                st.rerun()
 
 with st.container(border=True, key="panel-agent"):
     st.markdown("#### :material/smart_toy: Durchführungs-Agent")

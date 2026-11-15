@@ -432,6 +432,23 @@ def test_free_days_of_the_project_move_the_plan(app, monkeypatch):
     assert any("lesbare freie Tage (Schritt 2)" in i.value for i in at.info)
 
 
+def test_a_team_or_project_that_cannot_be_saved_is_said_not_thrown(with_plan, monkeypatch):
+    def locked(*args, **kwargs):
+        raise PermissionError(13, "Zugriff verweigert")
+
+    monkeypatch.setattr(workbench, "save_team", locked)
+    monkeypatch.setattr(tracking, "adopt", locked)
+    button(with_plan, "Team lokal speichern").click()
+    at = with_plan.run()
+    assert not at.exception
+    assert any("team.json konnte nicht gespeichert werden" in e.value for e in at.error)
+    button(at, "Plan als Projekt übernehmen").click()
+    at = at.run()
+    assert not at.exception
+    assert any("projekt.json konnte nicht gespeichert werden" in e.value for e in at.error)
+    assert not any("Übernommen" in s.value for s in at.success)
+
+
 def test_an_agent_error_is_shown_to_the_project_lead(app, monkeypatch):
     def failing_run(project, team, on_round=None):
         raise PlanningError("Kein Zugang zur Claude API: ANTHROPIC_API_KEY ist nicht gesetzt.")
@@ -864,6 +881,19 @@ def test_durchfuehrung_shows_who_does_what_next(tracked):
     tracking.save(tracking.apply_rows(tracking.load(), done))
     at = at.run()
     assert "Alle Aufgaben sind fertig: Es steht nichts mehr an." in [s.value for s in at.success]
+
+
+def test_progress_that_cannot_be_saved_is_said_not_thrown(tracked, monkeypatch):
+    def locked(tracking_, path=None):
+        raise PermissionError(13, "Zugriff verweigert")
+
+    monkeypatch.setattr(tracking, "save", locked)
+    at = tracked.switch_page("pages/durchfuehrung.py").run()
+    button(at, "Fortschritt speichern").click()
+    at = at.run()
+    assert not at.exception
+    assert any("konnte nicht gespeichert werden" in e.value for e in at.error)
+    assert not at.success  # and nothing claims it was saved
 
 
 WAYS_ON = ["Fortschritt erfassen", "Stand prüfen"]

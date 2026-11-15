@@ -35,6 +35,7 @@ from pm_agent.workbench import (
     team_rows,
     to_csv,
     to_markdown,
+    write_whole,
 )
 
 PLAN = Plan.model_validate(plan_input())
@@ -611,3 +612,46 @@ def test_a_save_that_fails_half_way_leaves_the_saved_team(tmp_path, disk_full):
         save_team(TEAM, path)
     assert path.read_bytes() == b"[]"
     assert [file.name for file in tmp_path.iterdir()] == ["team.json"]
+
+
+def test_a_save_waits_for_a_reader_that_holds_the_file_for_a_moment(tmp_path):
+    # Another browser tab loads the file at the very moment of the save. On Windows the
+    # file cannot be replaced while it is open; written in place, that used to work.
+    path = tmp_path / "projekt.json"
+    path.write_text("alt", encoding="utf-8")
+    opened, done = threading.Event(), threading.Event()
+
+    def read_slowly():
+        with path.open(encoding="utf-8"):
+            opened.set()
+            done.wait(0.15)
+
+    reader = threading.Thread(target=read_slowly)
+    reader.start()
+    opened.wait()
+    write_whole(path, "neu")
+    done.set()
+    reader.join()
+    assert path.read_text(encoding="utf-8") == "neu"
+    assert [file.name for file in tmp_path.iterdir()] == ["projekt.json"]
+
+
+def test_two_saves_at_once_do_not_trip_over_each_other(tmp_path):
+    path = tmp_path / "projekt.json"
+    failures = []
+
+    def save_often(session):
+        for number in range(40):
+            try:
+                write_whole(path, f"sitzung {session}, stand {number}")
+            except OSError as err:
+                failures.append(err)
+
+    threads = [threading.Thread(target=save_often, args=(session,)) for session in range(6)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    assert failures == []
+    assert path.read_text(encoding="utf-8").endswith("stand 39")
+    assert [file.name for file in tmp_path.iterdir()] == ["projekt.json"]
