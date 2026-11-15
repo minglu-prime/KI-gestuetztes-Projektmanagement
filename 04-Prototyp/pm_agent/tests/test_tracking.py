@@ -12,13 +12,16 @@ from pm_agent.tracking import (
     agent_runs,
     apply_rows,
     control_document,
+    earned_value,
     evaluate,
     forecast,
     forecast_bars,
     forecast_text,
     has_progress,
+    hours_text,
     load,
     next_step,
+    planned_curve,
     progress_rows,
     reassignment_effect,
     rest_plan,
@@ -707,3 +710,45 @@ def test_the_control_document_keeps_its_shape_whatever_the_report_says(two_peopl
     assert (
         "| Z9 | Ben übernimmt. | Schneller. | Nicht prüfbar: Aufgabe Z9 ist nicht im Plan |" in text
     )
+
+
+def test_earned_value_compares_what_is_done_with_what_the_plan_wanted_done(tracking):
+    # Tue 10.11.: the plan wanted A (8 h) done and B (16 h, two days) half done.
+    updated = apply_rows(tracking, ROWS)  # A finished with 10 h, B started with 4 h
+    value = earned_value(evaluate(updated, today=date(2026, 11, 10)))
+
+    assert (value.planned, value.earned, value.actual) == (16, 8, 14)
+    assert (hours_text(41.64), hours_text(8.0)) == ("41,6", "8")
+    assert value.schedule_index == 0.5  # half of what was planned is done
+    assert value.cost_index == pytest.approx(8 / 14)  # 14 h booked for 8 h of finished work
+
+
+def test_earned_value_has_no_index_without_a_basis(tracking):
+    # Fri 06.11., before the first planned day: nothing was planned yet, nothing is booked.
+    early = earned_value(evaluate(tracking, today=date(2026, 11, 6)))
+    assert (early.planned, early.earned, early.actual) == (0, 0, 0)
+    assert early.schedule_index is None
+    assert early.cost_index is None
+    # After the plan's last day the planned value stays at the whole plan.
+    assert earned_value(evaluate(tracking, today=date(2026, 12, 1))).planned == 24
+
+
+def test_the_planned_curve_has_one_point_per_workday_of_the_plan(tracking):
+    assert planned_curve(evaluate(tracking, today=date(2026, 11, 10))) == [
+        {"Tag": date(2026, 11, 9), "Stunden": 8},
+        {"Tag": date(2026, 11, 10), "Stunden": 16},
+        {"Tag": date(2026, 11, 11), "Stunden": 24},
+    ]
+
+
+def test_the_control_document_names_the_earned_value(tracking):
+    updated = apply_rows(tracking, ROWS)
+    text = control_document(updated, evaluate(updated, today=date(2026, 11, 10)))
+    assert "- Planwert bis heute: 16 h" in text
+    assert "- Fertigstellungswert: 8 h" in text
+    assert "- Termin-Kennzahl (SPI): 0,50" in text
+    assert "- Aufwands-Kennzahl (CPI): 0,57" in text
+
+    before = control_document(tracking, evaluate(tracking, today=date(2026, 11, 6)))
+    assert "- Termin-Kennzahl (SPI): nicht berechenbar, der Plan hat noch nicht begonnen" in before
+    assert "- Aufwands-Kennzahl (CPI): nicht berechenbar, keine Ist-Stunden erfasst" in before

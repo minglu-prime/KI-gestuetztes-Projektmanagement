@@ -25,7 +25,13 @@ from pm_agent.models import (
     StatusSummary,
     Task,
 )
-from pm_agent.planning import check_plan, scheduling_order, workday_shift
+from pm_agent.planning import (
+    add_workdays,
+    check_plan,
+    count_workdays,
+    scheduling_order,
+    workday_shift,
+)
 from pm_agent.workbench import DATA_DIR, InputError, _cell, _date, _md, _reason, bar_end
 
 PROJECT_FILE = DATA_DIR / "projekt.json"
@@ -228,6 +234,68 @@ def evaluate(tracking: Tracking, today: date) -> Evaluation:
             for member in dict.fromkeys(t.member for t in tasks)
         ],
     )
+
+
+@dataclass(frozen=True)
+class EarnedValue:
+    """Earned value analysis in hours, by the 0/100 rule: a task earns its planned hours when
+    it is finished, and nothing before."""
+
+    planned: float  # PV: what the plan wanted done by the end of today
+    earned: float  # EV: planned hours of the finished tasks
+    actual: float  # AC: hours booked so far, on all tasks
+
+    @property
+    def schedule_index(self) -> float | None:
+        """SPI: below 1 the project is behind the plan. None before the plan's first day."""
+        return self.earned / self.planned if self.planned else None
+
+    @property
+    def cost_index(self) -> float | None:
+        """CPI: below 1 the work takes more hours than planned. None without booked hours."""
+        return self.earned / self.actual if self.actual else None
+
+
+def planned_value(evaluation: Evaluation, day: date) -> float:
+    """The hours the plan wanted done by the end of `day`. Inside a task the hours count
+    evenly over its workdays."""
+    total = 0.0
+    for task in evaluation.tasks:
+        if day >= task.planned_start:
+            passed = count_workdays(task.planned_start, min(day, task.planned_end))
+            span = count_workdays(task.planned_start, task.planned_end)  # at least one day
+            total += task.planned_hours * passed / span
+    return total
+
+
+def earned_value(evaluation: Evaluation) -> EarnedValue:
+    return EarnedValue(
+        planned=planned_value(evaluation, evaluation.today),
+        earned=sum(t.planned_hours for t in evaluation.tasks if t.status == "fertig"),
+        actual=evaluation.actual_hours,
+    )
+
+
+def planned_curve(evaluation: Evaluation) -> list[dict[str, Any]]:
+    """The planned value at the end of each workday of the plan, for the chart."""
+    first = min(t.planned_start for t in evaluation.tasks)
+    last = max(t.planned_end for t in evaluation.tasks)
+    days = [add_workdays(first, n) for n in range(count_workdays(first, last))]
+    return [{"Tag": day, "Stunden": planned_value(evaluation, day)} for day in days]
+
+
+def hours_text(value: float) -> str:
+    """Hours with at most one decimal, the German way: 41.6 -> "41,6", 8.0 -> "8"."""
+    return f"{round(value, 1):g}".replace(".", ",")
+
+
+def index_text(value: float | None, missing: str) -> str:
+    """An index of the earned value analysis, the German way: 0.5 -> "0,50"."""
+    return missing if value is None else f"{value:.2f}".replace(".", ",")
+
+
+NO_SCHEDULE_INDEX = "nicht berechenbar, der Plan hat noch nicht begonnen"
+NO_COST_INDEX = "nicht berechenbar, keine Ist-Stunden erfasst"
 
 
 # When the booked hours reach the estimate and the project lead has entered no remaining
@@ -597,6 +665,7 @@ def control_document(
     rate for the cost lines; both can be missing."""
     project, today = tracking.project, evaluation.today
     outlook = forecast(tracking, today)
+    value = earned_value(evaluation)
     overdue = [
         f"- {_md(t.id)} · {_md(t.title)} ({_md(t.member)}), geplant bis "
         f"{_date(t.planned_end)}, Status: "
@@ -647,6 +716,10 @@ def control_document(
         ist_h=f"{evaluation.actual_hours:g}",
         abweichung=f"{evaluation.finished_deviation:+g}",
         kosten=cost,
+        planwert=hours_text(value.planned),
+        fertigwert=hours_text(value.earned),
+        spi=index_text(value.schedule_index, NO_SCHEDULE_INDEX),
+        cpi=index_text(value.cost_index, NO_COST_INDEX),
         verzug="\n".join(overdue) or "Keine Aufgabe im Verzug.",
         personen="\n".join(
             f"| {_md(row['Person'])} | {row['Plan (h)']:g} | {row['Ist (h)']:g} | "

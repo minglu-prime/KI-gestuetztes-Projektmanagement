@@ -8,15 +8,21 @@ import streamlit as st
 
 from pm_agent import followup, workbench
 from pm_agent.tracking import (
+    NO_COST_INDEX,
+    NO_SCHEDULE_INDEX,
     agent_runs,
     control_document,
+    earned_value,
     euro,
     evaluate,
     forecast,
     forecast_bars,
     has_progress,
+    hours_text,
+    index_text,
     measure_effect,
     percent,
+    planned_curve,
 )
 from pm_agent.ui import adopted_project, consent, run_with_progress
 
@@ -152,6 +158,68 @@ if tracking is not None:
                 "Ist-Stunden, mindestens einer Stunde. Ein Rest, den du auf der Seite "
                 "Durchführung einträgst, geht vor."
             )
+
+    with st.container(border=True, key="panel-earned"):
+        st.markdown("#### :material/monitoring: Earned Value")
+        value = earned_value(result)
+        # Two rows: five tiles in one row cut their labels off.
+        pv, ev, ac = st.columns(3)
+        pv.metric("Planwert bis heute", f"{hours_text(value.planned)} h")
+        ev.metric("Fertigstellungswert", f"{hours_text(value.earned)} h")
+        ac.metric("Ist-Stunden", f"{hours_text(value.actual)} h")
+        spi, cpi = st.columns(2)
+        spi.metric("SPI", index_text(value.schedule_index, "–"))
+        cpi.metric("CPI", index_text(value.cost_index, "–"))
+        if value.schedule_index is None:
+            st.caption(f"SPI: {NO_SCHEDULE_INDEX}.")
+        if value.cost_index is None:
+            st.caption(f"CPI: {NO_COST_INDEX}.")
+
+        kinds = ["Planwert", "Fertigstellungswert", "Ist-Stunden"]
+        colour = alt.Color(
+            "Wert:N",
+            sort=kinds,
+            title=None,
+            scale=alt.Scale(domain=kinds, range=["#90ad9a", "#23654c", "#ba8d42"]),
+        )
+        curve = (
+            alt.Chart(pd.DataFrame(planned_curve(result)).assign(Wert=kinds[0]))
+            .mark_line()
+            .encode(
+                x=alt.X("Tag:T", title=None, axis=alt.Axis(format="%d.%m.")),
+                y=alt.Y("Stunden:Q", title="Stunden"),
+                color=colour,
+                tooltip=[alt.Tooltip("Tag:T", format="%d.%m.%Y"), "Wert", "Stunden"],
+            )
+        )
+        now = (
+            alt.Chart(
+                pd.DataFrame(
+                    {
+                        "Tag": [result.today, result.today],
+                        "Stunden": [value.earned, value.actual],
+                        "Wert": kinds[1:],
+                    }
+                )
+            )
+            .mark_point(size=140, filled=True, opacity=1)
+            .encode(
+                x="Tag:T",
+                y="Stunden:Q",
+                color=colour,
+                tooltip=[alt.Tooltip("Tag:T", format="%d.%m.%Y"), "Wert", "Stunden"],
+            )
+        )
+        # White like the panel around it; the theme would paint the page colour.
+        st.altair_chart((curve + now).properties(background="#ffffff"), width="stretch")
+        st.caption(
+            "Die Linie ist der Planwert: was laut Plan bis zum Ende jedes Tages erledigt sein "
+            "sollte. Die Punkte zeigen heute. SPI ist Fertigstellungswert durch Planwert, CPI "
+            "Fertigstellungswert durch Ist-Stunden; unter 1 liegt das Projekt hinter dem Plan "
+            "oder braucht mehr Stunden als geplant. Gerechnet wird nach der 0/100-Methode: "
+            "Eine Aufgabe zählt erst, wenn sie fertig ist, ihre Ist-Stunden zählen sofort. "
+            "Mitten in einer Aufgabe wirken beide Kennzahlen deshalb schlechter als die Lage."
+        )
 
     with st.container(border=True, key="panel-tasks"):
         st.markdown("#### :material/bar_chart: Plan und Ist je Aufgabe")

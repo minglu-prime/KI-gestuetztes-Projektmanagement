@@ -12,6 +12,10 @@
 - Planstunden gesamt: $plan_h h
 - Ist-Stunden bisher: $ist_h h
 - Abweichung der fertigen Aufgaben: $abweichung h
+- Planwert bis heute: $planwert h (was laut Plan bis heute erledigt sein sollte)
+- Fertigstellungswert: $fertigwert h (Planstunden der fertigen Aufgaben)
+- Termin-Kennzahl (SPI): $spi
+- Aufwands-Kennzahl (CPI): $cpi
 $kosten
 
 ## Im Verzug

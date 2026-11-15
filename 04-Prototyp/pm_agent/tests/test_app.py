@@ -537,6 +537,14 @@ def test_the_rest_of_the_project_goes_from_kontrolle_into_the_planung(site):
     assert list(at.session_state["team_df"]["Name"]) == ["Anna"]
 
 
+def test_kontrolle_shows_the_earned_value(tracked):
+    at = tracked.switch_page("pages/kontrolle.py").run()
+    assert not at.exception
+    labels = [m.label for m in at.metric]
+    for label in ["Planwert bis heute", "Fertigstellungswert", "SPI", "CPI"]:
+        assert label in labels
+
+
 def test_kontrolle_offers_the_control_document(tracked):
     at = tracked.switch_page("pages/kontrolle.py").run()
     assert not at.exception

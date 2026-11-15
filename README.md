@@ -166,6 +166,10 @@ Schlägt der Kontroll-Agent vor, Aufgaben einer anderen Person zu geben, rechnet
 das für das voraussichtliche Ende bedeutet. Das Ergebnis steht neben der Wirkung, die Claude
 erwartet. Maßnahmen ohne Umverteilung sind als nicht nachrechenbar markiert.
 
+Dazu kommt die **Earned-Value-Analyse** nach der 0/100-Methode: Planwert bis heute,
+Fertigstellungswert und Ist-Stunden, daraus SPI und CPI, mit der Kurve des Planwerts über die
+Laufzeit.
+
 Alles zusammen gibt es als **Kontrollbericht**: ein Markdown-Dokument aus einer Vorlage mit
 Kennzahlen, Prognose, Verzug, Kosten und, wenn erstellt, der Bewertung des Agenten samt
 nachgerechneter Wirkung.
