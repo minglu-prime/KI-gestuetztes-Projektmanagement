@@ -88,6 +88,14 @@ Ausgabe-Token, Modell `claude-opus-5-5`. Projekt (Web-App zum Buchen von Lernrä
 Eine Streamlit-Anwendung mit dem Menü Startseite, Agenten (Planung, Durchführung, Kontrolle),
 KI-Lab, Über uns und Impressum. Sie läuft nur auf dem eigenen Rechner.
 
+<div align="center">
+<img src="04-Prototyp/pm_agent/assets/screenshots/rundgang.gif" width="820" alt="Rundgang durch die laufende Website in 40 Sekunden: Startseite mit den drei Agenten, Planung mit einem geöffneten protokollierten Lauf, Terminplan als Gantt-Diagramm und eine Aufgabe im Detail, Durchführung mit den nächsten fünf Arbeitstagen, Kontrolle mit Prognose und Earned Value">
+</div>
+
+<sub>Rundgang in 40 Sekunden, aufgenommen aus der laufenden Website mit dem Beispielprojekt:
+Startseite, Planung mit einem protokollierten Lauf, Durchführung, Kontrolle. Ein neuer Lauf mit
+Claude ist nicht dabei; den zeigt der Abschnitt „Ein echter Lauf“.</sub>
+
 ### Planung
 
 Sechs Schritte: Team, Projekt, Planung, Ergebnis, Anpassen, Export. Eine Leiste zeigt, was noch
