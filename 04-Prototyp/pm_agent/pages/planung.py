@@ -288,7 +288,7 @@ with tabs[0]:
             "Stunden/Woche": st.column_config.NumberColumn(min_value=1, max_value=168),
             "Abwesend": st.column_config.TextColumn(
                 help="Tage ohne Arbeit, z. B. 01.12.2026–05.12.2026, 23.12.2026. Feiertage "
-                "kennt der Kalender nicht: bei allen Personen eintragen."
+                "und andere freie Tage für alle stehen beim Projekt (Schritt 2)."
             ),
             "Notiz": st.column_config.TextColumn(help="z. B. Urlaub, Prüfungsphase"),
         },
@@ -341,6 +341,7 @@ with tabs[1]:
         "einzelner Personen stehen in der Teamtabelle.",
     )
     project = None
+    project_gap = "Projektidee und Deadline (Schritt 2)"  # what step 3 says is missing
     if not idea.strip() or deadline is None:
         st.info("Beschreibe die Projektidee und wähle eine Deadline.")
     else:
@@ -350,8 +351,10 @@ with tabs[1]:
             )
         except InputError as err:
             st.error(f"Freie Tage: {err}")
+            project_gap = "lesbare freie Tage (Schritt 2)"
         except ValidationError as err:
             st.error("; ".join(e["msg"].removeprefix("Value error, ") for e in err.errors()))
+            project_gap = "ein gültiges Projekt (Schritt 2)"
     next_step("Weiter zur Planung", STEPS[2], project is not None, "to_planning")
 
 # 3 · Planung ------------------------------------------------------------------------------
@@ -368,7 +371,7 @@ with tabs[2]:
             for ok, text in [
                 (bool(team), "ein gültiges Team (Schritt 1)"),
                 (consent, "die Zustimmung des Teams (Schritt 1)"),
-                (project is not None, "Projektidee und Deadline (Schritt 2)"),
+                (project is not None, project_gap),
             ]
             if not ok
         ]

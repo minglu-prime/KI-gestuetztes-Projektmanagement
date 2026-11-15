@@ -27,7 +27,7 @@ from pm_agent.models import (
     Project,
     Task,
 )
-from pm_agent.planning import workday_shift
+from pm_agent.planning import workday_shift, working_shift
 
 DATA_DIR = LOG_DIR.parent / "data"
 TEAM_FILE = DATA_DIR / "team.json"
@@ -336,7 +336,7 @@ def suggested_wishes(
     wishes = []
     if result.end_date > project.deadline:
         wishes.append(f"Der Plan soll spätestens am {_date(project.deadline)} enden.")
-    elif workday_shift(result.end_date, project.deadline) == 0:
+    elif working_shift(project, result.end_date, project.deadline) == 0:
         wishes.append("Schaffe vor der Deadline mindestens zwei Arbeitstage Puffer.")
     loads = [item for item in result.load if item.utilization is not None]
     for item in loads:
@@ -644,6 +644,8 @@ def _absences(text: str, what: str = "Abwesenheit ") -> list[Absence]:
                 f"{what}'{part}' nicht lesbar, erwartet zum Beispiel "
                 "'01.12.2026–05.12.2026' oder '23.12.2026'"
             ) from None
+        if days[-1] < days[0]:
+            raise InputError(f"{what}'{part}': Das Ende liegt vor dem Beginn")
         absences.append(Absence(first=days[0], last=days[-1]))
     return absences
 

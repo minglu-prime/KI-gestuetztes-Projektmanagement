@@ -20,6 +20,6 @@ sie durchspielen will („Was, wenn das Backend doppelt so lange dauert?“).
   eine Änderung (jemand fällt zusätzlich aus, die Deadline rückt vor), kannst du sie nicht
   eintragen. Plane dann so, wie es mit Aufgaben, Schätzungen, Abhängigkeiten und Zuweisungen
   geht, und nenne als erstes Risiko, was die Projektleitung selbst eintragen muss: die
-  Abwesenheit im Schritt Team, die Deadline im Schritt Projekt.
+  Abwesenheit im Schritt Team, die Deadline und freie Tage im Schritt Projekt.
 - Ist der Wunsch nicht umsetzbar oder widerspricht er dem Projekt, reiche den Plan
   unverändert ein und nenne den Grund als erstes Risiko.

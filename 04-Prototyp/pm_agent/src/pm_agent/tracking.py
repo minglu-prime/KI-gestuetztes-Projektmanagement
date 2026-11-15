@@ -26,10 +26,10 @@ from pm_agent.models import (
     Task,
 )
 from pm_agent.planning import (
-    add_workdays,
+    add_working_days,
     check_plan,
     planned_work,
-    workday_shift,
+    working_shift,
 )
 from pm_agent.workbench import DATA_DIR, InputError, _cell, _date, _md, _reason, bar_end
 
@@ -431,8 +431,9 @@ def forecast(tracking: Tracking, today: date, reassign: dict[str, str] | None = 
     return Forecast(
         planned_end=planned_end,
         end=end,
-        shift=workday_shift(planned_end, end),
-        deadline_gap=workday_shift(project.deadline, end),
+        # In working days of the project: its free days are no buffer.
+        shift=working_shift(project, planned_end, end),
+        deadline_gap=working_shift(project, project.deadline, end),
         blocked=waiting,
         schedule=sorted(expected.schedule, key=lambda s: expected.order.index(s.task_id)),
     )
@@ -447,7 +448,7 @@ def week_ahead(tracking: Tracking, today: date, days: int = 5) -> list[dict[str,
     """Who does what next: the unfinished tasks the forecast starts within the next `days`
     workdays (today counts), by person and start. Empty if nothing is left or the forecast
     has a problem; forecast() says which."""
-    horizon = add_workdays(today, days - 1)
+    horizon = add_working_days(tracking.project, today, days - 1)
     titles = {task.id: task.title for task in tracking.plan.tasks}
     ahead = [s for s in forecast(tracking, today).schedule if s.start <= horizon]
     return [
@@ -486,7 +487,7 @@ def reassignment_effect(tracking: Tracking, today: date, task_ids: list[str], me
     after = forecast(tracking, today, reassign=dict.fromkeys(moved, member))
     if after.problem:
         return f"Nicht prüfbar: {after.problem}"
-    shift = workday_shift(before.end, after.end)
+    shift = working_shift(tracking.project, before.end, after.end)
     if shift:
         days = f"{abs(shift)} Arbeitstag{'' if abs(shift) == 1 else 'e'}"
         text = (

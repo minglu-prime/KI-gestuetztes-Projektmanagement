@@ -283,8 +283,12 @@ def test_an_unreadable_absence_names_the_row_and_shows_the_expected_form():
     with pytest.raises(InputError, match="Abwesenheit '31.02.2027' nicht lesbar"):
         rows_to_team(rows)
     rows[0]["Abwesend"] = "05.12.2026–01.12.2026"
-    with pytest.raises(InputError, match="Ende der Abwesenheit liegt vor ihrem Beginn"):
+    with pytest.raises(
+        InputError, match="Abwesenheit '05.12.2026–01.12.2026': Das Ende liegt vor dem Beginn"
+    ):
         rows_to_team(rows)
+    with pytest.raises(InputError, match="^'05.12.2026–01.12.2026': Das Ende liegt vor dem"):
+        free_days("05.12.2026–01.12.2026")
 
 
 BEN = Member(name="Ben", skills={"SQL": 3}, hours_per_week=20)

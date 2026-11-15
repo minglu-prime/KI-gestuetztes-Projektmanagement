@@ -398,6 +398,8 @@ def test_free_days_of_the_project_move_the_plan(app, monkeypatch):
     assert not at.exception
     assert any("'Weihnachten' nicht lesbar" in e.value for e in at.error)
     assert button(at, "Plan mit Claude erstellen").disabled
+    # Step 3 says what is in the way, not that idea and deadline were missing.
+    assert any("lesbare freie Tage (Schritt 2)" in i.value for i in at.info)
 
 
 def test_an_agent_error_is_shown_to_the_project_lead(app, monkeypatch):

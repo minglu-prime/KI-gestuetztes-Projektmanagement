@@ -119,16 +119,16 @@ def check_plan(
         warnings.append(text)
 
     if end_date > project.deadline:
-        late = count_workdays(project.deadline + timedelta(days=1), end_date)
+        late = working_days(project, project.deadline + timedelta(days=1), end_date)
         warn(
             ("late",),
             f"Der Plan endet am {_fmt(end_date)}, {late} Arbeitstag{'' if late == 1 else 'e'} "
             f"nach der Deadline ({_fmt(project.deadline)})",
         )
-    # end_date is a workday, so one workday in [end_date, deadline] is end_date itself: any
-    # delay misses the deadline. Counted from end_date, not the day after, which does not
-    # exist for 31.12.9999.
-    elif count_workdays(end_date, project.deadline) == 1:
+    # end_date is a working day, so one working day in [end_date, deadline] is end_date
+    # itself: any delay misses the deadline. Counted from end_date, not the day after, which
+    # does not exist for 31.12.9999. Free days of the project in between are no buffer.
+    elif working_days(project, end_date, project.deadline) == 1:
         warn(
             ("buffer",),
             f"Der Plan endet am {_fmt(end_date)}, bis zur Deadline ({_fmt(project.deadline)}) "
@@ -137,10 +137,15 @@ def check_plan(
     for item in load:
         if item.utilization is None:
             if item.assigned_hours:
+                # With free days of the project in play, "absent" would blame the person.
+                reason = (
+                    "hat bis zur Deadline keinen Arbeitstag (abwesend oder frei für alle)"
+                    if project.free_days
+                    else "ist bis zur Deadline durchgehend abwesend"
+                )
                 warn(
                     ("away", item.member),
-                    f"{item.member} ist bis zur Deadline durchgehend abwesend, hat aber "
-                    f"{_hours(item.assigned_hours)} h zugewiesen",
+                    f"{item.member} {reason}, hat aber {_hours(item.assigned_hours)} h zugewiesen",
                 )
         elif round(item.utilization, _DIGITS) > 1:
             percent = math.ceil(round(item.utilization * 100, _DIGITS))  # never reads "100%"
@@ -219,6 +224,43 @@ def workday_shift(before: date, after: date) -> int:
     if after >= before:
         return count_workdays(before + timedelta(days=1), after)
     return -count_workdays(after + timedelta(days=1), before)
+
+
+def working_days(project: Project, first: date, last: date) -> int:
+    """Number of working days of the project in [first, last]: Mon-Fri dates that are not
+    free for everybody. 0 if last is before first. Absences of single persons do not count
+    here: this is the calendar of the project, for deadlines and buffers."""
+    total = count_workdays(first, last)
+    free = sum(
+        max(0, min(end, total - 1) - start + 1) for start, end in _away(project.free_days, first)
+    )
+    return total - free
+
+
+def working_shift(project: Project, before: date, after: date) -> int:
+    """How many working days of the project `after` lies behind `before`; negative if it
+    lies ahead of it."""
+    if after >= before:
+        return working_days(project, before + timedelta(days=1), after)
+    return -working_days(project, after + timedelta(days=1), before)
+
+
+def add_working_days(project: Project, start: date, n: int) -> date:
+    """Date of working day n of the project, where day 0 is the first working day on or
+    after start. If the free days run to the end of the calendar: the last date."""
+    day, offset = _next_workday(start), 0
+    ranges = _away(project.free_days, day)  # in workday offsets from `day`, sorted and merged
+    for first, last in ranges:
+        if first > offset + n:  # the n days fit before this free time
+            break
+        if first <= offset:  # inside it: go on after it
+            offset = max(offset, last + 1)
+        else:  # the free time takes what is left of n behind it
+            n -= first - offset
+            offset = last + 1
+    if offset + n > count_workdays(day, date.max) - 1:
+        return date.max
+    return add_workdays(day, offset + n)
 
 
 def _next_workday(day: date) -> date:
