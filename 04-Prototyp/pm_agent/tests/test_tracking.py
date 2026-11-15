@@ -908,3 +908,40 @@ def test_what_is_started_goes_on_before_what_is_open(tmp_path):
     assert [task.id for task in rest_plan(started).tasks] == ["Q", "P", "R"]
     outlook = forecast(started, date(2026, 11, 9))
     assert (outlook.planned_end, outlook.end) == (date(2026, 11, 11), date(2026, 11, 10))
+
+
+def test_what_is_left_of_a_started_task_is_not_rounded_up_to_an_hour(tmp_path):
+    # Anna, 8 h a day: A (8.5 h) fills Monday and half an hour of Tuesday, B (7.5 h) the
+    # rest of Tuesday. On Tuesday A is under way with Monday's 8 h booked: the project is
+    # exactly on plan, and half an hour of A is left, not a whole one.
+    plan = one_person_plan(("A", 8.5, []), ("B", 7.5, []))
+    adopted = adopt(PROJECT, TEAM, plan, path=tmp_path / "projekt.json")
+    started = apply_rows(adopted, [{"ID": "A", "Status": "in Arbeit", "Ist (h)": 8}])
+    assert rest_plan(started).tasks[0].estimate_hours == 0.5
+    assert forecast(started, date(2026, 11, 10)).shift == 0
+    # Booked up to the estimate and still not finished: nobody knows what is left. One hour.
+    over = apply_rows(adopted, [{"ID": "A", "Status": "in Arbeit", "Ist (h)": 9}])
+    assert rest_plan(over).tasks[0].estimate_hours == 1
+
+
+def test_what_waits_for_a_late_task_is_listed_in_the_order_of_the_plan(tmp_path):
+    # A is late. B (open) and C (already begun) both wait for it. The rest of the project
+    # lists C first, because it is begun; the list of what A holds up stays in plan order.
+    ben = Member(name="Ben", hours_per_week=40)
+    plan = Plan.model_validate(
+        {
+            "tasks": [
+                {"id": "A", "title": "a", "estimate_hours": 8},
+                {"id": "B", "title": "b", "estimate_hours": 8, "depends_on": ["A"]},
+                {"id": "C", "title": "c", "estimate_hours": 8, "depends_on": ["A"]},
+            ],
+            "assignments": [
+                {"task_id": tid, "member": member, "reason": "r"}
+                for tid, member in [("A", "Anna"), ("B", "Anna"), ("C", "Ben")]
+            ],
+        }
+    )
+    adopted = adopt(PROJECT, [*TEAM, ben], plan, path=tmp_path / "projekt.json")
+    late = apply_rows(adopted, [{"ID": "C", "Status": "in Arbeit", "Ist (h)": 2}])
+    assert [task.id for task in rest_plan(late).tasks] == ["C", "A", "B"]
+    assert forecast(late, date(2026, 11, 12)).blocked["A"] == ["B", "C"]

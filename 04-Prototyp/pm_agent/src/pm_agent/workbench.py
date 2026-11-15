@@ -416,6 +416,14 @@ def plan_changes(before: Plan, after: Plan) -> list[str]:
     if renumbered:
         subject = "Eine Aufgabe hat" if renumbered == 1 else f"{renumbered} Aufgaben haben"
         lines.append(f"{subject} eine neue ID")
+    # The tasks that are in both plans, in the IDs of after: do they stand in the same order?
+    if [twin[t.id] for t in before.tasks if t.id in twin] != [
+        t.id for t in after.tasks if t.id in origin
+    ]:
+        lines.append(
+            "Reihenfolge der Aufgaben geändert: Können zwei Aufgaben gleichzeitig beginnen, "
+            "wird zuerst eingeplant, was weiter oben steht"
+        )
     lines += [f"Neues Risiko: {risk}" for risk in after.risks if risk not in before.risks]
     lines += [f"Risiko entfällt: {risk}" for risk in before.risks if risk not in after.risks]
     return lines

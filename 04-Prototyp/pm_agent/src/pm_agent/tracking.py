@@ -367,9 +367,10 @@ def rest_plan(tracking: Tracking, reassign: dict[str, str] | None = None) -> Pla
         if done.remaining_hours is not None:
             return done.remaining_hours
         if done.status == "in Arbeit":
-            # Never more than the task itself: one under an hour stays under an hour.
-            floor = min(MIN_REST_HOURS, task.estimate_hours)
-            return max(task.estimate_hours - done.actual_hours, floor)
+            left = round(task.estimate_hours - done.actual_hours, 6)
+            # Only when nothing is left by the numbers. A rest under an hour is a rest;
+            # and never more than the task itself, if that is shorter than the hour.
+            return left if left > 0 else min(MIN_REST_HOURS, task.estimate_hours)
         return task.estimate_hours
 
     open_ids = {task.id for task in tracking.plan.tasks if state[task.id].status != "fertig"}
@@ -383,8 +384,10 @@ def rest_plan(tracking: Tracking, reassign: dict[str, str] | None = None) -> Pla
                     "depends_on": [dep for dep in task.depends_on if dep in open_ids],
                 }
             )
-            # What is started comes first: of two tasks a person could work on, the one
-            # in progress goes on. (sorted is stable: otherwise the order of the plan.)
+            # What is started comes first: of two tasks a person could begin with at the
+            # same time, the one in progress goes on. (sorted is stable: otherwise the
+            # order of the plan.) Not more than that: a begun task that still waits for
+            # another one does not hold back what can start now.
             for task in sorted(tracking.plan.tasks, key=lambda t: state[t.id].status != "in Arbeit")
             if task.id in open_ids
         ],
@@ -447,16 +450,19 @@ def forecast(tracking: Tracking, today: date, reassign: dict[str, str] | None = 
         )
     end = expected.end_date
 
+    # In the order of the plan; the rest lists what is begun first.
+    left = {task.id for task in rest.tasks}
+    unfinished = [task for task in plan.tasks if task.id in left]
     waiting: dict[str, list[str]] = {}
     for late in evaluate(tracking, today).overdue:
         reached, queue = [], [late.id]
         while queue:
             current = queue.pop(0)
-            for task in rest.tasks:
+            for task in unfinished:
                 if current in task.depends_on and task.id not in reached:
                     reached.append(task.id)
                     queue.append(task.id)
-        waiting[late.id] = [task.id for task in rest.tasks if task.id in reached]  # plan order
+        waiting[late.id] = [task.id for task in unfinished if task.id in reached]
     return Forecast(
         planned_end=planned_end,
         end=end,

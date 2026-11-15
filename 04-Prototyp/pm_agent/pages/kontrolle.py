@@ -153,10 +153,11 @@ if tracking is not None:
                 (bars + lines + names).properties(background="#ffffff"), width="stretch"
             )
             st.caption(
-                "Annahme: Die restliche Arbeit beginnt heute. Begonnenes geht vor, sonst kommt "
-                "als Nächstes, was am frühesten beginnen kann. Eine offene Aufgabe zählt mit "
-                "ihrer Schätzung, eine begonnene mit Schätzung minus "
-                "Ist-Stunden, mindestens einer Stunde. Ein Rest, den du auf der Seite "
+                "Annahme: Die restliche Arbeit beginnt heute. Als Nächstes kommt, was am "
+                "frühesten beginnen kann; bei Gleichstand Begonnenes vor Offenem. Eine offene "
+                "Aufgabe zählt mit ihrer Schätzung, eine begonnene mit Schätzung minus "
+                "Ist-Stunden; ist die Schätzung aufgebraucht, mit einer Stunde. Ein Rest, den "
+                "du auf der Seite "
                 "Durchführung einträgst, geht vor."
             )
 

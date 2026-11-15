@@ -252,3 +252,19 @@ def test_without_pairs_a_removed_task_takes_its_warning_along_as_well():
     after = skilled(("A", "Entwurf", "Anna", []))
     lines = check_changes(check_plan(before, TEAM, PROJECT), check_plan(after, TEAM, PROJECT))
     assert not any(line.startswith("Behoben") for line in lines)
+
+
+def test_the_same_tasks_in_another_order_are_a_change():
+    # The order decides which of two tasks goes first when both could start: the dates can
+    # move although no task changed.
+    before = simple(("T1", "A", "Anna", 8, []), ("T2", "B", "Anna", 8, []))
+    after = simple(("T2", "B", "Anna", 8, []), ("T1", "A", "Anna", 8, []))
+    assert plan_changes(before, after) == [
+        "Reihenfolge der Aufgaben geändert: Können zwei Aufgaben gleichzeitig beginnen, "
+        "wird zuerst eingeplant, was weiter oben steht"
+    ]
+    # A task in between changes nobody's place.
+    more = simple(
+        ("T1", "A", "Anna", 8, []), ("T3", "C", "Anna", 4, []), ("T2", "B", "Anna", 8, [])
+    )
+    assert plan_changes(before, more) == ["Neu: T3 · C (Anna, 4 h)"]

@@ -272,14 +272,10 @@ def _slack(
         first, last, _, _ = _schedule(plan, members, owner, away, order, (tid, days))
         return final(first, last) != planned
 
-    # Most tasks have little slack: double the delay until it hurts, then halve the gap.
-    # A task without slack costs one schedule this way, not one per halving of the plan.
-    step = 1
-    while step < harmful:
-        if moves_the_end(step):
-            harmful = step
-        else:
-            harmless, step = step, step * 2
+    # Most tasks have no slack at all: one schedule settles those.
+    if moves_the_end(1):
+        return 0
+    harmless = 1
     while harmful - harmless > 1:
         middle = (harmless + harmful) // 2
         if moves_the_end(middle):
@@ -356,20 +352,14 @@ def _schedule(
     # task can go before the one a long chain waits for. Upgrade to a priority by the work
     # behind a task if plans come out visibly too long.
     tasks = {t.id: t for t in plan.tasks}
-    position = {t.id: number for number, t in enumerate(plan.tasks)}
-    open_deps = {t.id: set(t.depends_on) for t in plan.tasks}
-    followers: dict[str, list[str]] = {t.id: [] for t in plan.tasks}
-    for t in plan.tasks:
-        for dep in open_deps[t.id]:
-            followers[dep].append(t.id)
     free_at: dict[str, tuple[float, str]] = {}  # member -> (offset, task that ends there)
     start: dict[str, float] = {}
     end: dict[str, float] = {}
     waits_for: dict[str, list[str]] = {}
     order: list[str] = []
 
-    def option(tid: str) -> tuple[tuple[float, int], float, float, list[tuple[float, str]]]:
-        """When the task could run if it were scheduled now, and what it would wait for."""
+    def option(tid: str) -> tuple[float, float, list[tuple[float, str]]]:
+        """When the task would run if it were scheduled now, and what it would wait for."""
         task, member = tasks[tid], owner[tid]
         candidates = [(end[dep], dep) for dep in task.depends_on]
         if member in free_at:
@@ -383,7 +373,7 @@ def _schedule(
             first, last = _work(
                 first + held_back[1], task.estimate_hours, daily_hours, away[member]
             )
-        return (round(first, _DIGITS), position[tid]), first, last, candidates
+        return first, last, candidates
 
     def place(tid: str, first: float, last: float, candidates: list[tuple[float, str]]) -> None:
         start[tid], end[tid] = first, last
@@ -393,15 +383,25 @@ def _schedule(
 
     if fixed:
         for tid in fixed:
-            place(tid, *option(tid)[1:])
+            place(tid, *option(tid))
         return start, end, waits_for, order
+
+    position = {t.id: number for number, t in enumerate(plan.tasks)}
+    open_deps = {t.id: set(t.depends_on) for t in plan.tasks}
+    followers: dict[str, list[str]] = {t.id: [] for t in plan.tasks}
+    for t in plan.tasks:
+        for dep in open_deps[t.id]:
+            followers[dep].append(t.id)
+
+    def key(tid: str) -> tuple[float, int]:
+        return round(options[tid][0], _DIGITS), position[tid]
 
     # The tasks whose dependencies are scheduled. An option changes only when its person
     # gets another task, so only those are computed again.
     options = {t.id: option(t.id) for t in plan.tasks if not t.depends_on}
     while options:
-        tid = min(options, key=lambda ready: options[ready][0])
-        place(tid, *options.pop(tid)[1:])
+        tid = min(options, key=key)
+        place(tid, *options.pop(tid))
         for other in options:
             if owner[other] == owner[tid]:
                 options[other] = option(other)

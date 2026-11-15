@@ -259,7 +259,8 @@ Was der Prototyp bewusst vereinfacht:
   andere von ihm laufen könnte. Das ist eine Regel, keine Optimierung: Ein Plan kann länger
   ausfallen als nötig.
 - **Prognose:** Die restliche Arbeit beginnt heute und wird nach derselben Regel eingeplant,
-  Begonnenes zuerst. Ein Projekt genau im Plan bekommt deshalb seinen Plan als Prognose, und
+  bei Gleichstand Begonnenes vor Offenem. Ein Projekt genau im Plan bekommt deshalb seinen
+  Plan als Prognose, und
   „Rest mit Claude umplanen“ zeigt in der Planung dasselbe Ende wie die Prognose.
   Ohne eingetragenen Rest zählt eine begonnene Aufgabe mit Schätzung minus Ist-Stunden.
 - **Kosten:** Stunden mal Stundensatz. Token-Kosten der Agenten werden gezählt, aber nicht in

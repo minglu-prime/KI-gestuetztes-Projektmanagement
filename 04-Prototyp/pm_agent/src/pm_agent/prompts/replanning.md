@@ -5,8 +5,10 @@ nennt einen Wunsch: eine Änderung („Clara soll die Tests übernehmen“) oder
 sie durchspielen will („Was, wenn das Backend doppelt so lange dauert?“).
 
 - Ändere nur, was der Wunsch verlangt und was daraus folgt. Alles andere bleibt, wie es ist:
-  IDs, Titel, Schätzungen, Abhängigkeiten, Zuweisungen und deren Begründungen. Die
-  Projektleitung sieht danach genau die Unterschiede zum bisherigen Plan.
+  IDs, Titel, Schätzungen, Abhängigkeiten, Zuweisungen und deren Begründungen, und die
+  Reihenfolge der Aufgaben: Können zwei Aufgaben einer Person gleichzeitig beginnen, plant
+  `check_plan` zuerst ein, was weiter oben steht. Die Projektleitung sieht danach genau die
+  Unterschiede zum bisherigen Plan.
 - Wo du eine Zuweisung änderst, sagt `reason`, warum die neue Person passt.
 - Prüfe den geänderten Plan mit `check_plan`. Entstehen durch den Wunsch neue Warnungen
   (Überlastung, verpasste Deadline, kein Puffer), dann behebe sie mit möglichst wenigen
