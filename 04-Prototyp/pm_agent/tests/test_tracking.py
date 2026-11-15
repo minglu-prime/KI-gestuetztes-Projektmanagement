@@ -836,3 +836,21 @@ def test_an_hourly_rate_of_zero_is_a_rate(tracking):
     evaluation = evaluate(tracking, today=date(2026, 11, 10))
     assert "- Plankosten gesamt: 0,00 €" in control_document(tracking, evaluation, rate=0)
     assert "- Kosten: kein Stundensatz gesetzt" in control_document(tracking, evaluation)
+
+
+def test_the_status_report_says_who_does_what_in_the_next_five_workdays(tracking):
+    thursday = date(2026, 11, 12)
+    updated = apply_rows(tracking, ROWS)  # A finished, B started with 4 of 16 h
+    report = status_report(updated, evaluate(updated, today=thursday))
+    assert "## Die nächsten fünf Arbeitstage" in report
+    assert "| Anna | B | API | 12.11.2026 | 13.11.2026 | in Arbeit |" in report
+    assert "$" not in report
+
+    done = progressed(tracking, A="fertig", B="fertig")
+    assert "Alle Aufgaben sind fertig: Es steht nichts mehr an." in status_report(
+        done, evaluate(done, today=thursday)
+    )
+    absurd = apply_rows(tracking, [{"ID": "B", "Status": "in Arbeit", "Rest (h)": 20_000_000}])
+    assert "Ohne Prognose lässt sich nicht sagen, was ansteht." in status_report(
+        absurd, evaluate(absurd, today=thursday)
+    )

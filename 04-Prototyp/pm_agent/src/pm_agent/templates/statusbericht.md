@@ -22,6 +22,10 @@ $zusammenfassung
 
 $verzug
 
+## Die nächsten fünf Arbeitstage
+
+$naechste
+
 ## Aufgaben
 
 | ID | Aufgabe | Person | Status | Plan (h) | Ist (h) | Notiz |

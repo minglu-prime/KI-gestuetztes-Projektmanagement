@@ -467,6 +467,11 @@ def forecast(tracking: Tracking, today: date, reassign: dict[str, str] | None = 
     )
 
 
+NOTHING_LEFT = "Alle Aufgaben sind fertig: Es steht nichts mehr an."
+NOTHING_AHEAD = "In den nächsten fünf Arbeitstagen beginnt laut Prognose keine Aufgabe."
+NO_WEEK_AHEAD = "Ohne Prognose lässt sich nicht sagen, was ansteht."
+
+
 def week_ahead(tracking: Tracking, today: date, days: int = 5) -> list[dict[str, Any]]:
     """Who does what next: the unfinished tasks the forecast starts within the next `days`
     workdays (today counts), by person and start. Empty if nothing is left or the forecast
@@ -670,6 +675,18 @@ def status_report(
         note = "*Vorschlag des Durchführungs-Agenten (Claude), von der Projektleitung zu prüfen.*"
         text = "\n\n".join(filter(None, [summary.summary, steps, note]))
     count = {status: sum(t.status == status for t in tasks) for status in STATUSES}
+    outlook = forecast(tracking, evaluation.today)
+    ahead = week_ahead(tracking, evaluation.today)
+    if outlook.problem:
+        coming = NO_WEEK_AHEAD  # the reason stands next to "Prognose" above
+    elif outlook.end is None:
+        coming = NOTHING_LEFT
+    elif not ahead:
+        coming = NOTHING_AHEAD
+    else:
+        rows = ["| " + " | ".join(_md(str(cell)) for cell in row.values()) + " |" for row in ahead]
+        head = ["| Person | ID | Aufgabe | Beginn | Ende | Status |", "|---|---|---|---|---|---|"]
+        coming = "\n".join(head + rows)
     overdue = [
         f"- {t.id} · {t.title} ({t.member}), geplant bis {_date(t.planned_end)}, Status: {t.status}"
         for t in evaluation.overdue
@@ -681,7 +698,8 @@ def status_report(
         start=_date(project.start_date),
         deadline=_date(project.deadline),
         planende=_date(max(t.planned_end for t in tasks)),
-        prognose=forecast_text(forecast(tracking, evaluation.today), project.deadline),
+        prognose=forecast_text(outlook, project.deadline),
+        naechste=coming,
         fortschritt=percent(evaluation.progress),
         fertig=count["fertig"],
         in_arbeit=count["in Arbeit"],

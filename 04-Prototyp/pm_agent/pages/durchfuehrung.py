@@ -7,6 +7,9 @@ import streamlit as st
 
 from pm_agent import followup
 from pm_agent.tracking import (
+    NO_WEEK_AHEAD,
+    NOTHING_AHEAD,
+    NOTHING_LEFT,
     PROGRESS_COLUMNS,
     PROGRESS_READ_ONLY,
     STATUSES,
@@ -59,14 +62,14 @@ with st.container(border=True, key="panel-ahead"):
     ahead = week_ahead(tracking, date.today())
     if outlook.problem:
         st.error(
-            f"Ohne Prognose lässt sich nicht sagen, was ansteht: {outlook.problem}. Prüfe "
-            "Status und Rest-Stunden in der Tabelle unten."
+            f"{NO_WEEK_AHEAD} {outlook.problem}. Prüfe Status und Rest-Stunden in der Tabelle "
+            "unten."
         )
     elif outlook.end is None:
-        st.success("Alle Aufgaben sind fertig: Es steht nichts mehr an.")
+        st.success(NOTHING_LEFT)
     elif not ahead:
         # Reachable when everyone with unfinished work is away for the whole time.
-        st.info("In den nächsten fünf Arbeitstagen beginnt laut Prognose keine Aufgabe.")
+        st.info(NOTHING_AHEAD)
     else:
         st.dataframe(pd.DataFrame(ahead), hide_index=True)
         st.caption(
