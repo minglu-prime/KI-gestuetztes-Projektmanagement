@@ -151,6 +151,10 @@ Plan und einen Tag nach der Deadline. Die Fortschrittstabelle der Durchführung 
 Aufgabe: „Prognose Ende“ neben dem geplanten Ende. Darüber steht, was daraus für die Woche folgt:
 wer in den nächsten fünf Arbeitstagen womit beginnt.
 
+<div align="center">
+<img src="04-Prototyp/pm_agent/assets/screenshots/durchfuehrung.jpg" width="820" alt="Seite Durchführung: Marken „1 von 18 Aufgaben fertig“, „0 in Arbeit“, „2 im Verzug“, der Fortschrittsbalken und der Bereich „Die nächsten fünf Arbeitstage“ mit fünf Aufgaben je Person samt Beginn, Ende und Status">
+</div>
+
 Von dort geht es zurück in die Planung: „Rest mit Claude umplanen“ lädt die unfertigen Aufgaben
 als Plan ab heute, und das Gespräch mit Claude beginnt mit genau dem Problem, das die Prognose
 gezeigt hat.
@@ -170,6 +174,10 @@ erwartet. Maßnahmen ohne Umverteilung sind als nicht nachrechenbar markiert.
 Dazu kommt die **Earned-Value-Analyse** nach der 0/100-Methode: Planwert bis heute,
 Fertigstellungswert und Ist-Stunden, daraus SPI und CPI, mit der Kurve des Planwerts über die
 Laufzeit.
+
+<div align="center">
+<img src="04-Prototyp/pm_agent/assets/screenshots/kontrolle-earned-value.jpg" width="820" alt="Bereich Earned Value auf der Seite Kontrolle: Planwert bis heute 41,6 h, Fertigstellungswert 4 h, Ist-Stunden 5 h, SPI 0,10 und CPI 0,80; darunter die Kurve des Planwerts vom 09.11. bis zum 15.12. mit den beiden Punkten für heute">
+</div>
 
 Alles zusammen gibt es als **Kontrollbericht**: ein Markdown-Dokument aus einer Vorlage mit
 Kennzahlen, Prognose, Verzug, Kosten und, wenn erstellt, der Bewertung des Agenten samt
