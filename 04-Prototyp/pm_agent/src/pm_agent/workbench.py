@@ -9,7 +9,9 @@ import csv
 import io
 import json
 import math
+import os
 import re
+import threading
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -26,7 +28,7 @@ from pm_agent.models import (
     Project,
     Task,
 )
-from pm_agent.planning import workday_shift
+from pm_agent.planning import workday_shift, working_shift
 
 DATA_DIR = LOG_DIR.parent / "data"
 TEAM_FILE = DATA_DIR / "team.json"
@@ -200,21 +202,134 @@ def load_run(path: Path) -> tuple[Project, list[Member], Plan, dict[str, Any]]:
     )
 
 
-def append_run(row: dict[str, Any], path: Path = RUNS_CSV) -> None:
-    """One line per exported plan in runs.csv: the data for the before/after comparison."""
+# One export at a time: every browser session runs in a thread of its own, and two lines
+# appended at the same moment can write over each other. Within this server only; two
+# servers on one logs folder are not kept apart.
+_RECORD_LOCK = threading.Lock()
+
+
+def append_run(row: dict[str, Any], path: Path | None = None) -> None:
+    """One line per exported plan in runs.csv: the data for the before/after comparison.
+
+    The file is only ever appended to, and only if it is a clean record: readable as UTF-8,
+    every line as long as the heading, and the heading has the columns of the row. Then the
+    line goes below, in the order of the heading. Any other file (other separator or
+    encoding, a line with too many cells, an open quote, an older set of columns) is put
+    aside as it is, under a name with the time, and a new file begins. Nothing in an
+    existing file is rewritten, so nothing in it can be lost or end up under another
+    heading.
+
+    Raises ValueError (UnicodeEncodeError) if the row cannot be written, before any file is
+    touched, and OSError if a file cannot be. After an OSError every line is still there,
+    in runs.csv or, if the old file was already put aside, in that file."""
+    path = path or RUNS_CSV  # read at call time: tests point it to a temporary folder
     path.parent.mkdir(parents=True, exist_ok=True)
-    rows = []
-    if path.exists():
-        with path.open(encoding="utf-8", newline="") as file:
-            rows = list(csv.DictReader(file))
-    # The columns of the file, then what this row has on top. Written as a whole each time:
-    # appending a line under a heading with other columns would put values under the wrong
-    # name, and nobody would notice. The file has one line per export, so it stays small.
-    columns = list(dict.fromkeys([*(rows[0] if rows else []), *row]))
-    with path.open("w", encoding="utf-8", newline="") as file:
-        writer = csv.DictWriter(file, fieldnames=columns, restval="")
-        writer.writeheader()
-        writer.writerows([*rows, row])
+    with _RECORD_LOCK:
+        old = path.read_bytes() if path.exists() else b""
+        heading = _record_heading(old)
+        fits = heading is not None and set(row) <= set(heading)
+        text = io.StringIO(newline="")
+        writer = csv.DictWriter(text, fieldnames=heading if fits else list(row), restval="")
+        if not fits:
+            writer.writeheader()
+        elif old[-1:] not in (b"\n", b"\r"):  # the new line must not continue the last one
+            text.write("\r\n")
+        writer.writerow(row)
+        line = text.getvalue().encode("utf-8")  # fails here, before any file is touched
+        if not fits and not _is_blank(old):
+            _put_aside(path)
+        with path.open("ab" if fits else "wb") as file:
+            file.write(line)  # in one piece
+
+
+def read_runs(path: Path | None = None) -> list[dict[str, str]]:
+    """The lines of runs.csv, one dict per export; [] if there is no file or nothing in it.
+    Read with the check append_run writes with, so that a table never shows a file with
+    cells left out or shifted. Raises InputError if the file is not a clean record."""
+    path = path or RUNS_CSV
+    content = path.read_bytes() if path.exists() else b""
+    if _is_blank(content):
+        return []
+    if _record_heading(content) is None:
+        raise InputError(
+            "kein sauberes Protokoll (andere Kodierung, ein offenes Anführungszeichen oder "
+            "eine Zeile mit mehr oder weniger Zellen als die Kopfzeile)"
+        )
+    return list(csv.DictReader(io.StringIO(content.decode("utf-8-sig"), newline="")))
+
+
+def _is_blank(content: bytes) -> bool:
+    """Nothing in it but a byte order mark and white space: nothing to keep."""
+    try:
+        return not content.decode("utf-8-sig").strip()
+    except UnicodeDecodeError:
+        return False
+
+
+def _record_heading(content: bytes) -> list[str] | None:
+    """The heading of a clean record, None for anything append_run must not append to."""
+    try:
+        lines = list(csv.reader(io.StringIO(content.decode("utf-8-sig"), newline=""), strict=True))
+    except (UnicodeDecodeError, csv.Error):  # another encoding; an open quote, a huge cell
+        return None
+    if not lines or not lines[0]:
+        return None
+    if "" in lines[0] or len(set(lines[0])) != len(lines[0]):
+        return None  # read by name, a column without one or with a double would hide values
+    if any(line and len(line) != len(lines[0]) for line in lines):  # blank lines are fine
+        return None
+    return lines[0]
+
+
+def _put_aside(path: Path) -> None:
+    """Give the file a name with the time, so that its place is free. The file itself is
+    moved, not a copy of what was read: a line that another server appended in between goes
+    with it. And never onto a name that exists, also not one that another server took in
+    the same second."""
+    stamp, number = datetime.now().strftime("%Y%m%d-%H%M%S"), 1
+    while True:
+        count = "" if number == 1 else f"-{number}"
+        aside = path.with_name(f"{path.stem}-bis-{stamp}{count}{path.suffix}")
+        try:
+            _move(path, aside)
+            return
+        except FileExistsError:
+            number += 1
+
+
+def _rename(source: Path, target: Path) -> None:
+    """Windows only: there a rename refuses a name that exists."""
+    os.rename(source, target)
+
+
+def _link_and_unlink(source: Path, target: Path) -> None:
+    """Elsewhere a rename writes over an existing file. A hard link refuses the name."""
+    os.link(source, target)
+    try:
+        source.unlink()
+    except OSError:
+        target.unlink()  # one file under two names would be put aside twice
+        raise
+
+
+# The move of _put_aside: never onto a name that exists.
+_move = _rename if os.name == "nt" else _link_and_unlink
+
+
+def put_aside(path: Path | None = None) -> list[str]:
+    """The names of the files append_run has put aside, oldest first."""
+    path = path or RUNS_CSV
+    if not path.parent.is_dir():  # no logs folder yet: nothing was ever written
+        return []
+    name = re.compile(
+        rf"{re.escape(path.stem)}-bis-(\d{{8}}-\d{{6}})(?:-(\d+))?{re.escape(path.suffix)}"
+    )
+    found = []
+    for file in path.parent.iterdir():
+        match = name.fullmatch(file.name)
+        if match and file.is_file():
+            found.append((match[1], int(match[2] or 1), file.name))
+    return [file for _, _, file in sorted(found)]
 
 
 def round_summary(number: int, record: dict[str, Any]) -> tuple[str, list[str]]:
@@ -309,7 +424,7 @@ def suggested_wishes(
     wishes = []
     if result.end_date > project.deadline:
         wishes.append(f"Der Plan soll spätestens am {_date(project.deadline)} enden.")
-    elif workday_shift(result.end_date, project.deadline) == 0:
+    elif working_shift(project, result.end_date, project.deadline) == 0:
         wishes.append("Schaffe vor der Deadline mindestens zwei Arbeitstage Puffer.")
     loads = [item for item in result.load if item.utilization is not None]
     for item in loads:
@@ -446,12 +561,16 @@ def plan_changes(before: Plan, after: Plan) -> list[str]:
 
 
 def check_changes(
-    before: CheckResult, after: CheckResult, pairs: dict[str, str] | None = None
+    before: CheckResult,
+    after: CheckResult,
+    pairs: dict[str, str] | None = None,
+    project: Project | None = None,
 ) -> list[str]:
     """What a change of the plan does to its check: end date, warnings, moved dates.
 
     `pairs` (pair_tasks) says which task of before is which task of after. Without it tasks
-    are the same if their IDs are."""
+    are the same if their IDs are. With `project` the end moves in working days of the
+    project; without it, in Mon-Fri days, free days included."""
     if pairs is None:
         kept = {s.task_id for s in after.schedule}
         pairs = {s.task_id: s.task_id for s in before.schedule if s.task_id in kept}
@@ -469,7 +588,10 @@ def check_changes(
         was[kind] = text
     lines = []
     if before.end_date and after.end_date and before.end_date != after.end_date:
-        shift = workday_shift(before.end_date, after.end_date)
+        if project is None:
+            shift = workday_shift(before.end_date, after.end_date)
+        else:
+            shift = working_shift(project, before.end_date, after.end_date)
         days, direction = abs(shift), "später" if shift > 0 else "früher"
         lines.append(
             f"Planende: {_date(before.end_date)} → {_date(after.end_date)} "
@@ -617,6 +739,8 @@ def _absences(text: str, what: str = "Abwesenheit ") -> list[Absence]:
                 f"{what}'{part}' nicht lesbar, erwartet zum Beispiel "
                 "'01.12.2026–05.12.2026' oder '23.12.2026'"
             ) from None
+        if days[-1] < days[0]:
+            raise InputError(f"{what}'{part}': Das Ende liegt vor dem Beginn")
         absences.append(Absence(first=days[0], last=days[-1]))
     return absences
 

@@ -252,6 +252,8 @@ Was der Prototyp bewusst vereinfacht:
 - **Kalender:** Arbeitstage Montag bis Freitag. Abwesenheiten trägt die Projektleitung je
   Person ein; an diesen Tagen wird keine Arbeit eingeplant. Feiertage kennt der Kalender
   nicht von selbst: Die Projektleitung trägt sie beim Projekt als freie Tage für alle ein.
+  Puffer und Verspätung zur Deadline zählen in Arbeitstagen des Projekts, also ohne diese
+  freien Tage; Abwesenheiten einzelner Personen zählen dabei mit.
 - **Arbeit:** eine Person arbeitet an einer Aufgabe zur selben Zeit; eine Aufgabe gehört einer
   Person.
 - **Terminierung:** Als Nächstes wird eingeplant, was am frühesten beginnen kann; bei

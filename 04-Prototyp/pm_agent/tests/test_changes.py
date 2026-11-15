@@ -268,3 +268,23 @@ def test_the_same_tasks_in_another_order_are_a_change():
         ("T1", "A", "Anna", 8, []), ("T3", "C", "Anna", 4, []), ("T2", "B", "Anna", 8, [])
     )
     assert plan_changes(before, more) == ["Neu: T3 · C (Anna, 4 h)"]
+
+
+def test_the_end_of_a_proposal_moves_in_working_days_of_the_project():
+    # 24.12.2026 to 01.01.2027 is free for everybody. 24 h end on 23.12., 32 h on the first
+    # day after the break: one working day later, eight Mon-Fri days.
+    winter = Project(
+        idea="x",
+        start_date=date(2026, 12, 21),
+        deadline=date(2027, 1, 8),
+        free_days=[{"first": date(2026, 12, 24), "last": date(2027, 1, 1)}],
+    )
+    before = check_plan(simple(("A", "a", "Anna", 24, [])), TEAM, winter)
+    after = check_plan(simple(("A", "a", "Anna", 32, [])), TEAM, winter)
+    assert check_changes(before, after, project=winter)[0] == (
+        "Planende: 23.12.2026 → 04.01.2027 (1 Arbeitstag später)"
+    )
+    # Without the project nothing is known about free days.
+    assert check_changes(before, after)[0] == (
+        "Planende: 23.12.2026 → 04.01.2027 (8 Arbeitstage später)"
+    )

@@ -981,3 +981,34 @@ def test_the_forecast_and_the_rest_keep_the_free_days_of_the_project(tmp_path):
     tuesday = date(2026, 11, 10)
     assert forecast(adopted, tuesday).end == date(2026, 11, 13)
     assert rest_project(adopted, tuesday)[0].free_days == project.free_days
+
+
+# The project of the tests below: it starts on Mon 21.12.2026, and 24.12.2026 to 01.01.2027 is
+# free for everybody. The working days are 21., 22., 23.12. and then Mon 04.01.2027.
+WINTER_BREAK = [{"first": date(2026, 12, 24), "last": date(2027, 1, 1)}]
+
+
+def test_the_forecast_counts_buffer_and_week_in_working_days_of_the_project(tmp_path):
+    project = PROJECT.model_copy(
+        update={
+            "start_date": date(2026, 12, 21),
+            "deadline": date(2027, 1, 4),
+            "free_days": [Absence(**WINTER_BREAK[0])],
+        }
+    )
+    # Anna: A 24 h (21. to 23.12.), then B 8 h on the first day after the break, the
+    # deadline.
+    plan = one_person_plan(("A", 24, []), ("B", 8, ["A"]))
+    adopted = adopt(project, TEAM, plan, path=tmp_path / "projekt.json")
+    outlook = forecast(adopted, date(2026, 12, 21))
+    assert (outlook.end, outlook.shift, outlook.deadline_gap) == (date(2027, 1, 4), 0, 0)
+
+    # A is done. In the middle of the break the next working day is 04.01.: B is what comes
+    # next, not something beyond the week.
+    after_a = apply_rows(adopted, [{"ID": "A", "Status": "fertig", "Ist (h)": 24}])
+    assert [row["ID"] for row in week_ahead(after_a, date(2026, 12, 28))] == ["B"]
+
+    # One task alone: it ends on 23.12., and one working day is left until the deadline, not
+    # the eight Mon-Fri days of the calendar.
+    alone = adopt(project, TEAM, one_person_plan(("A", 24, [])), path=tmp_path / "projekt.json")
+    assert forecast(alone, date(2026, 12, 21)).deadline_gap == -1

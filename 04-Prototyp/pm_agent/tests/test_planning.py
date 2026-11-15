@@ -4,13 +4,16 @@ from datetime import date, timedelta
 
 import pytest
 
-from pm_agent.models import Assignment, Member, Plan, Project, Task
+from pm_agent.models import Absence, Assignment, Member, Plan, Project, Task
 from pm_agent.planning import (
     add_workdays,
+    add_working_days,
     check_plan,
     count_workdays,
     planned_work,
     workday_shift,
+    working_days,
+    working_shift,
 )
 
 MON = date(2026, 11, 9)
@@ -649,3 +652,88 @@ def test_planned_work_stands_still_on_a_free_day_of_the_project():
         (date(2026, 11, 10), 8),
         (date(2026, 11, 11), 16),
     ]
+
+
+# The project of the tests below: it starts on Mon 21.12.2026, and 24.12.2026 to 01.01.2027 is
+# free for everybody. The working days are 21., 22., 23.12. and then Mon 04.01.2027.
+WINTER_BREAK = [{"first": date(2026, 12, 24), "last": date(2027, 1, 1)}]
+
+
+def over_the_break(deadline):
+    return Project(
+        idea="Lernplattform für Erstsemester",
+        start_date=date(2026, 12, 21),
+        deadline=deadline,
+        free_days=WINTER_BREAK,
+    )
+
+
+def test_free_days_are_no_buffer_before_the_deadline():
+    # 24 h end on 23.12. The deadline is the last day of the break: every Mon-Fri day in
+    # between is free, so a day of delay misses it.
+    p = plan(task("A", 24), owners={"A": "Anna"})
+    result = check_plan(p, [ANNA], over_the_break(date(2027, 1, 1)))
+    assert result.end_date == date(2026, 12, 23)
+    assert result.warning_kinds == [("buffer",)]
+    # With the first day after the break as deadline there is one day of room.
+    assert check_plan(p, [ANNA], over_the_break(date(2027, 1, 4))).warnings == []
+
+
+def test_a_plan_is_late_by_working_days_not_by_free_days():
+    # 32 h: the fourth day is the first one after the break.
+    p = plan(task("A", 32), owners={"A": "Anna"})
+    result = check_plan(p, [ANNA], over_the_break(date(2026, 12, 23)))
+    assert result.end_date == date(2027, 1, 4)
+    assert result.warnings[0] == (
+        "Der Plan endet am 04.01.2027, 1 Arbeitstag nach der Deadline (23.12.2026)"
+    )
+
+
+def test_with_free_days_until_the_deadline_nobody_is_called_absent():
+    p = plan(task("A", 8), owners={"A": "Anna"})
+    everything_free = Project(
+        idea="Lernplattform für Erstsemester",
+        start_date=MON,
+        deadline=date(2026, 11, 13),
+        free_days=[{"first": MON, "last": date(2026, 11, 13)}],
+    )
+    assert (
+        "Anna hat bis zur Deadline keinen Arbeitstag (abwesend oder frei für alle), hat aber "
+        "8 h zugewiesen" in check_plan(p, [ANNA], everything_free).warnings
+    )
+
+
+def test_working_days_leave_out_the_free_days_of_the_project():
+    project_ = over_the_break(date(2027, 1, 8))
+    assert working_days(project_, date(2026, 12, 21), date(2027, 1, 4)) == 4
+    assert working_shift(project_, date(2026, 12, 23), date(2027, 1, 4)) == 1
+    assert working_shift(project_, date(2027, 1, 4), date(2026, 12, 23)) == -1
+    assert add_working_days(project_, date(2026, 12, 24), 0) == date(2027, 1, 4)
+    assert add_working_days(project_, date(2026, 12, 22), 2) == date(2027, 1, 4)
+    # A free time to the end of the calendar: there is no such day, the last date stands in.
+    endless = project_.model_copy(
+        update={"free_days": [Absence(first=date(2026, 12, 24), last=date.max)]}
+    )
+    assert add_working_days(endless, date(2026, 12, 24), 0) == date.max
+
+
+def test_two_equal_dates_are_no_shift_even_at_the_end_of_the_calendar():
+    # The day after 31.12.9999 does not exist, and is not needed.
+    assert workday_shift(date.max, date.max) == 0
+    assert working_shift(over_the_break(date(2027, 1, 8)), date.max, date.max) == 0
+
+
+def test_a_free_day_after_the_deadline_does_not_change_what_is_said_about_an_absence():
+    # Anna is away until the deadline. The first of May is free, months later.
+    gone = away(date(2026, 11, 1), date(2026, 12, 31))
+    later = Project(
+        idea="Lernplattform für Erstsemester",
+        start_date=MON,
+        deadline=date(2026, 12, 18),
+        free_days=[{"first": date(2027, 5, 1), "last": date(2027, 5, 1)}],
+    )
+    p = plan(task("A", 8), owners={"A": "Anna"})
+    assert (
+        "Anna ist bis zur Deadline durchgehend abwesend, hat aber 8 h zugewiesen"
+        in check_plan(p, [gone], later).warnings
+    )

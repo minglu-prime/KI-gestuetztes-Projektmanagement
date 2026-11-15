@@ -288,7 +288,7 @@ with tabs[0]:
             "Stunden/Woche": st.column_config.NumberColumn(min_value=1, max_value=168),
             "Abwesend": st.column_config.TextColumn(
                 help="Tage ohne Arbeit, z. B. 01.12.2026–05.12.2026, 23.12.2026. Feiertage "
-                "kennt der Kalender nicht: bei allen Personen eintragen."
+                "und andere freie Tage für alle stehen beim Projekt (Schritt 2)."
             ),
             "Notiz": st.column_config.TextColumn(help="z. B. Urlaub, Prüfungsphase"),
         },
@@ -304,10 +304,16 @@ with tabs[0]:
             "Noch kein Teammitglied. Trage pro Zeile eine Person mit Skills und Wochenstunden ein."
         )
     if team and st.button("Team lokal speichern", icon=":material/save:"):
-        save_team(team)
-        st.success(
-            f"Gespeichert in {TEAM_FILE.parent.name}/{TEAM_FILE.name} (lokal, nicht im Repository)."
-        )
+        place = f"{TEAM_FILE.parent.name}/{TEAM_FILE.name}"
+        try:
+            save_team(team)
+        except OSError as err:
+            st.error(
+                f"{place} konnte nicht gespeichert werden: {err}. Die gespeicherte Datei "
+                "bleibt, wie sie ist."
+            )
+        else:
+            st.success(f"Gespeichert in {place} (lokal, nicht im Repository).")
     consent = st.checkbox(
         "Alle eingetragenen Personen haben zugestimmt, dass ihre Angaben (Name, Skills, Stunden, "
         "Notiz) zur Planung an die Anthropic API gesendet werden.",
@@ -341,6 +347,7 @@ with tabs[1]:
         "einzelner Personen stehen in der Teamtabelle.",
     )
     project = None
+    project_gap = "Projektidee und Deadline (Schritt 2)"  # what step 3 says is missing
     if not idea.strip() or deadline is None:
         st.info("Beschreibe die Projektidee und wähle eine Deadline.")
     else:
@@ -350,8 +357,10 @@ with tabs[1]:
             )
         except InputError as err:
             st.error(f"Freie Tage: {err}")
+            project_gap = "lesbare freie Tage (Schritt 2)"
         except ValidationError as err:
             st.error("; ".join(e["msg"].removeprefix("Value error, ") for e in err.errors()))
+            project_gap = "ein gültiges Projekt (Schritt 2)"
     next_step("Weiter zur Planung", STEPS[2], project is not None, "to_planning")
 
 # 3 · Planung ------------------------------------------------------------------------------
@@ -368,7 +377,7 @@ with tabs[2]:
             for ok, text in [
                 (bool(team), "ein gültiges Team (Schritt 1)"),
                 (consent, "die Zustimmung des Teams (Schritt 1)"),
-                (project is not None, "Projektidee und Deadline (Schritt 2)"),
+                (project is not None, project_gap),
             ]
             if not ok
         ]
@@ -762,7 +771,7 @@ with tabs[4]:
                     proposal["changes"] = plan_changes(state.plan, proposal["plan"])
                     if proposed is not None:
                         proposal["changes"] += check_changes(
-                            result, proposed, pair_tasks(state.plan, proposal["plan"])
+                            result, proposed, pair_tasks(state.plan, proposal["plan"]), project
                         )
                     if proposal["changes"]:
                         st.markdown("\n".join(f"- {c}" for c in proposal["changes"]))
@@ -834,25 +843,34 @@ with tabs[5]:
             st.warning("Der Plan hat noch Fehler (siehe Schritt 4). Export ist trotzdem möglich.")
 
         def record_export(fmt: str) -> None:
-            append_run(
-                {
-                    "exportiert": datetime.now().astimezone().isoformat(timespec="seconds"),
-                    "quelle": state.source,
-                    "agent_sekunden": state.agent_seconds,
-                    "runden": state.get("round_count", len(state.rounds)),
-                    "pruefung_sekunden": round(time.monotonic() - state.shown_at, 1),
-                    "angepasst": state.get("hand_edited", state.edited),
-                    "tasks": len(state.plan.tasks),
-                    "fehler": len(result.errors),
-                    "warnungen": len(result.warnings),
-                    "format": fmt,
-                }
-            )
+            row = {
+                "exportiert": datetime.now().astimezone().isoformat(timespec="seconds"),
+                "quelle": state.source,
+                "agent_sekunden": state.agent_seconds,
+                "runden": state.get("round_count", len(state.rounds)),
+                "pruefung_sekunden": round(time.monotonic() - state.shown_at, 1),
+                "angepasst": state.get("hand_edited", state.edited),
+                "tasks": len(state.plan.tasks),
+                "fehler": len(result.errors),
+                "warnungen": len(result.warnings),
+                "format": fmt,
+            }
+            try:
+                append_run(row)
+            except (OSError, ValueError) as err:  # the file, or a value that has no bytes
+                # A callback cannot place a message: the run that follows shows it.
+                state.export_error = str(err)
 
         stamp = date.today().strftime("%Y%m%d")
         download, take_over = st.columns(2, gap="medium")
         with download.container(border=True, key="panel-download", height="stretch"):
             st.markdown("#### :material/download: Herunterladen")
+            not_recorded = state.pop("export_error", None)
+            if not_recorded:
+                st.error(
+                    f"Der Plan ist heruntergeladen, aber nicht in {RUNS_CSV.parent.name}/"
+                    f"{RUNS_CSV.name} vermerkt: {not_recorded}"
+                )
             with st.container(horizontal=True):
                 st.download_button(
                     "Als Markdown herunterladen",
@@ -901,8 +919,15 @@ with tabs[5]:
                 icon=":material/flag:",
                 disabled=bool(result.errors) or not overwrite,
             ):
-                adopt(project, team, state.plan)
-                st.success("Übernommen. Weiter auf den Seiten Durchführung und Kontrolle.")
+                try:
+                    adopt(project, team, state.plan)
+                except OSError as err:
+                    st.error(
+                        f"data/projekt.json konnte nicht gespeichert werden: {err}. Das "
+                        "bisher übernommene Projekt bleibt, wie es ist."
+                    )
+                else:
+                    st.success("Übernommen. Weiter auf den Seiten Durchführung und Kontrolle.")
 
         with st.expander("Vorschau Markdown"):
             st.markdown(to_markdown(project, state.plan, result))

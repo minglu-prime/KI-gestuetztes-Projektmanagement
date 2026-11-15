@@ -393,7 +393,24 @@ with st.container(border=True, key="panel-effort"):
         st.caption("Noch keine protokollierten Läufe.")
 
     st.markdown("**Exportierte Pläne**")
-    if workbench.RUNS_CSV.exists():
-        st.dataframe(pd.read_csv(workbench.RUNS_CSV), hide_index=True)
+    record = workbench.RUNS_CSV
+    try:
+        exports = workbench.read_runs()
+    except workbench.InputError as err:
+        st.error(
+            f"{record.parent.name}/{record.name} konnte nicht gelesen werden: {err}. Die Datei "
+            "bleibt, wie sie ist; der nächste Export legt sie beiseite und beginnt eine neue."
+        )
+    except OSError as err:  # cannot be opened at all: the next export cannot either
+        st.error(f"{record.parent.name}/{record.name} konnte nicht gelesen werden: {err}.")
     else:
-        st.caption("Noch kein Plan exportiert.")
+        if exports:
+            st.dataframe(pd.DataFrame(exports), hide_index=True)
+        else:
+            st.caption("Noch kein Plan exportiert.")
+    aside = workbench.put_aside()
+    if aside:
+        st.caption(
+            f"Ältere Exporte mit anderen Spalten liegen daneben in {record.parent.name}/: "
+            + ", ".join(aside)
+        )

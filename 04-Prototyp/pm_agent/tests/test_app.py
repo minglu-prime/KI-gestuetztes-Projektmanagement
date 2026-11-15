@@ -314,6 +314,36 @@ def test_checking_an_untouched_table_keeps_an_open_proposal(app, monkeypatch):
     assert not button(at, "Übernehmen").disabled
 
 
+def test_an_export_writes_one_line_into_the_record(with_plan):
+    # runs.csv is the data of the before/after comparison. The page writes it from the
+    # callback of the download buttons; `local` points the file into the temporary folder.
+    record = workbench.RUNS_CSV
+    assert not record.exists()
+    next(b for b in with_plan.download_button if b.label == "Als CSV herunterladen").click()
+    at = with_plan.run()
+
+    assert not at.exception
+    (line,) = pd.read_csv(record).to_dict("records")
+    assert (line["quelle"], line["format"], line["tasks"]) == ("Agent", "csv", 2)
+    assert (line["runden"], line["angepasst"], line["fehler"]) == (0, False, 0)
+
+
+def test_an_export_that_cannot_be_recorded_says_so(with_plan):
+    # Something sits where the record should be and cannot be written to: here a folder.
+    workbench.RUNS_CSV.mkdir()
+    next(b for b in with_plan.download_button if b.label == "Als CSV herunterladen").click()
+    at = with_plan.run()
+
+    assert not at.exception  # the page is still there
+    # (In the test the record lies in a temporary folder, not in logs/.)
+    assert any("heruntergeladen, aber nicht in" in e.value for e in at.error)
+    assert any("/runs.csv vermerkt: " in e.value for e in at.error)
+    assert [b.label for b in at.download_button] == [
+        "Als Markdown herunterladen",
+        "Als CSV herunterladen",
+    ]
+
+
 def test_taking_a_change_keeps_what_the_export_record_needs(with_plan):
     # As after 3 rounds and 90 s of planning and a hand edit confirmed with "Erneut prüfen".
     with_plan.session_state["agent_seconds"] = 90.0
@@ -398,6 +428,25 @@ def test_free_days_of_the_project_move_the_plan(app, monkeypatch):
     assert not at.exception
     assert any("'Weihnachten' nicht lesbar" in e.value for e in at.error)
     assert button(at, "Plan mit Claude erstellen").disabled
+    # Step 3 says what is in the way, not that idea and deadline were missing.
+    assert any("lesbare freie Tage (Schritt 2)" in i.value for i in at.info)
+
+
+def test_a_team_or_project_that_cannot_be_saved_is_said_not_thrown(with_plan, monkeypatch):
+    def locked(*args, **kwargs):
+        raise PermissionError(13, "Zugriff verweigert")
+
+    monkeypatch.setattr(workbench, "save_team", locked)
+    monkeypatch.setattr(tracking, "adopt", locked)
+    button(with_plan, "Team lokal speichern").click()
+    at = with_plan.run()
+    assert not at.exception
+    assert any("team.json konnte nicht gespeichert werden" in e.value for e in at.error)
+    button(at, "Plan als Projekt übernehmen").click()
+    at = at.run()
+    assert not at.exception
+    assert any("projekt.json konnte nicht gespeichert werden" in e.value for e in at.error)
+    assert not any("Übernommen" in s.value for s in at.success)
 
 
 def test_an_agent_error_is_shown_to_the_project_lead(app, monkeypatch):
@@ -834,6 +883,19 @@ def test_durchfuehrung_shows_who_does_what_next(tracked):
     assert "Alle Aufgaben sind fertig: Es steht nichts mehr an." in [s.value for s in at.success]
 
 
+def test_progress_that_cannot_be_saved_is_said_not_thrown(tracked, monkeypatch):
+    def locked(tracking_, path=None):
+        raise PermissionError(13, "Zugriff verweigert")
+
+    monkeypatch.setattr(tracking, "save", locked)
+    at = tracked.switch_page("pages/durchfuehrung.py").run()
+    button(at, "Fortschritt speichern").click()
+    at = at.run()
+    assert not at.exception
+    assert any("konnte nicht gespeichert werden" in e.value for e in at.error)
+    assert not at.success  # and nothing claims it was saved
+
+
 WAYS_ON = ["Fortschritt erfassen", "Stand prüfen"]
 
 
@@ -862,6 +924,58 @@ def test_kontrolle_shows_the_earned_value(tracked):
     labels = [m.label for m in at.metric]
     for label in ["Planwert bis heute", "Fertigstellungswert", "SPI", "CPI"]:
         assert label in labels
+
+
+def test_kontrolle_survives_a_record_it_cannot_read(tracked):
+    # A line with a cell too many, as a hand edit or an old version leaves it.
+    workbench.RUNS_CSV.write_bytes(b"quelle,runden\r\nagent,3\r\nagent,5,csv,x\r\n")
+    (workbench.RUNS_CSV.parent / "runs-bis-20261115-120000.csv").write_bytes(b"alt\r\n1\r\n")
+    at = tracked.switch_page("pages/kontrolle.py").run()
+
+    assert not at.exception
+    assert any("runs.csv konnte nicht gelesen werden" in e.value for e in at.error)
+    assert any("runs-bis-20261115-120000.csv" in c.value for c in at.caption)
+
+
+def test_kontrolle_shows_no_table_with_cells_left_out(tracked):
+    # The first data line has a cell more than the heading. Read as it is, pandas would
+    # leave the surplus cells out and show the rest as if nothing were wrong.
+    workbench.RUNS_CSV.write_bytes(b"quelle,runden\r\nagent,5,csv\r\nagent,3,md\r\n")
+    at = tracked.switch_page("pages/kontrolle.py").run()
+    assert not at.exception
+    assert any("runs.csv konnte nicht gelesen werden" in e.value for e in at.error)
+    assert not any("quelle" in frame.value.columns for frame in at.dataframe)
+
+
+def test_kontrolle_opens_before_there_is_a_logs_folder(tracked, monkeypatch, tmp_path):
+    # A fresh clone: logs/ is git-ignored and made by the first run or export.
+    monkeypatch.setattr(workbench, "RUNS_CSV", tmp_path / "noch-nicht-da" / "runs.csv")
+    at = tracked.switch_page("pages/kontrolle.py").run()
+    assert not at.exception and not at.error
+    assert "Noch kein Plan exportiert." in [c.value for c in at.caption]
+
+
+def test_kontrolle_promises_nothing_about_a_record_it_cannot_open(tracked):
+    # Not a damaged record: something that cannot be opened at all (here a folder). The
+    # next export cannot open it either, so it will not put it aside.
+    workbench.RUNS_CSV.mkdir()
+    at = tracked.switch_page("pages/kontrolle.py").run()
+    assert not at.exception
+    (message,) = [e.value for e in at.error if "runs.csv konnte nicht gelesen werden" in e.value]
+    assert "legt sie beiseite" not in message
+
+    workbench.RUNS_CSV.rmdir()
+    workbench.RUNS_CSV.write_bytes(b"quelle,runden\r\nagent,5,csv\r\n")
+    at = at.run()
+    (message,) = [e.value for e in at.error if "runs.csv konnte nicht gelesen werden" in e.value]
+    assert "der nächste Export legt sie beiseite" in message
+
+
+def test_kontrolle_takes_an_empty_record_for_no_export_yet(tracked):
+    workbench.RUNS_CSV.write_bytes(b"")
+    at = tracked.switch_page("pages/kontrolle.py").run()
+    assert not at.exception and not at.error
+    assert "Noch kein Plan exportiert." in [c.value for c in at.caption]
 
 
 def test_kontrolle_offers_the_control_document(tracked):

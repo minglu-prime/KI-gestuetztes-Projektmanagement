@@ -1,11 +1,15 @@
 import csv
 import io
 import json
-from datetime import date
+import os
+import threading
+from datetime import date, datetime
+from pathlib import Path
 
 import pytest
 from test_tools import PROJECT, TEAM, plan_input
 
+from pm_agent import workbench
 from pm_agent.models import Member, Plan
 from pm_agent.planning import check_plan
 from pm_agent.workbench import (
@@ -19,6 +23,8 @@ from pm_agent.workbench import (
     load_run,
     load_team,
     plan_rows,
+    put_aside,
+    read_runs,
     round_summary,
     rows_to_plan,
     rows_to_team,
@@ -130,16 +136,212 @@ def test_runs_csv_gets_one_header_and_one_line_per_export(tmp_path):
     ]
 
 
-def test_runs_csv_keeps_every_value_under_its_column_when_the_columns_change(tmp_path):
-    # A later version of the site records one thing more, or names the columns in another
-    # order. The lines written before must not end up under the wrong heading.
-    path = tmp_path / "logs" / "runs.csv"
-    append_run({"quelle": "agent", "runden": 3}, path)
-    append_run({"runden": 0, "format": "csv", "quelle": "protokoll"}, path)
+def test_runs_csv_takes_a_line_under_its_heading_and_in_its_order(tmp_path):
+    path = tmp_path / "runs.csv"
+    append_run({"quelle": "agent", "runden": 3, "format": "md"}, path)
+    append_run({"runden": 0, "quelle": "protokoll"}, path)  # another order, a column less
     assert list(csv.DictReader(io.StringIO(path.read_text(encoding="utf-8")))) == [
-        {"quelle": "agent", "runden": "3", "format": ""},
-        {"quelle": "protokoll", "runden": "0", "format": "csv"},
+        {"quelle": "agent", "runden": "3", "format": "md"},
+        {"quelle": "protokoll", "runden": "0", "format": ""},
     ]
+    assert list(tmp_path.glob("runs-bis-*.csv")) == []
+
+
+@pytest.mark.parametrize(
+    "old",
+    [
+        b"quelle,runden\r\nagent,3\r\nagent,5,csv\r\n",  # the row brings a new column
+        b"\r\nquelle,runden,format\r\nagent,3,md\r\n",  # an empty first line
+        b"quelle;runden;format\r\nagent;3;md\r\n",  # saved by a German spreadsheet
+        b"quelle,runden,format\r\nagent,3,md,zu viel\r\n",  # a line with a cell too many
+        b'quelle,runden,format\r\nagent,3,"md\r\n',  # a quote that is never closed
+        b'"quelle,runden\r\n' + b"x,agent\r\n" * 20000,  # the same, larger than a cell may be
+        "quelle,runden,format\r\ngeändert,3,md\r\n".encode("cp1252"),  # not UTF-8
+    ],
+)
+def test_runs_csv_with_other_columns_is_put_aside_as_it_is(tmp_path, old):
+    # Nothing in such a file is read, moved or rewritten: under which heading its values
+    # belong is not for an export to decide. It gets another name, byte for byte, and a new
+    # file begins.
+    path = tmp_path / "runs.csv"
+    path.write_bytes(old)
+    append_run({"quelle": "agent", "runden": 1, "format": "csv"}, path)
+    (aside,) = tmp_path.glob("runs-bis-*.csv")
+    assert aside.read_bytes() == old
+    assert path.read_bytes() == b"quelle,runden,format\r\nagent,1,csv\r\n"
+
+
+def test_runs_csv_whose_columns_fit_keeps_every_byte(tmp_path):
+    # A byte order mark, other line ends, no line end after the last line: the new line
+    # goes below, on a line of its own.
+    path = tmp_path / "runs.csv"
+    before = b"\xef\xbb\xbfquelle,runden\nagent,5"
+    path.write_bytes(before)
+    append_run({"runden": 1, "quelle": "agent"}, path)
+    assert path.read_bytes() == before + b"\r\nagent,1\r\n"
+    assert list(tmp_path.glob("runs-bis-*.csv")) == []
+
+
+def test_bytes_that_only_look_like_a_byte_order_mark_are_content(tmp_path):
+    # EF BB BB is a letter (U+FEFB), not the mark EF BB BF.
+    path = tmp_path / "runs.csv"
+    path.write_bytes(b"\xef\xbb\xbb\r\n")
+    append_run({"quelle": "agent"}, path)
+    (aside,) = put_aside(path)
+    assert (tmp_path / aside).read_bytes() == b"\xef\xbb\xbb\r\n"
+
+
+@pytest.mark.parametrize("empty", [b"", b"\xef\xbb\xbf", b"\r\n\r\n", b"\xef\xbb\xbf\n \n"])
+def test_runs_csv_without_any_content_is_begun_anew(tmp_path, empty):
+    # Nothing to keep, so nothing to put aside.
+    path = tmp_path / "runs.csv"
+    path.write_bytes(empty)
+    append_run({"quelle": "agent", "runden": 1}, path)
+    assert path.read_bytes() == b"quelle,runden\r\nagent,1\r\n"
+    assert put_aside(path) == []
+
+
+def test_runs_csv_is_never_put_aside_over_another_file(tmp_path, monkeypatch):
+    # Three times in the same second: every old file keeps a name of its own, and
+    # put_aside names them oldest first. Files somebody else put there do not count.
+    class Noon(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return cls(2026, 11, 15, 12, 0, 0)
+
+    monkeypatch.setattr(workbench, "datetime", Noon)
+    path = tmp_path / "runs.csv"
+    (tmp_path / "runs-bis-notizen.csv").write_bytes(b"meins")
+    (tmp_path / "runs-bis-20261115-120000-9.csv").mkdir()
+    # A file that already has the name the first one would get, as another server of the
+    # same second would leave it: it is not written over.
+    (tmp_path / "runs-bis-20261115-120000.csv").write_bytes(b"von nebenan")
+    for number in range(3):
+        path.write_bytes(b"alt%d\r\n1\r\n" % number)
+        append_run({"quelle": "agent"}, path)
+    assert put_aside(path) == [
+        "runs-bis-20261115-120000.csv",
+        "runs-bis-20261115-120000-2.csv",
+        "runs-bis-20261115-120000-3.csv",
+        "runs-bis-20261115-120000-4.csv",
+    ]
+    assert [(tmp_path / name).read_bytes() for name in put_aside(path)] == [
+        b"von nebenan",
+        b"alt0\r\n1\r\n",
+        b"alt1\r\n1\r\n",
+        b"alt2\r\n1\r\n",
+    ]
+
+
+def test_putting_aside_moves_the_file_that_is_there(tmp_path, monkeypatch):
+    # Another server on the same folder appends a line after this one has read the file.
+    # Put aside as a copy of what was read, that line would be in no file at all.
+    path = tmp_path / "runs.csv"
+    path.write_bytes(b"quelle,runden\r\nagent,1\r\n")
+    heading = workbench._record_heading
+
+    def read_then_the_other_server_writes(content):
+        with path.open("ab") as file:
+            file.write(b"nebenan,2\r\n")
+        return heading(content)
+
+    monkeypatch.setattr(workbench, "_record_heading", read_then_the_other_server_writes)
+    append_run({"quelle": "agent", "runden": 3, "format": "csv"}, path)
+    (aside,) = put_aside(path)
+    assert (tmp_path / aside).read_bytes() == b"quelle,runden\r\nagent,1\r\nnebenan,2\r\n"
+
+
+@pytest.mark.parametrize(
+    "move",
+    [
+        pytest.param(
+            workbench._rename,
+            marks=pytest.mark.skipif(os.name != "nt", reason="refuses only on Windows"),
+        ),
+        workbench._link_and_unlink,
+    ],
+)
+def test_both_ways_to_move_a_file_refuse_a_name_that_exists(tmp_path, move):
+    # Windows and the other systems each have one move that does not write over a file.
+    # On Windows both run: its file system has hard links too.
+    source, free, taken = tmp_path / "runs.csv", tmp_path / "frei.csv", tmp_path / "belegt.csv"
+    source.write_bytes(b"alt")
+    taken.write_bytes(b"von nebenan")
+    with pytest.raises(FileExistsError):
+        move(source, taken)
+    assert (source.read_bytes(), taken.read_bytes()) == (b"alt", b"von nebenan")
+    move(source, free)
+    assert not source.exists()
+    assert free.read_bytes() == b"alt"
+
+
+def test_no_list_of_files_put_aside_without_the_folder(tmp_path):
+    # A fresh clone has no logs folder until the first run or export.
+    assert put_aside(tmp_path / "logs" / "runs.csv") == []
+    assert read_runs(tmp_path / "logs" / "runs.csv") == []
+
+
+def test_the_record_is_read_with_the_check_it_is_written_with(tmp_path):
+    path = tmp_path / "runs.csv"
+    assert read_runs(path) == []
+    path.write_bytes(b"\xef\xbb\xbf\r\n")  # nothing in it
+    assert read_runs(path) == []
+    append_run({"quelle": "Agent, auf Wunsch geändert", "runden": 3}, path)
+    append_run({"quelle": "agent", "runden": None}, path)
+    assert read_runs(path) == [
+        {"quelle": "Agent, auf Wunsch geändert", "runden": "3"},
+        {"quelle": "agent", "runden": ""},
+    ]
+    # A surplus cell that a table program would read as "no value" and leave out.
+    path.write_bytes(b"quelle,runden\r\nagent,5,NA\r\nagent,3,None\r\n")
+    with pytest.raises(InputError, match="kein sauberes Protokoll"):
+        read_runs(path)
+
+
+def test_runs_csv_takes_every_line_of_exports_at_the_same_time(tmp_path):
+    # Every browser session has a thread of its own. Appending is "go to the end, write":
+    # two at once could write over each other, and the page said nothing.
+    path = tmp_path / "runs.csv"
+
+    def export(session):
+        for number in range(150):
+            append_run({"quelle": f"sitzung-{session}", "runden": number}, path)
+
+    threads = [threading.Thread(target=export, args=(session,)) for session in range(8)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    lines = list(csv.DictReader(io.StringIO(path.read_text(encoding="utf-8"))))
+    assert sorted((line["quelle"], int(line["runden"])) for line in lines) == sorted(
+        (f"sitzung-{session}", number) for session in range(8) for number in range(150)
+    )
+
+
+def test_a_line_that_cannot_be_written_leaves_the_file_as_it_was(tmp_path):
+    # A lone surrogate cannot be encoded (a file name on Windows can hold one). Nothing is
+    # written then, not even the heading of a new file.
+    path = tmp_path / "runs.csv"
+    with pytest.raises(UnicodeEncodeError):
+        append_run({"quelle": "Protokoll run-\udc80.json"}, path)
+    assert not path.exists()
+    path.write_bytes(b"quelle\r\nagent\r\n")
+    with pytest.raises(UnicodeEncodeError):
+        append_run({"quelle": "Protokoll run-\udc80.json"}, path)
+    assert path.read_bytes() == b"quelle\r\nagent\r\n"
+    # Also a file that would have to be put aside first: it stays where it is.
+    with pytest.raises(UnicodeEncodeError):
+        append_run({"quelle": "Protokoll run-\udc80.json", "neu": 1}, path)
+    assert path.read_bytes() == b"quelle\r\nagent\r\n"
+    assert put_aside(path) == []
+
+
+def test_runs_csv_is_found_where_the_tests_point_it(tmp_path, monkeypatch):
+    # The page calls append_run without a path. Bound at import, the default would be the
+    # real logs/runs.csv whatever a test sets.
+    monkeypatch.setattr(workbench, "RUNS_CSV", tmp_path / "runs.csv")
+    append_run({"quelle": "agent"})
+    assert (tmp_path / "runs.csv").read_bytes() == b"quelle\r\nagent\r\n"
 
 
 def test_round_summary_counts_check_messages_and_names_rejections():
@@ -247,8 +449,12 @@ def test_an_unreadable_absence_names_the_row_and_shows_the_expected_form():
     with pytest.raises(InputError, match="Abwesenheit '31.02.2027' nicht lesbar"):
         rows_to_team(rows)
     rows[0]["Abwesend"] = "05.12.2026–01.12.2026"
-    with pytest.raises(InputError, match="Ende der Abwesenheit liegt vor ihrem Beginn"):
+    with pytest.raises(
+        InputError, match="Abwesenheit '05.12.2026–01.12.2026': Das Ende liegt vor dem Beginn"
+    ):
         rows_to_team(rows)
+    with pytest.raises(InputError, match="^'05.12.2026–01.12.2026': Das Ende liegt vor dem"):
+        free_days("05.12.2026–01.12.2026")
 
 
 BEN = Member(name="Ben", skills={"SQL": 3}, hours_per_week=20)
@@ -384,3 +590,38 @@ def test_free_days_are_typed_like_absences_and_read_back():
     assert free_days("") == []
     with pytest.raises(InputError, match="'Weihnachten' nicht lesbar"):
         free_days("Weihnachten")
+
+
+@pytest.mark.parametrize(
+    "old",
+    [b"quelle,quelle,runden\r\nagent,protokoll,3\r\n", b"quelle,,\r\nagent,1,2\r\n"],
+)
+def test_a_heading_with_a_name_twice_or_without_one_is_no_record(tmp_path, old):
+    # Two columns of one name: read by name, one value would hide the other.
+    path = tmp_path / "runs.csv"
+    path.write_bytes(old)
+    with pytest.raises(InputError, match="kein sauberes Protokoll"):
+        read_runs(path)
+    append_run({"quelle": "agent"}, path)
+    (aside,) = put_aside(path)
+    assert (tmp_path / aside).read_bytes() == old
+    assert read_runs(path) == [{"quelle": "agent"}]
+
+
+def test_a_link_that_cannot_be_finished_is_taken_back(tmp_path, monkeypatch):
+    # The other systems' way to move: link, then remove the old name. If the old name
+    # cannot be removed, the new one must not stay, or the next export would put the same
+    # file aside a second time.
+    source, target = tmp_path / "runs.csv", tmp_path / "runs-bis-x.csv"
+    source.write_bytes(b"alt")
+    unlink = Path.unlink
+
+    def held(self, *args, **kwargs):
+        if self == source:
+            raise PermissionError(13, "in use")
+        unlink(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "unlink", held)
+    with pytest.raises(PermissionError):
+        workbench._link_and_unlink(source, target)
+    assert [file.name for file in tmp_path.iterdir()] == ["runs.csv"]
