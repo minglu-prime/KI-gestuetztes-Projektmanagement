@@ -6,7 +6,7 @@ import pytest
 from test_tools import PROJECT, TEAM, plan_input
 
 from pm_agent import agent
-from pm_agent.agent import PlanningError, run_planning
+from pm_agent.agent import PlanningError, run_planning, run_replanning
 from pm_agent.models import Plan
 
 
@@ -112,3 +112,34 @@ def test_a_run_without_plan_is_logged_with_the_error(api, tmp_path):
     assert "ohne einen Plan einzureichen" in log["error"]
     assert log["plan"] is None
     assert log["rounds"][0]["stop_reason"] == "end_turn"
+
+
+def test_replanning_sends_the_current_plan_and_the_wish_and_logs_both(api, tmp_path):
+    replies, requests = api
+    longer = plan_input(hours=16)
+    replies += [reply([submit(longer, "call_1")])]
+    current = Plan.model_validate(plan_input())
+
+    plan = run_replanning(
+        PROJECT, TEAM, current, "Das Datenmodell braucht doppelt so lange.", log_dir=tmp_path
+    )
+
+    assert plan == Plan.model_validate(longer)
+    (request,) = requests
+    asked = request["messages"][0]["content"]
+    assert "Das Datenmodell braucht doppelt so lange." in asked
+    assert '"title": "Datenmodell"' in asked  # the current plan goes along
+    system = json.dumps(request["system"], ensure_ascii=False)
+    assert "Änderung eines bestehenden Plans" in system
+    assert "Inhalt des Plans" in system  # the rules for a plan still apply
+    log = read_log(tmp_path)
+    assert log["wish"] == "Das Datenmodell braucht doppelt so lange."
+    assert log["plan"] == plan.model_dump(mode="json")
+    assert log["project"] == PROJECT.model_dump(mode="json")
+
+
+def test_replanning_needs_a_wish(api, tmp_path):
+    replies, requests = api
+    with pytest.raises(PlanningError, match="Beschreibe, was sich ändern soll"):
+        run_replanning(PROJECT, TEAM, Plan.model_validate(plan_input()), "  ", log_dir=tmp_path)
+    assert requests == []  # nothing was sent

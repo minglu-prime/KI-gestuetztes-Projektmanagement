@@ -130,6 +130,86 @@ def test_the_buttons_at_the_end_of_a_step_open_the_next_step(app):
     assert at.session_state["step"] == "2 · Projekt"
 
 
+WISH = "Das Datenmodell dauert doppelt so lange."
+
+
+@pytest.fixture
+def with_plan(app, monkeypatch):
+    """The Planung page with a plan from the agent, and an agent that doubles task A on request."""
+    monkeypatch.setattr(agent, "run_planning", planned)
+    at = fill_project(app)
+    button(at, "Plan mit Claude erstellen").click()
+    at.run()
+
+    def replanned(project, team, plan, wish, on_round=None):
+        assert (project, team, plan, wish) == (PROJECT, TEAM, PLAN, WISH)
+        accepted = {"tool": "submit_plan", "is_error": False, "content": "Plan angenommen."}
+        on_round(
+            {
+                "text": "Ich verdopple die Schätzung.",
+                "tool_calls": [{"name": "submit_plan", "input": plan_input(hours=16)}],
+                "tool_results": [accepted],
+            }
+        )
+        return Plan.model_validate(plan_input(hours=16))
+
+    monkeypatch.setattr(agent, "run_replanning", replanned)
+    return at
+
+
+def test_a_change_asked_from_claude_is_shown_as_differences_before_it_counts(with_plan):
+    at = with_plan.chat_input(key="wish").set_value(WISH).run()
+
+    assert not at.exception and not at.error
+    texts = " ".join(m.value for m in at.markdown)
+    assert "A · Datenmodell: 8 h → 16 h" in texts
+    assert "Planende: 11.11.2026 → 12.11.2026 (1 Arbeitstag später)" in texts
+    # The round is shown while Claude works: its words and what it changed in the plan.
+    assert "Claude: Ich verdopple die Schätzung." in [c.value for c in at.caption]
+    assert {m.label: m.value for m in at.metric}["Planende"] == "11.11.2026"  # not taken yet
+    assert at.chat_input(key="wish").disabled  # decide on the open proposal first
+
+    button(at, "Übernehmen").click()
+    at.run()
+    assert not at.exception
+    assert {m.label: m.value for m in at.metric}["Planende"] == "12.11.2026"
+    (turn,) = at.session_state["chat"]
+    assert turn["accepted"] is True and turn["wish"] == WISH
+    assert not at.chat_input(key="wish").disabled  # ready for the next wish
+
+
+def test_a_dropped_proposal_leaves_the_plan_as_it_was(with_plan):
+    at = with_plan.chat_input(key="wish").set_value(WISH).run()
+    button(at, "Verwerfen").click()
+    at.run()
+
+    assert not at.exception
+    assert {m.label: m.value for m in at.metric}["Planende"] == "11.11.2026"
+    assert at.session_state["plan"] == PLAN
+    assert at.session_state["chat"][0]["accepted"] is False
+    assert "**Verworfen**" in [m.value for m in at.markdown]
+
+
+def test_without_consent_claude_is_not_asked_to_change_the_plan(with_plan):
+    with_plan.checkbox(key="consent").uncheck()
+    at = with_plan.run()
+    assert at.chat_input(key="wish").disabled
+    assert any("die Zustimmung des Teams (Schritt 1)" in c.value for c in at.caption)
+
+
+def test_a_failing_change_shows_the_reason_and_no_proposal(with_plan, monkeypatch):
+    def failing(project, team, plan, wish, on_round=None):
+        raise PlanningError("Claude hat nach 10 Runden noch keinen gültigen Plan.")
+
+    monkeypatch.setattr(agent, "run_replanning", failing)
+    at = with_plan.chat_input(key="wish").set_value(WISH).run()
+
+    assert not at.exception
+    assert [e.value for e in at.error] == ["Claude hat nach 10 Runden noch keinen gültigen Plan."]
+    assert at.session_state["proposal"] is None
+    assert "Übernehmen" not in [b.label for b in at.button]
+
+
 def test_an_agent_error_is_shown_to_the_project_lead(app, monkeypatch):
     def failing_run(project, team, on_round=None):
         raise PlanningError("Kein Zugang zur Claude API: ANTHROPIC_API_KEY ist nicht gesetzt.")
