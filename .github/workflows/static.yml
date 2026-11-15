@@ -1,5 +1,5 @@
-# Simple workflow for deploying static content to GitHub Pages
-name: Deploy static content to Pages
+# Builds the repository with Jekyll and deploys it to GitHub Pages
+name: Deploy README site to Pages
 
 on:
   # Runs on pushes targeting the default branch
@@ -33,11 +33,17 @@ jobs:
         uses: actions/checkout@v4
       - name: Setup Pages
         uses: actions/configure-pages@v5
+      # The repository has no index.html. Jekyll turns README.md into the start page (and
+      # the README of each folder into that folder's page); every other file is copied as it is.
+      - name: Build with Jekyll
+        uses: actions/jekyll-build-pages@v1
+        with:
+          source: ./
+          destination: ./_site
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          # Upload entire repository
-          path: '.'
+          path: ./_site
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v5
