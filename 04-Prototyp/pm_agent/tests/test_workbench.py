@@ -1,7 +1,8 @@
 import csv
 import io
 import json
-from datetime import date
+import threading
+from datetime import date, datetime
 
 import pytest
 from test_tools import PROJECT, TEAM, plan_input
@@ -20,6 +21,7 @@ from pm_agent.workbench import (
     load_run,
     load_team,
     plan_rows,
+    put_aside,
     round_summary,
     rows_to_plan,
     rows_to_team,
@@ -148,6 +150,9 @@ def test_runs_csv_takes_a_line_under_its_heading_and_in_its_order(tmp_path):
         b"quelle,runden\r\nagent,3\r\nagent,5,csv\r\n",  # the row brings a new column
         b"\r\nquelle,runden,format\r\nagent,3,md\r\n",  # an empty first line
         b"quelle;runden;format\r\nagent;3;md\r\n",  # saved by a German spreadsheet
+        b"quelle,runden,format\r\nagent,3,md,zu viel\r\n",  # a line with a cell too many
+        b'quelle,runden,format\r\nagent,3,"md\r\n',  # a quote that is never closed
+        b'"quelle,runden\r\n' + b"x,agent\r\n" * 20000,  # the same, larger than a cell may be
         "quelle,runden,format\r\ngeändert,3,md\r\n".encode("cp1252"),  # not UTF-8
     ],
 )
@@ -172,6 +177,76 @@ def test_runs_csv_whose_columns_fit_keeps_every_byte(tmp_path):
     append_run({"runden": 1, "quelle": "agent"}, path)
     assert path.read_bytes() == before + b"\r\nagent,1\r\n"
     assert list(tmp_path.glob("runs-bis-*.csv")) == []
+
+
+@pytest.mark.parametrize("empty", [b"", b"\xef\xbb\xbf", b"\r\n\r\n", b"\xef\xbb\xbf\n \n"])
+def test_runs_csv_without_any_content_is_begun_anew(tmp_path, empty):
+    # Nothing to keep, so nothing to put aside.
+    path = tmp_path / "runs.csv"
+    path.write_bytes(empty)
+    append_run({"quelle": "agent", "runden": 1}, path)
+    assert path.read_bytes() == b"quelle,runden\r\nagent,1\r\n"
+    assert put_aside(path) == []
+
+
+def test_runs_csv_is_never_put_aside_over_another_file(tmp_path, monkeypatch):
+    # Three times in the same second: every old file keeps a name of its own, and
+    # put_aside names them oldest first. Files somebody else put there do not count.
+    class Noon(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return cls(2026, 11, 15, 12, 0, 0)
+
+    monkeypatch.setattr(workbench, "datetime", Noon)
+    path = tmp_path / "runs.csv"
+    (tmp_path / "runs-bis-notizen.csv").write_bytes(b"meins")
+    (tmp_path / "runs-bis-20261115-120000-9.csv").mkdir()
+    for number in range(3):
+        path.write_bytes(b"alt%d\r\n1\r\n" % number)
+        append_run({"quelle": "agent"}, path)
+    assert put_aside(path) == [
+        "runs-bis-20261115-120000.csv",
+        "runs-bis-20261115-120000-2.csv",
+        "runs-bis-20261115-120000-3.csv",
+    ]
+    assert [(tmp_path / name).read_bytes() for name in put_aside(path)] == [
+        b"alt0\r\n1\r\n",
+        b"alt1\r\n1\r\n",
+        b"alt2\r\n1\r\n",
+    ]
+
+
+def test_runs_csv_takes_every_line_of_exports_at_the_same_time(tmp_path):
+    # Every browser session has a thread of its own. Appending is "go to the end, write":
+    # two at once could write over each other, and the page said nothing.
+    path = tmp_path / "runs.csv"
+
+    def export(session):
+        for number in range(150):
+            append_run({"quelle": f"sitzung-{session}", "runden": number}, path)
+
+    threads = [threading.Thread(target=export, args=(session,)) for session in range(8)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    lines = list(csv.DictReader(io.StringIO(path.read_text(encoding="utf-8"))))
+    assert sorted((line["quelle"], int(line["runden"])) for line in lines) == sorted(
+        (f"sitzung-{session}", number) for session in range(8) for number in range(150)
+    )
+
+
+def test_a_line_that_cannot_be_written_leaves_the_file_as_it_was(tmp_path):
+    # A lone surrogate cannot be encoded (a file name on Windows can hold one). Nothing is
+    # written then, not even the heading of a new file.
+    path = tmp_path / "runs.csv"
+    with pytest.raises(UnicodeEncodeError):
+        append_run({"quelle": "Protokoll run-\udc80.json"}, path)
+    assert not path.exists()
+    path.write_bytes(b"quelle\r\nagent\r\n")
+    with pytest.raises(UnicodeEncodeError):
+        append_run({"quelle": "Protokoll run-\udc80.json"}, path)
+    assert path.read_bytes() == b"quelle\r\nagent\r\n"
 
 
 def test_runs_csv_is_found_where_the_tests_point_it(tmp_path, monkeypatch):

@@ -9,8 +9,8 @@ import csv
 import io
 import json
 import math
-import os
 import re
+import threading
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -201,44 +201,94 @@ def load_run(path: Path) -> tuple[Project, list[Member], Plan, dict[str, Any]]:
     )
 
 
+# One export at a time: every browser session runs in a thread of its own, and two lines
+# appended at the same moment can write over each other. Within this server only; two
+# servers on one logs folder are not kept apart.
+_RECORD_LOCK = threading.Lock()
+_NO_CONTENT = b"\xef\xbb\xbf \t\r\n"  # a byte order mark and white space
+
+
 def append_run(row: dict[str, Any], path: Path | None = None) -> None:
     """One line per exported plan in runs.csv: the data for the before/after comparison.
 
-    The file is only ever appended to. The line goes under the heading of the file, in its
-    order. A file whose heading does not have the columns of the row, or cannot be read as
-    one (other separator, not UTF-8, an empty first line), is put aside as it is, under a
-    name with the time, and a new file begins: nothing in an existing file is rewritten, so
-    nothing in it can be lost or end up under another heading. Raises OSError if the file
-    cannot be written."""
+    The file is only ever appended to, and only if it is a clean record: readable as UTF-8,
+    every line as long as the heading, and the heading has the columns of the row. Then the
+    line goes below, in the order of the heading. Any other file (other separator or
+    encoding, a line with too many cells, an open quote, an older set of columns) is put
+    aside as it is, under a name with the time, and a new file begins. Nothing in an
+    existing file is rewritten, so nothing in it can be lost or end up under another
+    heading.
+
+    Raises OSError if a file cannot be written, and ValueError (UnicodeEncodeError) if the
+    row cannot be; the record is as it was then."""
     path = path or RUNS_CSV  # read at call time: tests point it to a temporary folder
     path.parent.mkdir(parents=True, exist_ok=True)
-    old = path.read_bytes() if path.exists() else b""
-    heading: list[str] = []
-    try:
-        heading = next(csv.reader(io.StringIO(old.decode("utf-8-sig"), newline="")), [])
-    except UnicodeDecodeError:
-        pass  # not ours to append to: put aside below
-    if old and not (heading and set(row) <= set(heading)):
-        stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-        aside, number = path.with_name(f"{path.stem}-bis-{stamp}{path.suffix}"), 1
-        while aside.exists():  # two in one second
-            number += 1
-            aside = path.with_name(f"{path.stem}-bis-{stamp}-{number}{path.suffix}")
-        os.replace(path, aside)
-        old, heading = b"", []
-    with path.open("a", encoding="utf-8", newline="") as file:
-        writer = csv.DictWriter(file, fieldnames=heading or list(row), restval="")
-        if not old:
+    with _RECORD_LOCK:
+        old = path.read_bytes() if path.exists() else b""
+        heading = _record_heading(old)
+        if not old.strip(_NO_CONTENT):
+            old, heading = b"", None  # nothing in it: begin anew, nothing to put aside
+        fits = heading is not None and set(row) <= set(heading)
+        text = io.StringIO(newline="")
+        writer = csv.DictWriter(text, fieldnames=heading if fits else list(row), restval="")
+        if not fits:
             writer.writeheader()
         elif old[-1:] not in (b"\n", b"\r"):  # the new line must not continue the last one
-            file.write("\r\n")
+            text.write("\r\n")
         writer.writerow(row)
+        line = text.getvalue().encode("utf-8")  # fails here, before any file is touched
+        if old and not fits:
+            _put_aside(path, old)
+        with path.open("ab" if old and fits else "wb") as file:
+            file.write(line)  # in one piece
+
+
+def _record_heading(content: bytes) -> list[str] | None:
+    """The heading of a clean record, None for anything append_run must not append to."""
+    try:
+        lines = list(csv.reader(io.StringIO(content.decode("utf-8-sig"), newline=""), strict=True))
+    except (UnicodeDecodeError, csv.Error):  # another encoding; an open quote, a huge cell
+        return None
+    if not lines or not lines[0]:
+        return None
+    if any(line and len(line) != len(lines[0]) for line in lines):  # blank lines are fine
+        return None
+    return lines[0]
+
+
+def _put_aside(path: Path, content: bytes) -> None:
+    """Keep the file under a name with the time and take it away from its place. The copy
+    is created with "x", which refuses a name that exists: no file is ever written over,
+    also not by another server that puts a file aside in the same second."""
+    stamp, number = datetime.now().strftime("%Y%m%d-%H%M%S"), 1
+    while True:
+        count = "" if number == 1 else f"-{number}"
+        aside = path.with_name(f"{path.stem}-bis-{stamp}{count}{path.suffix}")
+        try:
+            with aside.open("xb") as file:
+                file.write(content)
+            break
+        except FileExistsError:
+            number += 1
+    try:
+        path.unlink()
+    except OSError:
+        aside.unlink()  # the original stays where it is: no second copy of it
+        raise
 
 
 def put_aside(path: Path | None = None) -> list[str]:
     """The names of the files append_run has put aside, oldest first."""
     path = path or RUNS_CSV
-    return sorted(p.name for p in path.parent.glob(f"{path.stem}-bis-*{path.suffix}"))
+    name = re.compile(
+        rf"{re.escape(path.stem)}-bis-(\d{{8}}-\d{{6}})(?:-(\d+))?{re.escape(path.suffix)}"
+    )
+    found = []
+    for file in path.parent.iterdir():
+        match = name.fullmatch(file.name)
+        if match and file.is_file():
+            found.append((match[1], int(match[2] or 1), file.name))
+    return [file for _, _, file in sorted(found)]
 
 
 def round_summary(number: int, record: dict[str, Any]) -> tuple[str, list[str]]:

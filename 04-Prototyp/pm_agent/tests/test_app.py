@@ -907,6 +907,23 @@ def test_kontrolle_survives_a_record_it_cannot_read(tracked):
     assert any("runs-bis-20261115-120000.csv" in c.value for c in at.caption)
 
 
+def test_kontrolle_shows_no_table_with_cells_left_out(tracked):
+    # The first data line has a cell more than the heading. Read as it is, pandas would
+    # leave the surplus cells out and show the rest as if nothing were wrong.
+    workbench.RUNS_CSV.write_bytes(b"quelle,runden\r\nagent,5,csv\r\nagent,3,md\r\n")
+    at = tracked.switch_page("pages/kontrolle.py").run()
+    assert not at.exception
+    assert any("runs.csv konnte nicht gelesen werden" in e.value for e in at.error)
+    assert not any("quelle" in frame.value.columns for frame in at.dataframe)
+
+
+def test_kontrolle_takes_an_empty_record_for_no_export_yet(tracked):
+    workbench.RUNS_CSV.write_bytes(b"")
+    at = tracked.switch_page("pages/kontrolle.py").run()
+    assert not at.exception and not at.error
+    assert "Noch kein Plan exportiert." in [c.value for c in at.caption]
+
+
 def test_kontrolle_offers_the_control_document(tracked):
     at = tracked.switch_page("pages/kontrolle.py").run()
     assert not at.exception

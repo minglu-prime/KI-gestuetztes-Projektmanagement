@@ -851,7 +851,7 @@ with tabs[5]:
             }
             try:
                 append_run(row)
-            except OSError as err:
+            except (OSError, ValueError) as err:  # the file, or a value that has no bytes
                 # A callback cannot place a message: the run that follows shows it.
                 state.export_error = str(err)
 

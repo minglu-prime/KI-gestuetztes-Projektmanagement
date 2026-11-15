@@ -1,5 +1,6 @@
 """Page "Kontrolle": plan against actual for the adopted project, and what the agent cost."""
 
+import warnings
 from datetime import date
 
 import altair as alt
@@ -397,8 +398,14 @@ with st.container(border=True, key="panel-effort"):
     if record.exists():
         try:
             # index_col=False: a first line with a cell too many must not shift every column.
-            exports = pd.read_csv(record, encoding="utf-8-sig", index_col=False)
-        except (ValueError, OSError) as err:  # pandas' parser errors are ValueErrors
+            # pandas then leaves the surplus cells out and only warns: that is an error here.
+            with warnings.catch_warnings():
+                warnings.simplefilter("error", pd.errors.ParserWarning)
+                exports = pd.read_csv(record, encoding="utf-8-sig", index_col=False)
+        except pd.errors.EmptyDataError:  # a file without a line, as before the first export
+            st.caption("Noch kein Plan exportiert.")
+        # pandas' parser errors are ValueErrors.
+        except (ValueError, OSError, pd.errors.ParserWarning) as err:
             st.error(
                 f"{record.parent.name}/{record.name} konnte nicht gelesen werden: {err}. Die "
                 "Datei bleibt, wie sie ist."
