@@ -20,7 +20,8 @@ from pydantic import BaseModel, ConfigDict, ValidationError
 from pm_agent.agent import LOG_DIR, run_submission
 from pm_agent.models import Charter, Criterion, Project, Requirement, Requirements
 from pm_agent.tools import Submission
-from pm_agent.workbench import DATA_DIR, InputError, _cell, _reason
+from pm_agent.tracking import _fill
+from pm_agent.workbench import DATA_DIR, InputError, _cell, _date, _md, _reason
 
 FILE = DATA_DIR / "vorhaben.json"
 
@@ -317,3 +318,75 @@ def run_requirements(
         indent=2,
     )
     return run_submission("anforderungen", submission, data, log_dir, on_round)
+
+
+def charter_document(life: Lifecycle) -> str:
+    """The Projektauftrag as Markdown, with whether it is approved."""
+    charter, project = life.charter, life.project
+    if charter is None or project is None:
+        raise InputError("Ohne Projektdaten und Projektauftrag gibt es kein Dokument.")
+    return _fill(
+        "projektauftrag.md",
+        projekt=_md(project.idea),
+        start=_date(project.start_date),
+        deadline=_date(project.deadline),
+        stand=_stand(charter_state(life), life.charter_ok),
+        ziel=_md(charter.goal),
+        nutzen=_md(charter.benefit),
+        umfang=_items(charter.in_scope),
+        nicht=_items(charter.out_of_scope),
+        beteiligte=_items(charter.stakeholders),
+        kriterien=_items(f"{c.id}: {c.text}" for c in charter.success_criteria),
+        rahmen=_items(charter.constraints),
+    )
+
+
+def requirements_document(life: Lifecycle) -> str:
+    """The requirements as Markdown: an overview, each one with its acceptance criteria
+    (numbered R1.1, R1.2 …), and which requirements serve each success criterion."""
+    requirements, project = life.requirements, life.project
+    if requirements is None or project is None:
+        raise InputError("Ohne Projektdaten und Anforderungen gibt es kein Dokument.")
+    items = requirements.items
+    overview = "\n".join(
+        f"| {_md(r.id)} | {_md(r.title)} | {r.priority} | {_md(', '.join(r.sources)) or '–'} |"
+        for r in items
+    )
+    single = "\n\n".join(
+        f"### {_md(r.id)} · {_md(r.title)}\n\n*{_md(r.story)}* ({r.priority})\n\n"
+        + "\n".join(f"- {_md(r.id)}.{n} {_md(text)}" for n, text in enumerate(r.criteria, 1))
+        for r in items
+    )
+    if life.charter is None:
+        trace = "Kein Projektauftrag: Die Anforderungen lassen sich nicht zurückverfolgen."
+    else:
+        trace = _items(
+            f"{c.id} ({c.text}): "
+            + (", ".join(r.id for r in items if c.id in r.sources) or "keine Anforderung")
+            for c in life.charter.success_criteria
+        )
+    return _fill(
+        "anforderungen.md",
+        projekt=_md(project.idea),
+        start=_date(project.start_date),
+        deadline=_date(project.deadline),
+        stand=_stand(requirements_state(life), life.requirements_ok),
+        ueberblick=overview,
+        einzeln=single,
+        rueckverfolgung=trace,
+    )
+
+
+def _stand(state: State, approval: Approval | None) -> str:
+    if state == "freigegeben" and approval is not None:
+        return f"Freigegeben am {approval.at:%d.%m.%Y %H:%M}"
+    if state == "geändert" and approval is not None:
+        return (
+            f"Seit der Freigabe am {approval.at:%d.%m.%Y %H:%M} geändert, nicht erneut freigegeben"
+        )
+    return "Entwurf, nicht freigegeben"
+
+
+def _items(texts: Any) -> str:
+    lines_ = [f"- {_md(text)}" for text in texts]
+    return "\n".join(lines_) or "–"

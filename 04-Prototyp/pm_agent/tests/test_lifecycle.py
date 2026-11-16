@@ -228,3 +228,29 @@ def test_runs_of_the_new_agents_are_counted(api, tmp_path):
     assert [(r["Agent"], r["Ergebnis"]) for r in agent_runs(tmp_path)] == [
         ("Projektauftrag", "Projektauftrag")
     ]
+
+
+def test_the_charter_document_says_whether_it_is_approved():
+    life = Lifecycle(project=PROJECT, charter=charter())
+    draft = lifecycle.charter_document(life)
+    assert draft.startswith("# Projektauftrag")
+    assert "**Stand:** Entwurf, nicht freigegeben" in draft
+    assert "- K2: Doppelbuchungen sind ausgeschlossen" in draft
+    assert "- Raumverwaltung" in draft and "## Nicht im Umfang\n\n- Bezahlung" in draft
+    approved = lifecycle.charter_document(approve_charter(life, NOW))
+    assert "**Stand:** Freigegeben am 16.11.2026 10:00" in approved
+    changed = approve_charter(life, NOW).model_copy(update={"charter": charter(goal="Mehr")})
+    assert "**Stand:** Seit der Freigabe am 16.11.2026 10:00 geändert" in (
+        lifecycle.charter_document(changed)
+    )
+
+
+def test_the_requirements_document_traces_to_criteria():
+    items = requirements(need("R1", title="Buchen | Stornieren"), need("R2", "Soll", ["K2"]))
+    text = lifecycle.requirements_document(
+        Lifecycle(project=PROJECT, charter=charter(), requirements=items)
+    )
+    assert r"| R1 | Buchen \| Stornieren | Muss | K1 |" in text
+    assert "- R1.1 Die Buchung steht in der Liste" in text
+    assert "- K1 (Eine Buchung dauert unter einer Minute): R1" in text
+    assert "- K2 (Doppelbuchungen sind ausgeschlossen): R2" in text
