@@ -68,6 +68,8 @@ def load(path: Path | None = None) -> Lifecycle | None:
         return None
     try:
         text = path.read_text(encoding="utf-8")
+    except UnicodeDecodeError as err:  # saved by an editor in another encoding
+        raise InputError(f"{path.name} ist beschädigt: kein UTF-8 ({err.reason})") from err
     except OSError as err:
         raise InputError(f"{path.name} konnte nicht gelesen werden: {err}") from err
     try:

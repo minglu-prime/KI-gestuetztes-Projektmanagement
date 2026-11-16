@@ -1010,3 +1010,10 @@ def test_the_forecast_counts_buffer_and_week_in_working_days_of_the_project(tmp_
     # the eight Mon-Fri days of the calendar.
     alone = adopt(project, TEAM, one_person_plan(("A", 24, [])), path=tmp_path / "projekt.json")
     assert forecast(alone, date(2026, 12, 21)).deadline_gap == -1
+
+
+def test_a_project_file_in_another_encoding_is_damaged_not_a_crash(tmp_path):
+    path = tmp_path / "projekt.json"
+    path.write_bytes('{"project": "Lernräume"}'.encode("cp1252"))
+    with pytest.raises(InputError, match="projekt.json"):
+        load(path)

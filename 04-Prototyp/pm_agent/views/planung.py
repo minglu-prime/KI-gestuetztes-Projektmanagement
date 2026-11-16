@@ -142,7 +142,7 @@ def show_plan(plan, rounds, source, agent_seconds, rounds_start=None) -> None:
 def forget_conversation() -> None:
     """A new plan is on the table: the conversation, an open proposal and a wish that was
     not answered yet were about another one."""
-    state.update(chat=[], proposal=None, covered=frozenset())
+    state.update(chat=[], proposal=None)
     state.pop("asked", None)
 
 
@@ -184,6 +184,20 @@ def fill_project(project: Project) -> None:
     )
 
 
+def take_dates(project: Project) -> None:
+    """Callback: idea and dates from the Projektauftrag. Free days stay: they are entered
+    here."""
+    state.update(idea=project.idea, start=project.start_date, deadline=project.deadline)
+
+
+def lifecycle_requirements():
+    """The approved requirements, read again: callbacks run before the page sets `needs`."""
+    try:
+        return lifecycle.approved_requirements(lifecycle.load())
+    except InputError:
+        return None  # the project path above the page says why
+
+
 def open_run(path) -> None:
     """Callback: runs before the widgets, so it may fill their keys."""
     project, team, plan, record = load_run(path)
@@ -191,6 +205,7 @@ def open_run(path) -> None:
     state.team_current = None
     state.team_version += 1
     fill_project(project)
+    state.covered = frozenset()  # a whole plan: nothing done outside it
     show_plan(plan, record["rounds"], f"Protokoll {path.name}", record.get("seconds"))
     forget_conversation()
     state.step = STEPS[3]  # straight to the result
@@ -211,7 +226,7 @@ def load_rest() -> None:
     show_plan(plan, [], "Rest des übernommenen Projekts", None)
     forget_conversation()
     # What finished tasks served needs no new task in the rest.
-    state.covered = covered_requirements(adopted)
+    state.covered = covered_requirements(adopted, lifecycle_requirements())
     state.step = STEPS[4]  # straight to the step with the conversation
 
 
@@ -371,10 +386,10 @@ with tabs[1]:
         st.button(
             "Eckdaten aus dem Projektauftrag übernehmen",
             icon=":material/input:",
-            on_click=fill_project,
+            on_click=take_dates,
             args=(life.project,),
-            help="Idee, Start, Deadline und freie Tage, wie sie auf der Seite Projektauftrag "
-            "stehen.",
+            help="Idee, Start und Deadline, wie sie auf der Seite Projektauftrag stehen. "
+            "Freie Tage bleiben, wie sie hier stehen.",
         )
     idea = st.text_area(
         "Projektidee",

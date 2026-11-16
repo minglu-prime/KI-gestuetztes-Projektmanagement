@@ -109,7 +109,8 @@ with st.container(border=True, key="panel-requirements"):
             "Priorität": st.column_config.SelectboxColumn(options=["Muss", "Soll", "Kann"]),
         },
     )
-    typed = any(
+    # A table emptied of saved requirements is an edit too.
+    typed = life.requirements is not None or any(
         str(value).strip()
         for row in edited_rows.to_dict("records")
         for value in row.values()

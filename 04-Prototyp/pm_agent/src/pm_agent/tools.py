@@ -115,7 +115,12 @@ def invalid_input(err: ValidationError) -> list[str]:
         }
         if isinstance(limits.get("expected"), str):  # "'Muss', 'Soll' or 'Kann'"
             limits["expected"] = limits["expected"].replace("'", "").replace(" or ", " oder ")
-        text = GERMAN[e["type"]].format(**limits) if e["type"] in GERMAN else e["msg"]
+        if e["type"] == "value_error":  # our own validators speak German already
+            text = e["msg"].removeprefix("Value error, ")
+        elif e["type"] in GERMAN:
+            text = GERMAN[e["type"]].format(**limits)
+        else:
+            text = e["msg"]
         messages.append(
             f"Ungültige Eingabe bei {where}: {text}" if where else f"Ungültige Eingabe: {text}"
         )

@@ -188,7 +188,15 @@ def adopt(
         plan=plan,
         progress=progress,
         history=history,
-        requirements=requirements or [],
+        # Adopted again without approved requirements: the rest keeps what it was
+        # traced to, so the progress per requirement goes on.
+        requirements=(
+            requirements
+            if requirements is not None
+            else keep.requirements
+            if keep is not None
+            else []
+        ),
     )
     save(tracking, path)
     return tracking
@@ -203,17 +211,27 @@ def finished_again(tracking: Tracking, plan: Plan) -> list[str]:
     return [t.id for t in plan.tasks if t.id in done]
 
 
-def covered_requirements(tracking: Tracking) -> frozenset[str]:
-    """Requirements served by finished tasks, of this plan or of one before it. The rest of
-    the project needs no new task for them."""
-    done = {rid for e in tracking.history if e.finished for rid in e.requirement_ids}
-    done |= {
-        rid
-        for task in tracking.plan.tasks
-        if tracking.progress[task.id].status == "fertig"
-        for rid in task.requirement_ids
-    }
-    return frozenset(done)
+def covered_requirements(
+    tracking: Tracking, current: list[Requirement] | None = None
+) -> frozenset[str]:
+    """Requirements whose every task is finished, in this plan or in one before it: the rest
+    of the project needs no new task for them. With `current` (the requirements approved
+    now), only those that still read as they did when the plan was adopted: an ID used again
+    for something else is not covered by the old work."""
+    finished: dict[str, bool] = {}
+    for e in tracking.history:
+        if e.finished:
+            for rid in e.requirement_ids:
+                finished.setdefault(rid, True)
+    for task in tracking.plan.tasks:
+        for rid in task.requirement_ids:
+            done = tracking.progress[task.id].status == "fertig"
+            finished[rid] = finished.get(rid, True) and done
+    covered = {rid for rid, done in finished.items() if done}
+    if current is not None:
+        then = {need.id: need for need in tracking.requirements}
+        covered = {need.id for need in current if need.id in covered and then.get(need.id) == need}
+    return frozenset(covered)
 
 
 def requirement_progress(tracking: Tracking) -> list[dict[str, Any]]:
@@ -273,6 +291,8 @@ def load(path: Path | None = None) -> Tracking | None:
         return None
     try:
         text = path.read_text(encoding="utf-8")
+    except UnicodeDecodeError as err:  # saved by an editor in another encoding
+        raise InputError(f"{path.name} ist beschädigt: kein UTF-8 ({err.reason})") from err
     except OSError as err:  # locked, no permission, a folder of that name
         raise InputError(f"{path.name} konnte nicht gelesen werden: {err}") from err
     try:

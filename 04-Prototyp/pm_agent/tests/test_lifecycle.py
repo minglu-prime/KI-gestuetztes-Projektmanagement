@@ -254,3 +254,26 @@ def test_the_requirements_document_traces_to_criteria():
     assert "- R1.1 Die Buchung steht in der Liste" in text
     assert "- K1 (Eine Buchung dauert unter einer Minute): R1" in text
     assert "- K2 (Doppelbuchungen sind ausgeschlossen): R2" in text
+
+
+def test_a_file_in_another_encoding_is_damaged_not_a_crash(tmp_path):
+    path = tmp_path / "vorhaben.json"
+    path.write_bytes('{"project": "Lernräume"}'.encode("cp1252"))
+    with pytest.raises(InputError, match="vorhaben.json"):
+        lifecycle.load(path)
+
+
+def test_an_acceptance_criterion_has_no_semicolon():
+    # The table separates acceptance criteria by semicolons: one inside would split it.
+    from pydantic import ValidationError
+
+    from pm_agent.models import Requirement
+    from pm_agent.tools import invalid_input
+
+    with pytest.raises(ValidationError) as err:
+        Requirement.model_validate(
+            {**need("R1"), "criteria": ["Antwort unter 2 s; bei 50 Nutzern"]}
+        )
+    assert invalid_input(err.value) == [
+        "Ungültige Eingabe bei criteria.0: darf kein Semikolon enthalten"
+    ]

@@ -652,14 +652,14 @@ def edit_progress(at, edits):
     return edit_table(at, "progress_editor_", edits)
 
 
-def edit_table(at, prefix, edits):
+def edit_table(at, prefix, edits, deleted=()):
     # AppTest has no canvas cell editor. Submit its documented edit-state payload;
     # st.data_editor still applies the edits and the page's real save handler runs.
     (editor,) = [frame for frame in at.dataframe if frame.key and frame.key.startswith(prefix)]
     at.session_state[editor.key] = {
         "edited_rows": edits,
         "added_rows": [],
-        "deleted_rows": [],
+        "deleted_rows": list(deleted),
     }
     return at.run()
 
@@ -1632,14 +1632,17 @@ def test_the_auftrag_prefills_step_2(app):
     )
     lifecycle.save(lifecycle.Lifecycle(project=planned_until))
     at = app.run()
+    at.text_input(key="free_days").input("24.12.2026")
+    at = at.run()
     button(at, "Eckdaten aus dem Projektauftrag übernehmen").click()
     at = at.run()
     assert at.text_area(key="idea").value == PROJECT.idea
     assert at.date_input(key="deadline").value == PROJECT.deadline
-    assert at.text_input(key="free_days").value == "01.12.2026–02.12.2026"
+    # Free days are entered here, in the Planung: taking the dates leaves them alone.
+    assert at.text_input(key="free_days").value == "24.12.2026"
 
 
-def test_the_rest_does_not_ask_for_requirements_that_are_done(site):
+def test_the_rest_does_not_ask_for_requirements_that_are_done(site, monkeypatch):
     second = NEEDS.items[0].model_copy(update={"id": "R2", "title": "Stornieren"})
     needs = Requirements(items=[*NEEDS.items, second])
     approve_needs(needs)
@@ -1657,6 +1660,21 @@ def test_the_rest_does_not_ask_for_requirements_that_are_done(site):
     assert at.session_state["covered"] == frozenset({"R1"})
     # R1 was served by the finished A, which is not in the rest: no warning about it.
     assert not any("'R1'" in w.value for w in at.warning)
+
+    # A new plan for the rest still counts what finished work served.
+    seen = []
+
+    def planning(project, team, on_round=None, **trace):
+        seen.append(trace["covered"])
+        return at.session_state["plan"]
+
+    monkeypatch.setattr(agent, "run_planning", planning)
+    at.checkbox(key="consent").check()
+    at = at.run()
+    button(at, "Plan mit Claude erstellen").click()
+    at = at.run()
+    assert seen == [frozenset({"R1"})]
+    assert at.session_state["covered"] == frozenset({"R1"})
 
 
 def test_the_kontrolle_shows_progress_per_requirement(site):
@@ -1682,3 +1700,26 @@ def test_the_kontrolle_shows_progress_per_requirement(site):
 def test_without_requirements_the_kontrolle_says_why_it_cannot_trace(tracked):
     at = tracked.switch_page("views/kontrolle.py").run()
     assert any("ohne freigegebene Anforderungen übernommen" in c.value for c in at.caption)
+
+
+def test_an_emptied_requirements_table_cannot_be_approved_as_it_was(site):
+    lifecycle.save(with_charter().model_copy(update={"requirements": NEEDS}))
+    at = site.switch_page("views/anforderungen.py").run()
+    at = edit_table(at, "requirements_editor_", {}, deleted=[0])
+    assert any("Noch keine Anforderung" in e.value for e in at.error)
+    assert button(at, "Anforderungen freigeben").disabled
+
+
+def test_starting_over_clears_the_fields_too(site):
+    lifecycle.save(lifecycle.Lifecycle(project=PROJECT, charter=CHARTER))
+    at = site.switch_page("views/auftrag.py").run()
+    assert at.text_area(key="auftrag_idea").value == PROJECT.idea
+    lifecycle.FILE.write_text("{kaputt", encoding="utf-8")
+    at = at.run()
+    at.checkbox(key="vorhaben_replace").check()
+    at = at.run()
+    button(at, "Neu beginnen").click()
+    at = at.run()
+    at = at.run()  # the fields of the old project must not save it again
+    assert lifecycle.load() == lifecycle.Lifecycle()
+    assert at.text_area(key="auftrag_idea").value == ""

@@ -244,7 +244,7 @@ def traced_again(path):
     first = apply_rows(
         first, [{"ID": "A", "Status": "fertig", "Ist (h)": 10}, {"ID": "B", "Status": "in Arbeit"}]
     )
-    assert covered_requirements(first) == {"R1"}
+    assert covered_requirements(first) == frozenset()  # B serves R1 too and is not done
     project, rest = rest_project(first, THURSDAY)
     assert [t.requirement_ids for t in rest.tasks] == [["R1", "R2"]]  # the rest keeps its trace
     return adopt(project, TEAM, rest, path=path, keep=first, requirements=NEEDS)
@@ -255,7 +255,7 @@ def test_history_keeps_the_requirements_of_closed_tasks(traced_again):
         ("A", ["R1"]),
         ("B", ["R1", "R2"]),
     ]
-    assert covered_requirements(traced_again) == {"R1"}
+    assert covered_requirements(traced_again) == frozenset()  # B goes on, for R1 and R2
 
 
 def test_progress_per_requirement_counts_earlier_plans(traced_again):
@@ -275,3 +275,21 @@ def test_progress_per_requirement_counts_earlier_plans(traced_again):
             "Fertig": "0 von 1",
         },
     ]
+
+
+def test_a_requirement_counts_as_done_only_when_all_its_tasks_are(path):
+    adopted = adopt(PROJECT, TEAM, traced_plan(), path=path, requirements=NEEDS)
+    half = apply_rows(adopted, [{"ID": "A", "Status": "fertig"}])
+    assert covered_requirements(half) == frozenset()
+    done = apply_rows(half, [{"ID": "B", "Status": "fertig"}])
+    assert covered_requirements(done) == {"R1", "R2"}
+    # A requirement that means something else now is not covered by the old work.
+    changed = [NEEDS[0], NEEDS[1].model_copy(update={"title": "Export"})]
+    assert covered_requirements(done, changed) == {"R1"}
+    assert covered_requirements(done, NEEDS[:1]) == {"R1"}
+
+
+def test_adopting_again_without_requirements_keeps_the_snapshot(traced_again, path):
+    project, rest = rest_project(traced_again, THURSDAY)
+    again = adopt(project, TEAM, rest, path=path, keep=traced_again)
+    assert again.requirements == NEEDS

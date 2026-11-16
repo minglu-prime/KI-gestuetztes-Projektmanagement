@@ -67,8 +67,15 @@ def saved_lifecycle() -> Lifecycle | None:
         )
         if st.button("Neu beginnen", icon=":material/restart_alt:", disabled=not replace):
             if store(None, Lifecycle()) is not None:
+                # The fields still hold the old project; the next run would save it again.
+                for key in [k for k in st.session_state if k.startswith(FIELD_PREFIXES)]:
+                    del st.session_state[key]
                 st.rerun()
         return None
+
+
+# Keys of the fields on the pages Projektauftrag and Anforderungen.
+FIELD_PREFIXES = ("auftrag_", "charter_", "requirements_")
 
 
 def store(old: Lifecycle | None, new: Lifecycle) -> Lifecycle | None:
@@ -76,7 +83,7 @@ def store(old: Lifecycle | None, new: Lifecycle) -> Lifecycle | None:
     try:
         lifecycle.save(new)
     except OSError as err:
-        st.error(f"vorhaben.json konnte nicht gespeichert werden: {err}. Sie bleibt, wie sie war.")
+        st.error(f"vorhaben.json konnte nicht gespeichert werden: {err}.")
         return old
     return new
 

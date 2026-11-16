@@ -9,7 +9,7 @@ not rejected on parse.
 from datetime import date
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, model_validator
 
 NonEmpty = Annotated[str, Field(min_length=1)]
 SkillLevel = Annotated[int, Field(ge=1, le=5)]
@@ -105,6 +105,12 @@ class Charter(_Model):
     constraints: list[NonEmpty] = Field(default_factory=list)
 
 
+def _no_semicolon(text: str) -> str:
+    if ";" in text:
+        raise ValueError("darf kein Semikolon enthalten")
+    return text
+
+
 class Requirement(_Model):
     """One requirement of the PRD, with the criteria for accepting it."""
 
@@ -112,7 +118,8 @@ class Requirement(_Model):
     title: NonEmpty
     story: NonEmpty  # who wants what, and why
     priority: Literal["Muss", "Soll", "Kann"]
-    criteria: list[NonEmpty] = Field(min_length=1)  # acceptance criteria
+    # Acceptance criteria. No semicolon: it separates them in the table.
+    criteria: list[Annotated[NonEmpty, AfterValidator(_no_semicolon)]] = Field(min_length=1)
     sources: list[Ref] = Field(default_factory=list)  # success criteria of the charter
 
 
