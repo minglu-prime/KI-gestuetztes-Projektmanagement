@@ -184,4 +184,4 @@ with st.container(border=True, key="panel-documents"):
         st.markdown(text)
 
 if st.button("Weiter zur Kontrolle", icon=":material/arrow_forward:"):
-    st.switch_page("pages/kontrolle.py")
+    st.switch_page("views/kontrolle.py")
