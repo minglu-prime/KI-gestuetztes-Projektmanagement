@@ -709,3 +709,19 @@ def test_the_exported_plan_lists_the_tasks_of_each_requirement():
     assert "- R3 · Export (Muss): keine" in markdown
     # Without approved requirements the export is as before.
     assert "## Anforderungen" not in to_markdown(PROJECT, plan, check_plan(plan, TEAM, PROJECT))
+
+
+def test_the_plan_table_keeps_the_demos_and_the_markdown_lists_them():
+    from test_tools import PROJECT, TEAM, plan_input
+
+    from pm_agent.models import Plan
+    from pm_agent.planning import check_plan
+    from pm_agent.workbench import plan_rows, rows_to_plan, table_plan, to_markdown
+
+    plan = Plan.model_validate(
+        {**plan_input(), "demos": [{"week": 1, "title": "API zeigen", "task_ids": ["A", "B"]}]}
+    )
+    assert rows_to_plan(plan_rows(plan), plan, plan.risks).demos == plan.demos
+    assert table_plan(plan) == plan
+    text = to_markdown(PROJECT, plan, check_plan(plan, TEAM, PROJECT))
+    assert "## Demos je Woche\n\n- Woche 1 (bis 13.11.2026): API zeigen (A, B)" in text
