@@ -1584,3 +1584,76 @@ def test_an_unreadable_vorhaben_is_said_on_the_agent_pages(site):
     assert not at.exception
     assert any("vorhaben.json ist beschädigt" in c.value for c in at.caption)
     assert "done" not in str(steps(at)) and "next" not in str(steps(at)["Auftrag"])
+
+
+def approve_needs(needs=NEEDS):
+    life = with_charter().model_copy(update={"requirements": needs})
+    lifecycle.save(lifecycle.approve_requirements(life, APPROVED_AT))
+
+
+def test_approved_requirements_reach_agent_and_check(app, monkeypatch):
+    approve_needs()
+    seen = {}
+
+    def planning(project, team, on_round=None, **trace):
+        seen.update(trace)
+        return PLAN  # serves no requirement
+
+    monkeypatch.setattr(agent, "run_planning", planning)
+    at = fill_project(app.run())
+    button(at, "Plan mit Claude erstellen").click()
+    at = at.run()
+    assert not at.exception
+    assert seen == {"requirements": NEEDS.items, "covered": frozenset()}
+    warnings = [w.value for w in at.warning]
+    assert "Muss-Anforderung 'R1' (Raum buchen) hat keine Task" in warnings
+    assert "2 Tasks dienen keiner Anforderung: A, B" in warnings
+    (trace,) = [d.value for d in at.dataframe if "Anforderung" in d.value.columns]
+    assert trace.to_dict("records") == [
+        {"ID": "R1", "Anforderung": "Raum buchen", "Priorität": "Muss", "Aufgaben": "keine"}
+    ]
+    assert "✓ Anforderungen: freigegeben<" in chips(at)
+
+
+def test_without_approval_the_planung_works_as_before_and_says_so(app, monkeypatch):
+    lifecycle.save(with_charter().model_copy(update={"requirements": NEEDS}))  # a draft
+    monkeypatch.setattr(agent, "run_planning", planned)  # the old signature
+    at = fill_project(app.run())
+    button(at, "Plan mit Claude erstellen").click()
+    at = at.run()
+    assert not at.exception and not at.error
+    assert not any("Anforderung" in w.value for w in at.warning)
+    assert "○ Anforderungen: Entwurf, nicht freigegeben<" in chips(at)
+
+
+def test_the_auftrag_prefills_step_2(app):
+    planned_until = PROJECT.model_copy(
+        update={"free_days": [Absence(first=date(2026, 12, 1), last=date(2026, 12, 2))]}
+    )
+    lifecycle.save(lifecycle.Lifecycle(project=planned_until))
+    at = app.run()
+    button(at, "Eckdaten aus dem Projektauftrag übernehmen").click()
+    at = at.run()
+    assert at.text_area(key="idea").value == PROJECT.idea
+    assert at.date_input(key="deadline").value == PROJECT.deadline
+    assert at.text_input(key="free_days").value == "01.12.2026–02.12.2026"
+
+
+def test_the_rest_does_not_ask_for_requirements_that_are_done(site):
+    second = NEEDS.items[0].model_copy(update={"id": "R2", "title": "Stornieren"})
+    needs = Requirements(items=[*NEEDS.items, second])
+    approve_needs(needs)
+    data = plan_input()
+    data["tasks"][0]["requirement_ids"] = ["R1"]
+    data["tasks"][1]["requirement_ids"] = ["R2"]
+    open_end = PROJECT.model_copy(update={"deadline": date.max})
+    tracking.adopt(open_end, TEAM, Plan.model_validate(data), requirements=needs.items)
+    tracking.save(tracking.apply_rows(tracking.load(), [{"ID": "A", "Status": "fertig"}]))
+
+    at = site.switch_page("views/kontrolle.py").run()
+    button(at, "Rest mit Claude umplanen").click()
+    at.run()
+    at = at.switch_page(PLANUNG).run()
+    assert at.session_state["covered"] == frozenset({"R1"})
+    # R1 was served by the finished A, which is not in the rest: no warning about it.
+    assert not any("'R1'" in w.value for w in at.warning)

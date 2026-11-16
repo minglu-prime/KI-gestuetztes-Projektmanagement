@@ -83,7 +83,7 @@ def store(old: Lifecycle | None, new: Lifecycle) -> Lifecycle | None:
 
 # How far a phase before the plan is, as a chip of the status strip.
 PHASE_CHIPS = {
-    "offen": ("noch keiner", ""),
+    "offen": ("nicht angelegt", ""),
     "entwurf": ("Entwurf, nicht freigegeben", ""),
     "geändert": ("seit der Freigabe geändert", "warn"),
     "freigegeben": ("freigegeben", "on"),

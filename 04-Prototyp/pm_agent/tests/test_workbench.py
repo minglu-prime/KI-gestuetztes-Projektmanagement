@@ -10,7 +10,7 @@ import pytest
 from test_tools import PROJECT, TEAM, plan_input
 
 from pm_agent import workbench
-from pm_agent.models import Member, Plan
+from pm_agent.models import Member, Plan, Requirement
 from pm_agent.planning import check_plan
 from pm_agent.workbench import (
     InputError,
@@ -689,3 +689,23 @@ def test_the_csv_has_the_requirements_before_the_dates():
     )
     assert rows[0][-4:] == ["Anforderungen", "Start", "Ende", "Begründung"]
     assert rows[1][-4] == "R1, R2"
+
+
+def test_the_exported_plan_lists_the_tasks_of_each_requirement():
+    needs = [
+        Requirement(
+            id=rid,
+            title=title,
+            story="Als Nutzerin will ich das.",
+            priority="Muss",
+            criteria=["geht"],
+        )
+        for rid, title in [("R1", "Raum | sehen"), ("R2", "Buchen"), ("R3", "Export")]
+    ]
+    plan = traced_plan()  # A serves R1 and R2
+    markdown = to_markdown(PROJECT, plan, check_plan(plan, TEAM, PROJECT), needs)
+    assert "## Anforderungen" in markdown
+    assert r"- R1 · Raum \| sehen (Muss): A" in markdown
+    assert "- R3 · Export (Muss): keine" in markdown
+    # Without approved requirements the export is as before.
+    assert "## Anforderungen" not in to_markdown(PROJECT, plan, check_plan(plan, TEAM, PROJECT))

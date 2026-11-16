@@ -26,6 +26,7 @@ from pm_agent.models import (
     Member,
     Plan,
     Project,
+    Requirement,
     Task,
 )
 from pm_agent.planning import workday_shift, working_shift
@@ -690,7 +691,26 @@ def gantt(plan: Plan, result: CheckResult, deadline: date) -> tuple[list[dict[st
     return bars, bar_end(deadline)
 
 
-def to_markdown(project: Project, plan: Plan, result: CheckResult) -> str:
+def trace_rows(requirements: list[Requirement], plan: Plan) -> list[dict[str, Any]]:
+    """Per requirement, the tasks of the plan that serve it."""
+    return [
+        {
+            "ID": need.id,
+            "Anforderung": need.title,
+            "Priorität": need.priority,
+            "Aufgaben": ", ".join(t.id for t in plan.tasks if need.id in t.requirement_ids)
+            or "keine",
+        }
+        for need in requirements
+    ]
+
+
+def to_markdown(
+    project: Project,
+    plan: Plan,
+    result: CheckResult,
+    requirements: list[Requirement] | None = None,
+) -> str:
     owner = {a.task_id: a for a in plan.assignments}
     dates = {s.task_id: s for s in result.schedule}
     lines = [
@@ -715,6 +735,12 @@ def to_markdown(project: Project, plan: Plan, result: CheckResult) -> str:
         )
     if result.critical_path:
         lines += ["", f"**Kritischer Pfad:** {' → '.join(result.critical_path)}"]
+    if requirements is not None:
+        lines += ["", "## Anforderungen", ""] + [
+            f"- {_md(row['ID'])} · {_md(row['Anforderung'])} ({row['Priorität']}): "
+            f"{_md(row['Aufgaben'])}"
+            for row in trace_rows(requirements, plan)
+        ]
     for title, items in (
         ("Fehler", result.errors),
         ("Warnungen", result.warnings),
