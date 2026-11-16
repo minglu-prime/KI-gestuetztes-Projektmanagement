@@ -21,6 +21,7 @@ from pm_agent.models import (
     Member,
     Plan,
     Project,
+    Requirement,
     ScheduledTask,
     StatusSummary,
     Task,
@@ -96,6 +97,7 @@ class Earlier(BaseModel):
     finished: bool
     note: str = ""
     until: date  # the day the next plan was adopted
+    requirement_ids: list[str] = Field(default_factory=list)  # what the task served
 
 
 class Tracking(BaseModel):
@@ -109,6 +111,9 @@ class Tracking(BaseModel):
     plan: Plan
     progress: dict[str, Progress]
     history: list[Earlier] = Field(default_factory=list)
+    # The requirements approved when the plan was adopted. A snapshot like project and plan:
+    # progress per requirement is measured against what the plan was traced to.
+    requirements: list[Requirement] = Field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -151,13 +156,16 @@ def adopt(
     plan: Plan,
     path: Path | None = None,
     keep: Tracking | None = None,
+    requirements: list[Requirement] | None = None,
 ) -> Tracking:
     """Make the plan the baseline. Replaces an adopted project and its progress.
 
     With `keep`, the project adopted before, its work stays as history: finished tasks, and
     the booked part of every started task. A started task that is in the new plan under the
-    same ID goes on there "in Arbeit"; its new estimate is what was left (rest_plan)."""
-    errors = check_plan(plan, team, project).errors
+    same ID goes on there "in Arbeit"; its new estimate is what was left (rest_plan).
+
+    `requirements`: the approved ones the plan is traced to; they are kept with it."""
+    errors = check_plan(plan, team, project, requirements=requirements).errors
     if errors:
         raise InputError("Der Plan hat noch Fehler: " + "; ".join(errors))
     if keep is not None and (again := finished_again(keep, plan)):
@@ -180,6 +188,7 @@ def adopt(
         plan=plan,
         progress=progress,
         history=history,
+        requirements=requirements or [],
     )
     save(tracking, path)
     return tracking
@@ -192,6 +201,42 @@ def finished_again(tracking: Tracking, plan: Plan) -> list[str]:
     done = {e.id for e in tracking.history if e.finished}
     done |= {task_id for task_id, p in tracking.progress.items() if p.status == "fertig"}
     return [t.id for t in plan.tasks if t.id in done]
+
+
+def covered_requirements(tracking: Tracking) -> frozenset[str]:
+    """Requirements served by finished tasks, of this plan or of one before it. The rest of
+    the project needs no new task for them."""
+    done = {rid for e in tracking.history if e.finished for rid in e.requirement_ids}
+    done |= {
+        rid
+        for task in tracking.plan.tasks
+        if tracking.progress[task.id].status == "fertig"
+        for rid in task.requirement_ids
+    }
+    return frozenset(done)
+
+
+def requirement_progress(tracking: Tracking) -> list[dict[str, Any]]:
+    """Per requirement adopted with the plan: its tasks, of this plan and finished ones of
+    plans before it, and how many of them are finished. Empty without requirements."""
+    rows = []
+    for need in tracking.requirements:
+        tasks = {
+            e.id: True for e in tracking.history if e.finished and need.id in e.requirement_ids
+        }
+        for task in tracking.plan.tasks:
+            if need.id in task.requirement_ids:
+                tasks[task.id] = tracking.progress[task.id].status == "fertig"
+        rows.append(
+            {
+                "ID": need.id,
+                "Anforderung": need.title,
+                "Priorität": need.priority,
+                "Aufgaben": ", ".join(tasks) or "keine",
+                "Fertig": f"{sum(tasks.values())} von {len(tasks)}",
+            }
+        )
+    return rows
 
 
 def _closed(tracking: Tracking, day: date) -> list[Earlier]:
@@ -215,6 +260,7 @@ def _closed(tracking: Tracking, day: date) -> list[Earlier]:
                 finished=finished,
                 note=state.note,
                 until=day,
+                requirement_ids=estimates[state.id].requirement_ids,
             )
         )
     return closed
