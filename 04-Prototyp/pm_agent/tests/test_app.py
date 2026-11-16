@@ -501,6 +501,14 @@ def test_the_site_says_that_it_is_german(site):
     assert any('document.documentElement.lang = "de"' in h.value for h in site.html)
 
 
+def test_the_startseite_introduces_the_roles_the_agent_pages_mark(site):
+    flow = next(h.value for h in site.html if 'class="flow"' in h.value)
+    # The same chips as on the agent pages, in the order of the work.
+    marks = ['class="role claude"', 'class="role python"', 'class="role du"']
+    assert all(m in flow for m in marks)
+    assert flow.index(marks[0]) < flow.index(marks[1]) < flow.index(marks[2])
+
+
 def test_every_menu_entry_opens_and_explains_its_empty_state(site):
     assert not site.exception
     assert [t.value for t in site.title] == ["Der Agent schlägt vor. *Du entscheidest.*"]
