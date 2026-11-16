@@ -43,9 +43,9 @@ frei. Soft Gate: Wer den Entwurf überspringt, plant wie bisher; der Pfad zeigt 
 
 ## Ansätze
 
-**Format der Verträge** (offene Frage an den Nutzer, hier mit Empfehlung angenommen):
+**Format der Verträge** (vom Nutzer am 16.11.2026 freigegeben: typisierte Felder):
 
-| | Typisierte Felder (angenommen) | Freier Text |
+| | Typisierte Felder (gewählt) | Freier Text |
 |---|---|---|
 | Form | Eingabe/Ausgabe als `name: Typ`, Fehler als `Code Bedeutung` | je ein Satz für Eingabe, Ausgabe, Fehler |
 | Python prüft | doppelte Feldnamen und Fehlercodes; Diagramm zeigt die Felder aus dem Vertrag | nur „ausgefüllt?“ |
@@ -172,8 +172,6 @@ Lade-, Leer- und Fehlerzustände wie auf den Seiten aus Batch 1.
 
 ## Annahmen
 
-- Der Nutzer wählt typisierte Felder (Empfehlung). Wählt er freien Text, entfallen
-  `DataField`/`ErrorCase`, die Prüfpunkte zu Feldern und die Feldnamen im Diagramm.
 - Rollen stehen als Bausteine im Entwurf, damit sie im Diagramm erscheinen; sie werden nicht
   automatisch aus dem Auftrag übernommen, Claude schlägt sie vor.
 
