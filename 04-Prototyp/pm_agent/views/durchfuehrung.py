@@ -25,6 +25,7 @@ from pm_agent.tracking import (
 )
 from pm_agent.ui import (
     adopted_project,
+    as_text,
     chip,
     consent,
     heading,
@@ -60,7 +61,7 @@ st.html(
         chip(f"{late} im Verzug", "warn") if late else chip("Kein Verzug", "on"),
     )
 )
-st.markdown(f"**{tracking.project.idea}**")
+st.markdown(f"**{as_text(tracking.project.idea)}**")
 st.progress(result.progress, text=f"{percent(result.progress)} der Planstunden fertig")
 st.caption(f"Übernommen am {tracking.adopted:%d.%m.%Y %H:%M} · {len(tracking.plan.tasks)} Aufgaben")
 
@@ -181,9 +182,9 @@ with st.container(border=True, key="panel-agent"):
             st.info("Der Fortschritt hat sich seit dem Vorschlag geändert. Lass ihn neu erstellen.")
     if summary is not None:
         with st.container(border=True, key="preview-summary"):
-            st.markdown(summary.summary)
+            st.markdown(as_text(summary.summary))
             for step in summary.next_steps:
-                st.markdown(f"- **{step.task_id}:** {step.action}")
+                st.markdown(f"- **{as_text(step.task_id)}:** {as_text(step.action)}")
         st.caption("Der Vorschlag steht jetzt auch im Statusbericht unten.")
 
 with st.container(border=True, key="panel-documents"):
