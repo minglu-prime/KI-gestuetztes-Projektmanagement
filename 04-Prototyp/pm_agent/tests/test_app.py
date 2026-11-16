@@ -1811,3 +1811,19 @@ def test_the_planner_gets_the_design_only_while_it_is_approved(app, monkeypatch)
     assert not at.exception
     assert seen == [design(), None]
     assert "! Entwurf: seit der Freigabe geändert<" in chips(at)
+
+
+def test_check_messages_on_the_lifecycle_pages_show_no_link(site):
+    # A message quotes what the lead or Claude wrote; rendered as Markdown, a link in it
+    # would hide where it leads.
+    criteria = [*CHARTER.success_criteria, Criterion(id="K9", text="[hier](https://evil.example)")]
+    charter = CHARTER.model_copy(update={"success_criteria": criteria})
+    life = lifecycle.Lifecycle(project=PROJECT, charter=charter, requirements=NEEDS)
+    lifecycle.save(life)
+    shown = []
+    for page in ["auftrag", "anforderungen"]:
+        at = site.switch_page(f"views/{page}.py").run()
+        assert not at.exception
+        shown += [e.value for e in at.error] + [w.value for w in at.warning]
+    assert any("evil.example" in text for text in shown)
+    assert not [text for text in shown if re.search(r"(?<!\\)\[", text)]
