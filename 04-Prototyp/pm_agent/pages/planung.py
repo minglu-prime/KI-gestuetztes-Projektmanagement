@@ -27,6 +27,7 @@ from pm_agent.ui import (
     LEGEND,
     TASK_AXIS,
     chip,
+    heading,
     on_panel,
     round_printer,
     strip,
@@ -376,7 +377,7 @@ with tabs[2]:
     st.subheader("Planung mit Claude")
     new_plan, logged_run = st.columns([3, 2], gap="medium")
     with new_plan.container(border=True, key="panel-claude", height="stretch"):
-        st.markdown("#### :material/smart_toy: Neuen Plan erstellen")
+        heading("smart_toy", "Neuen Plan erstellen")
         st.caption(
             "Claude entwirft, Python prüft, Claude bessert nach, bis der Plan ohne Fehler ist."
         )
@@ -428,7 +429,7 @@ with tabs[2]:
                 )
 
     with logged_run.container(border=True, key="panel-run", height="stretch"):
-        st.markdown("#### :material/history: Protokollierten Lauf öffnen")
+        heading("history", "Protokollierten Lauf öffnen")
         st.caption("Zeigt einen früheren Plan ohne neuen Aufruf von Claude.")
         try:
             runs = saved_runs()
@@ -480,7 +481,7 @@ with tabs[3]:
             st.success("Die Prüfung meldet keine Fehler und keine Warnungen.")
 
         with st.container(border=True, key="panel-schedule"):
-            st.markdown("#### :material/view_timeline: Terminplan")
+            heading("view_timeline", "Terminplan")
             if result.schedule:
                 bars, deadline_line = gantt(state.plan, result, project.deadline)
                 chart = (
@@ -531,7 +532,7 @@ with tabs[3]:
                 st.info("Ohne fehlerfreien Plan gibt es keinen Terminplan.")
 
         with st.container(border=True, key="panel-load"):
-            st.markdown("#### :material/groups: Auslastung bis zur Deadline")
+            heading("groups", "Auslastung bis zur Deadline")
             st.dataframe(
                 pd.DataFrame(
                     [
@@ -553,14 +554,14 @@ with tabs[3]:
                 },
             )
         with st.container(border=True, key="panel-risks"):
-            st.markdown("#### :material/warning: Risiken")
+            heading("warning", "Risiken")
             if state.plan.risks:
                 st.markdown("\n".join(f"- {r}" for r in state.plan.risks))
             else:
                 st.caption("Der Plan nennt keine Risiken.")
 
         with st.container(border=True, key="panel-reasons"):
-            st.markdown("#### :material/assignment_ind: Zuweisungen und Begründungen")
+            heading("assignment_ind", "Zuweisungen und Begründungen")
             reasons = pd.DataFrame(plan_rows(state.plan))[["ID", "Aufgabe", "Person", "Begründung"]]
             if result.slack:
                 reasons.insert(3, "Puffer (Tage)", reasons["ID"].map(result.slack))
@@ -568,7 +569,7 @@ with tabs[3]:
 
         if result.schedule:
             with st.container(border=True, key="panel-task"):
-                st.markdown("#### :material/search: Aufgabe im Detail")
+                heading("search", "Aufgabe im Detail")
                 st.caption(
                     "Warum diese Person, was hängt an der Aufgabe, und wer könnte sie sonst "
                     "übernehmen? Die Begründung stammt von Claude, alles andere rechnet Python."
@@ -657,7 +658,7 @@ with tabs[4]:
         # The conversation stands above the table but runs after it: it has to know
         # what the table says in this run, not in the one before.
         chat_panel = st.container(border=True, key="panel-chat")
-        st.markdown("#### :material/edit: Von Hand ändern")
+        heading("edit", "Von Hand ändern")
         st.caption(
             "Ändere Personen, Stunden oder Abhängigkeiten. „Erneut prüfen“ rechnet nur "
             "deterministisch nach, Claude wird nicht aufgerufen."
@@ -693,7 +694,7 @@ with tabs[4]:
         next_step("Ergebnis ansehen", STEPS[3], False, "back_to_result")
 
         with chat_panel:
-            st.markdown("#### :material/forum: Mit Claude ändern")
+            heading("forum", "Mit Claude ändern")
             st.caption(
                 "Sag, was sich ändern soll, oder spiel eine Annahme durch: „Clara übernimmt die "
                 "Tests“, „Was, wenn das Backend doppelt so lange dauert?“. Claude ändert den "
@@ -876,7 +877,7 @@ with tabs[5]:
         stamp = date.today().strftime("%Y%m%d")
         download, take_over = st.columns(2, gap="medium")
         with download.container(border=True, key="panel-download", height="stretch"):
-            st.markdown("#### :material/download: Herunterladen")
+            heading("download", "Herunterladen")
             not_recorded = state.pop("export_error", None)
             if not_recorded:
                 st.error(
@@ -907,7 +908,7 @@ with tabs[5]:
             )
 
         with take_over.container(border=True, key="panel-adopt", height="stretch"):
-            st.markdown("#### :material/flag: Als Projekt übernehmen")
+            heading("flag", "Als Projekt übernehmen")
             st.caption("Der Plan wird zur Grundlage für die Seiten Durchführung und Kontrolle.")
             try:
                 adopted = load_tracking()

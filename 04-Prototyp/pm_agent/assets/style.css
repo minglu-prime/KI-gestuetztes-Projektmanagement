@@ -5,7 +5,7 @@
 
 :root {
   --ink: #18352d;
-  --muted: #5c6b64; /* a shade darker than the lab's #64736c: 4.5 to 1 also on --sage */
+  --muted: #5c6b64; /* the lab's grey too: 4.5 to 1 also on --sage */
   --green: #23654c;
   --green-dark: #174b38;
   --mint: #dceadf;
@@ -111,6 +111,16 @@
 [data-testid="stHeading"] h3 {
   font-size: 21px;
   letter-spacing: -0.5px;
+}
+/* The icon of ui.heading, drawn like the ones Streamlit draws from ":material/name:". */
+.icon {
+  display: inline-block;
+  font-family: "Material Symbols Rounded";
+  font-weight: 400;
+  user-select: none;
+  vertical-align: bottom;
+  white-space: nowrap;
+  overflow-wrap: normal;
 }
 
 /* ---- Buttons --------------------------------------------------------------------------- */

@@ -23,7 +23,7 @@ from pm_agent.tracking import (
     week_ahead,
     work_packages,
 )
-from pm_agent.ui import adopted_project, chip, consent, run_with_progress, strip
+from pm_agent.ui import adopted_project, chip, consent, heading, run_with_progress, strip
 from pm_agent.workbench import InputError
 
 state = st.session_state
@@ -57,7 +57,7 @@ st.progress(result.progress, text=f"{percent(result.progress)} der Planstunden f
 st.caption(f"Übernommen am {tracking.adopted:%d.%m.%Y %H:%M} · {len(tracking.plan.tasks)} Aufgaben")
 
 with st.container(border=True, key="panel-ahead"):
-    st.markdown("#### :material/event_upcoming: Die nächsten fünf Arbeitstage")
+    heading("event_upcoming", "Die nächsten fünf Arbeitstage")
     outlook = forecast(tracking, date.today())
     ahead = week_ahead(tracking, date.today())
     if outlook.problem:
@@ -78,7 +78,7 @@ with st.container(border=True, key="panel-ahead"):
         )
 
 with st.container(border=True, key="panel-progress"):
-    st.markdown("#### :material/edit_note: Fortschritt")
+    heading("edit_note", "Fortschritt")
     if state.pop("progress_saved", False):
         st.success("Fortschritt gespeichert (lokal in data/projekt.json, nicht im Repository).")
     edited = st.data_editor(
@@ -124,7 +124,7 @@ with st.container(border=True, key="panel-progress"):
                 st.rerun()
 
 with st.container(border=True, key="panel-agent"):
-    st.markdown("#### :material/smart_toy: Durchführungs-Agent")
+    heading("smart_toy", "Durchführungs-Agent")
     st.caption(
         "Claude schlägt aus Plan und gespeichertem Fortschritt die Zusammenfassung und die "
         "nächsten Schritte für den Statusbericht vor. Python nimmt den Vorschlag nur an, wenn "
@@ -156,7 +156,7 @@ with st.container(border=True, key="panel-agent"):
         st.caption("Der Vorschlag steht jetzt auch im Statusbericht unten.")
 
 with st.container(border=True, key="panel-documents"):
-    st.markdown("#### :material/description: Dokumente aus Vorlagen")
+    heading("description", "Dokumente aus Vorlagen")
     st.caption("Gefüllt aus dem übernommenen Plan und dem gespeicherten Fortschritt.")
     documents = {
         "Statusbericht": ("statusbericht", status_report(tracking, result, summary)),

@@ -29,6 +29,7 @@ from pm_agent.ui import (
     TASK_AXIS,
     adopted_project,
     consent,
+    heading,
     on_panel,
     run_with_progress,
 )
@@ -73,7 +74,7 @@ if tracking is not None:
         st.switch_page("pages/durchfuehrung.py")
 
     with st.container(border=True, key="panel-forecast"):
-        st.markdown("#### :material/trending_up: Prognose")
+        heading("trending_up", "Prognose")
         outlook = forecast(tracking, date.today())
         if outlook.problem:
             st.error(
@@ -175,7 +176,7 @@ if tracking is not None:
             )
 
     with st.container(border=True, key="panel-earned"):
-        st.markdown("#### :material/monitoring: Earned Value")
+        heading("monitoring", "Earned Value")
         value = earned_value(tracking, result)
         # Two rows: five tiles in one row cut their labels off.
         pv, ev, ac = st.columns(3)
@@ -253,7 +254,7 @@ if tracking is not None:
         )
 
     with st.container(border=True, key="panel-tasks"):
-        st.markdown("#### :material/bar_chart: Plan und Ist je Aufgabe")
+        heading("bar_chart", "Plan und Ist je Aufgabe")
         per_task = pd.DataFrame(
             [
                 {
@@ -290,7 +291,7 @@ if tracking is not None:
         st.dataframe(per_task, hide_index=True)
 
     with st.container(border=True, key="panel-members"):
-        st.markdown("#### :material/groups: Plan und Ist je Person")
+        heading("groups", "Plan und Ist je Person")
         per_member = pd.DataFrame(result.by_member)
         # Every person in this table has at least one task, so the planned hours are not zero.
         share = per_member["Fertig (Plan-h)"] / per_member["Plan (h)"]
@@ -306,7 +307,7 @@ if tracking is not None:
         )
 
     with st.container(border=True, key="panel-cost"):
-        st.markdown("#### :material/euro: Kosten")
+        heading("euro", "Kosten")
         rate = st.number_input(
             "Stundensatz (€)", min_value=0.0, value=None, step=5.0, placeholder="nicht gesetzt"
         )
@@ -318,7 +319,7 @@ if tracking is not None:
             st.caption("Ohne Stundensatz werden keine Kosten berechnet.")
 
     with st.container(border=True, key="panel-agent"):
-        st.markdown("#### :material/smart_toy: Kontroll-Agent")
+        heading("smart_toy", "Kontroll-Agent")
         st.caption(
             "Claude bewertet den Stand und schlägt Gegenmaßnahmen vor. Python nimmt den Vorschlag "
             "nur an, wenn jede Aufgabe im Verzug eine Gegenmaßnahme hat. Was umgesetzt wird, "
@@ -376,7 +377,7 @@ if tracking is not None:
 
 if tracking is not None:
     with st.container(border=True, key="panel-document"):
-        st.markdown("#### :material/description: Kontrollbericht")
+        heading("description", "Kontrollbericht")
         st.caption(
             "Alles von dieser Seite als ein Dokument: Kennzahlen, Prognose, Verzug, Kosten bei "
             "gesetztem Stundensatz und, wenn erstellt, die Bewertung des Kontroll-Agenten."
@@ -399,7 +400,7 @@ if tracking is not None:
             st.markdown(document)
 
 with st.container(border=True, key="panel-effort"):
-    st.markdown("#### :material/timer: Aufwand der Agenten")
+    heading("timer", "Aufwand der Agenten")
     try:
         runs = agent_runs()
     except ValueError as err:  # a damaged log file

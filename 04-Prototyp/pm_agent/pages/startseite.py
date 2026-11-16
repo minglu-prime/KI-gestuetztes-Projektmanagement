@@ -5,6 +5,7 @@ from datetime import date
 import streamlit as st
 
 from pm_agent.tracking import evaluate, forecast, forecast_text, load, next_step, percent
+from pm_agent.ui import heading
 from pm_agent.workbench import InputError
 
 # How every agent works, as the diagram next to the headline (styled in assets/style.css).
@@ -26,7 +27,7 @@ FLOW = """
 AGENTS = [
     (
         "planung",
-        ":material/view_timeline:",
+        "view_timeline",
         "Planung",
         "Aus Projektidee und Team entsteht ein geprüfter Plan: Aufgaben, Aufwand, Zuweisung, "
         "Termine und Risiken. Claude plant, die Projektleitung passt an.",
@@ -34,7 +35,7 @@ AGENTS = [
     ),
     (
         "durchfuehrung",
-        ":material/task_alt:",
+        "task_alt",
         "Durchführung",
         "Fortschritt und Ist-Stunden je Aufgabe erfassen. Claude schlägt Zusammenfassung und "
         "nächste Schritte vor. Statusbericht und Arbeitspaketbeschreibungen werden aus Vorlagen "
@@ -43,7 +44,7 @@ AGENTS = [
     ),
     (
         "kontrolle",
-        ":material/monitoring:",
+        "monitoring",
         "Kontrolle",
         "Plan und Ist vergleichen: Fortschritt, Abweichung, Verzug, Kosten bei gesetztem "
         "Stundensatz. Claude bewertet den Stand und schlägt Gegenmaßnahmen vor. Dazu der "
@@ -76,7 +77,7 @@ with st.container(key="agents"):
         slug, icon, title, text, target = agent
         with column.container(border=True, key=f"card-{slug}", height="stretch"):
             st.html(f'<p class="card-number">0{number} · AGENT</p>')
-            st.markdown(f"#### {icon} {title}")
+            heading(icon, title)
             st.write(text)
             st.page_link(target, label=f"{title} öffnen", icon=":material/arrow_forward:")
 
@@ -84,7 +85,7 @@ with st.container(key="lab"):
     st.subheader("Experiment")
     with st.container(border=True, key="card-lab"):
         st.html('<p class="card-number">VERGLEICH OHNE UND MIT KI</p>')
-        st.markdown("#### :material/science: KI-Lab")
+        heading("science", "KI-Lab")
         st.write(
             "Kontrollierter Vergleich: dieselbe Art von Planungsaufgabe einmal ohne und einmal "
             "mit KI-Hilfe, mit Zeitlimit und Protokoll."

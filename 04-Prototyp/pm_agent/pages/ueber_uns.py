@@ -2,24 +2,26 @@
 
 import streamlit as st
 
+from pm_agent.ui import heading
+
 PRINCIPLES = [
     (
         "vorschlag",
-        ":material/smart_toy:",
+        "smart_toy",
         "Die KI schlägt vor",
         "Claude zerlegt, schätzt, verteilt und begründet. Jedes Ergebnis kommt über ein Werkzeug "
         "mit festem Format, nie als freier Text.",
     ),
     (
         "pruefung",
-        ":material/fact_check:",
+        "fact_check",
         "Python rechnet und prüft",
         "Termine, Auslastung, Puffer, Verzug und Prognose rechnet Python. Was die Prüfung "
         "ablehnt, geht mit den Gründen zurück an Claude.",
     ),
     (
         "entscheidung",
-        ":material/how_to_reg:",
+        "how_to_reg",
         "Der Mensch entscheidet",
         "Ein Plan gilt erst, wenn die Projektleitung ihn übernimmt. Warnungen bleiben stehen, "
         "bis sie jemand gesehen hat.",
@@ -44,7 +46,7 @@ with st.container(border=True, key="panel-frage"):
 st.subheader("Grundsätze")
 for column, (slug, icon, title, text) in zip(st.columns(3), PRINCIPLES, strict=True):
     with column.container(border=True, key=f"panel-{slug}", height="stretch"):
-        st.markdown(f"#### {icon} {title}")
+        heading(icon, title)
         st.write(text)
 
 st.subheader("Was die Website enthält")

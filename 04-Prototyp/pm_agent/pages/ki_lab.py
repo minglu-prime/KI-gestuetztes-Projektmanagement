@@ -6,6 +6,7 @@ import streamlit as st
 
 from pm_agent import lab_server
 from pm_agent.lab_server import LabError
+from pm_agent.ui import heading
 
 st.header("KI-Lab")
 st.caption(
@@ -27,7 +28,7 @@ except LabError as err:
 
 if status is None:
     with st.container(border=True, key="panel-lab-start"):
-        st.markdown("#### :material/science: Eine Sitzung im KI-Lab")
+        heading("science", "Eine Sitzung im KI-Lab")
         st.markdown(
             """
 1. Du bearbeitest zwei Planungsfälle, jeden höchstens 25 Minuten.
