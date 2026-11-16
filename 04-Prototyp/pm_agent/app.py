@@ -20,6 +20,7 @@ MENU = {
     "": [st.Page("views/startseite.py", title="Startseite", icon=":material/home:")],
     "Vorbereiten": [
         st.Page("views/auftrag.py", title="Projektauftrag", icon=":material/flag:"),
+        st.Page("views/anforderungen.py", title="Anforderungen", icon=":material/checklist:"),
     ],
     "Agenten": [
         st.Page("views/planung.py", title="Planung", icon=":material/view_timeline:"),

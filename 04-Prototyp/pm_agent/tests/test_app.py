@@ -17,7 +17,16 @@ from test_tools import PROJECT, TEAM, plan_input
 
 from pm_agent import agent, followup, lab_server, lifecycle, tracking, ui, workbench
 from pm_agent.agent import AgentError, PlanningError
-from pm_agent.models import Absence, Charter, ControlReport, Criterion, Plan, StatusSummary
+from pm_agent.models import (
+    Absence,
+    Charter,
+    ControlReport,
+    Criterion,
+    Plan,
+    Requirement,
+    Requirements,
+    StatusSummary,
+)
 
 SITE = Path(__file__).parents[1] / "app.py"
 PAGES = "views"
@@ -545,6 +554,7 @@ def test_every_menu_entry_opens_and_explains_its_empty_state(site):
         "views/kontrolle.py": ("Kontrolle", "Noch kein Projekt übernommen."),
         "views/ki_lab.py": ("KI-Lab", "Das KI-Lab läuft noch nicht."),
         "views/auftrag.py": ("Projektauftrag", "Noch kein Projektauftrag."),
+        "views/anforderungen.py": ("Anforderungen", "Noch keine Anforderungen."),
     }
     for path, (header, info) in expected.items():
         at = site.switch_page(path).run()
@@ -639,11 +649,13 @@ def adopt_from_planning(at):
 
 
 def edit_progress(at, edits):
+    return edit_table(at, "progress_editor_", edits)
+
+
+def edit_table(at, prefix, edits):
     # AppTest has no canvas cell editor. Submit its documented edit-state payload;
     # st.data_editor still applies the edits and the page's real save handler runs.
-    (editor,) = [
-        frame for frame in at.dataframe if frame.key and frame.key.startswith("progress_editor_")
-    ]
+    (editor,) = [frame for frame in at.dataframe if frame.key and frame.key.startswith(prefix)]
     at.session_state[editor.key] = {
         "edited_rows": edits,
         "added_rows": [],
@@ -1435,3 +1447,91 @@ def test_a_damaged_vorhaben_file_is_said_not_thrown(site):
     button(at, "Neu beginnen").click()
     at = at.run()
     assert lifecycle.load() == lifecycle.Lifecycle()
+
+
+NEEDS = Requirements(
+    items=[
+        Requirement(
+            id="R1",
+            title="Raum buchen",
+            story="Als Studentin will ich einen Raum buchen, damit die Gruppe arbeiten kann.",
+            priority="Muss",
+            criteria=["Die Buchung steht sofort in der Liste"],
+            sources=["K1"],
+        )
+    ]
+)
+APPROVED_AT = datetime.datetime(2026, 11, 16, 10, 0)
+
+
+def with_charter(approved=True):
+    life = lifecycle.Lifecycle(project=PROJECT, charter=CHARTER)
+    return lifecycle.approve_charter(life, APPROVED_AT) if approved else life
+
+
+def test_requirements_from_claude_are_checked_against_the_charter(site, monkeypatch):
+    def drafted(project, charter, on_round=None):
+        assert (project, charter) == (PROJECT, CHARTER)
+        return NEEDS
+
+    monkeypatch.setattr(lifecycle, "run_requirements", drafted)
+    lifecycle.save(with_charter())
+    at = site.switch_page("views/anforderungen.py").run()
+    button(at, "Anforderungen mit Claude entwerfen").click()
+    at = at.run()
+    assert not at.exception and not at.error
+    assert lifecycle.load().requirements == NEEDS
+    (table,) = [f.value for f in at.dataframe if f.key and f.key.startswith("requirements_editor_")]
+    assert list(table["ID"]) == ["R1"]
+
+    button(at, "Anforderungen freigeben").click()
+    at = at.run()
+    assert lifecycle.approved_requirements(lifecycle.load()) == NEEDS.items
+    assert "✓ Anforderungen: freigegeben<" in chips(at)
+
+
+def test_requirements_edited_in_the_table_are_checked_again(site):
+    lifecycle.save(with_charter().model_copy(update={"requirements": NEEDS}))
+    at = site.switch_page("views/anforderungen.py").run()
+    # The only Muss becomes a Kann: the check finds no Muss, and nothing can be approved.
+    at = edit_table(at, "requirements_editor_", {0: {"Priorität": "Kann"}})
+    assert any("nicht gespeichert" in c.value for c in at.caption)
+    button(at, "Änderungen speichern und prüfen").click()
+    at = at.run()
+    assert lifecycle.load().requirements.items[0].priority == "Kann"
+    assert any("keine Muss-Anforderung" in e.value for e in at.error)
+    assert button(at, "Anforderungen freigeben").disabled
+
+
+def test_a_requirement_for_an_unknown_criterion_cannot_be_approved(site):
+    lifecycle.save(with_charter().model_copy(update={"requirements": NEEDS}))
+    at = site.switch_page("views/anforderungen.py").run()
+    at = edit_table(at, "requirements_editor_", {0: {"Erfolgskriterien": "K9"}})
+    button(at, "Änderungen speichern und prüfen").click()
+    at = at.run()
+    errors = [e.value for e in at.error]
+    assert "Anforderung 'R1' nennt das unbekannte Erfolgskriterium 'K9'" in errors
+    assert button(at, "Anforderungen freigeben").disabled
+
+
+def test_without_an_approved_charter_the_requirements_say_so(site, monkeypatch):
+    seen = []
+    monkeypatch.setattr(
+        lifecycle,
+        "run_requirements",
+        lambda project, charter, on_round=None: seen.append(charter) or NEEDS,
+    )
+    lifecycle.save(with_charter(approved=False))
+    at = site.switch_page("views/anforderungen.py").run()
+    assert any("nicht freigegeben" in w.value for w in at.warning)
+    button(at, "Anforderungen mit Claude entwerfen").click()
+    at = at.run()
+    # Claude works from the charter as it stands, approved or not.
+    assert seen == [CHARTER]
+
+
+def test_without_project_data_the_requirements_lead_to_the_auftrag(site):
+    at = site.switch_page("views/anforderungen.py").run()
+    assert not at.exception
+    assert button(at, "Anforderungen mit Claude entwerfen").disabled
+    assert any("Noch keine Anforderungen." in i.value for i in at.info)
