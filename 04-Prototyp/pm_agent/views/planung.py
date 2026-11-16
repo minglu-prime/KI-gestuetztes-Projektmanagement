@@ -29,6 +29,7 @@ from pm_agent.ui import (
     chip,
     heading,
     on_panel,
+    roles,
     round_printer,
     strip,
 )
@@ -280,6 +281,7 @@ tabs = st.tabs(STEPS, key="step", on_change="rerun")
 # 1 · Team ---------------------------------------------------------------------------------
 with tabs[0]:
     st.subheader("Team")
+    st.html(roles(du="trägst das Team ein"))
     st.caption(
         "Wer arbeitet mit? Skills mit Stufe 1–5 und die Stunden pro Woche bestimmen, wem "
         "welche Aufgabe zugewiesen wird. An Tagen unter „Abwesend“ wird für die Person keine "
@@ -342,6 +344,7 @@ with tabs[0]:
 # 2 · Projekt ------------------------------------------------------------------------------
 with tabs[1]:
     st.subheader("Projekt")
+    st.html(roles(du="beschreibst Ziel und Termine"))
     st.caption("Was soll bis wann entstehen? Aus der Idee leitet Claude die Aufgaben ab.")
     idea = st.text_area(
         "Projektidee",
@@ -385,7 +388,12 @@ with tabs[2]:
     st.subheader("Planung mit Claude")
     new_plan, logged_run = st.columns([3, 2], gap="medium")
     with new_plan.container(border=True, key="panel-claude", height="stretch"):
-        heading("smart_toy", "Neuen Plan erstellen")
+        heading(
+            "smart_toy",
+            "Neuen Plan erstellen",
+            claude="entwirft",
+            python="prüft jede Runde",
+        )
         st.caption(
             "Claude entwirft, Python prüft, Claude bessert nach, bis der Plan ohne Fehler ist."
         )
@@ -437,7 +445,7 @@ with tabs[2]:
                 )
 
     with logged_run.container(border=True, key="panel-run", height="stretch"):
-        heading("history", "Protokollierten Lauf öffnen")
+        heading("history", "Protokollierten Lauf öffnen", du="öffnest einen früheren Lauf")
         st.caption("Zeigt einen früheren Plan ohne neuen Aufruf von Claude.")
         try:
             runs = saved_runs()
@@ -468,6 +476,7 @@ result = check_plan(state.plan, team, project) if state.plan and team and projec
 # 4 · Ergebnis -----------------------------------------------------------------------------
 with tabs[3]:
     st.subheader("Ergebnis")
+    st.html(roles(python="hat geprüft und gerechnet", du="liest und beurteilst"))
     if state.plan is None:
         st.info("Noch kein Plan. Erstelle ihn in Schritt 3 oder öffne einen protokollierten Lauf.")
     elif result is None:
@@ -666,7 +675,7 @@ with tabs[4]:
         # The conversation stands above the table but runs after it: it has to know
         # what the table says in this run, not in the one before.
         chat_panel = st.container(border=True, key="panel-chat")
-        heading("edit", "Von Hand ändern")
+        heading("edit", "Von Hand ändern", du="änderst die Tabelle", python="prüft erneut")
         st.caption(
             "Ändere Personen, Stunden oder Abhängigkeiten. „Erneut prüfen“ rechnet nur "
             "deterministisch nach, Claude wird nicht aufgerufen."
@@ -702,7 +711,13 @@ with tabs[4]:
         next_step("Ergebnis ansehen", STEPS[3], False, "back_to_result")
 
         with chat_panel:
-            heading("forum", "Mit Claude ändern")
+            heading(
+                "forum",
+                "Mit Claude ändern",
+                claude="ändert auf deinen Wunsch",
+                python="prüft",
+                du="übernimmst oder verwirfst",
+            )
             st.caption(
                 "Sag, was sich ändern soll, oder spiel eine Annahme durch: „Clara übernimmt die "
                 "Tests“, „Was, wenn das Backend doppelt so lange dauert?“. Claude ändert den "
@@ -916,7 +931,7 @@ with tabs[5]:
             )
 
         with take_over.container(border=True, key="panel-adopt", height="stretch"):
-            heading("flag", "Als Projekt übernehmen")
+            heading("flag", "Als Projekt übernehmen", du="gibst den Plan frei")
             st.caption("Der Plan wird zur Grundlage für die Seiten Durchführung und Kontrolle.")
             overwrite, keep = True, None
             try:

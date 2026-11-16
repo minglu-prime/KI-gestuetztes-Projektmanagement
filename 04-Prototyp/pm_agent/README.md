@@ -31,6 +31,11 @@ Das Menü links:
 | KI-Lab | startet den Studienserver aus `../ki_lab` und zeigt ihn eingebettet |
 | Über uns, Impressum | Projektkontext; Impressumsangaben trägt das Team noch ein |
 
+Über jeder Agentenseite steht der Projektpfad Planen → Ausführen → Prüfen: Was erledigt ist,
+trägt ein Häkchen, die aktuelle Seite ist umrandet. Mit einem übernommenen Projekt folgt eine
+Zeile „Jetzt dran“ mit einem Knopf zur passenden Seite. Jeder Abschnitt nennt, wer dort
+handelt: CLAUDE schlägt vor, PYTHON rechnet und prüft, DU trägst ein und entscheidest.
+
 Durchführung und Kontrolle rechnen mit dem übernommenen Plan (`data/projekt.json`) und dem
 erfassten Fortschritt. Ein Logo erscheint oben rechts, sobald `assets/logo.svg` oder
 `assets/logo.png` existiert.

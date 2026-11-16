@@ -9,6 +9,8 @@ from pathlib import Path
 
 import streamlit as st
 
+from pm_agent.ui import journey
+
 ROOT = Path(__file__).parent
 
 st.set_page_config(page_title="PM-Agent", page_icon=":material/view_timeline:", layout="wide")
@@ -62,4 +64,6 @@ state.page = page.url_path
 with st.container(key=f"page-{page.url_path or 'startseite'}"):
     if section:
         st.html(f'<p class="eyebrow">{section}</p>')
+    if section == "Agenten":
+        journey(page.url_path)
     page.run()

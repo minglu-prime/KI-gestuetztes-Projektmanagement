@@ -33,6 +33,7 @@ from pm_agent.ui import (
     heading,
     history_table,
     on_panel,
+    roles,
     run_with_progress,
 )
 
@@ -53,6 +54,7 @@ tracking = adopted_project()
 if tracking is not None:
     result = evaluate(tracking, date.today())
     st.subheader("Projektstand")
+    st.html(roles(python="rechnet aus Plan und Fortschritt"))
     if not has_progress(tracking):
         st.info("Noch kein Fortschritt erfasst. Trage ihn auf der Seite Durchführung ein.")
     a, b, c, d = st.columns(4)
@@ -76,7 +78,7 @@ if tracking is not None:
         st.switch_page("views/durchfuehrung.py")
 
     with st.container(border=True, key="panel-forecast"):
-        heading("trending_up", "Prognose")
+        heading("trending_up", "Prognose", python="rechnet")
         outlook = forecast(tracking, date.today())
         if outlook.problem:
             st.error(
@@ -177,7 +179,7 @@ if tracking is not None:
             )
 
     with st.container(border=True, key="panel-earned"):
-        heading("monitoring", "Earned Value")
+        heading("monitoring", "Earned Value", python="rechnet")
         value = earned_value(tracking, result)
         # Two rows: five tiles in one row cut their labels off.
         pv, ev, ac = st.columns(3)
@@ -255,7 +257,7 @@ if tracking is not None:
         )
 
     with st.container(border=True, key="panel-tasks"):
-        heading("bar_chart", "Plan und Ist je Aufgabe")
+        heading("bar_chart", "Plan und Ist je Aufgabe", python="rechnet")
         per_task = pd.DataFrame(
             [
                 {
@@ -298,7 +300,7 @@ if tracking is not None:
         history_table(tracking)
 
     with st.container(border=True, key="panel-members"):
-        heading("groups", "Plan und Ist je Person")
+        heading("groups", "Plan und Ist je Person", python="rechnet")
         per_member = pd.DataFrame(result.by_member)
         # A person with only a part from an earlier plan whose booked hours stood for none
         # of its estimate has 0 planned hours: nothing to show a share of.
@@ -315,7 +317,7 @@ if tracking is not None:
         )
 
     with st.container(border=True, key="panel-cost"):
-        heading("euro", "Kosten")
+        heading("euro", "Kosten", du="setzt den Stundensatz", python="rechnet")
         rate = st.number_input(
             "Stundensatz (€)", min_value=0.0, value=None, step=5.0, placeholder="nicht gesetzt"
         )
@@ -327,7 +329,13 @@ if tracking is not None:
             st.caption("Ohne Stundensatz werden keine Kosten berechnet.")
 
     with st.container(border=True, key="panel-agent"):
-        heading("smart_toy", "Kontroll-Agent")
+        heading(
+            "smart_toy",
+            "Kontroll-Agent",
+            claude="bewertet und schlägt vor",
+            python="prüft",
+            du="entscheidest, was umgesetzt wird",
+        )
         st.caption(
             "Claude bewertet den Stand und schlägt Gegenmaßnahmen vor. Python nimmt den Vorschlag "
             "nur an, wenn jede Aufgabe im Verzug eine Gegenmaßnahme hat. Was umgesetzt wird, "
@@ -385,7 +393,7 @@ if tracking is not None:
 
 if tracking is not None:
     with st.container(border=True, key="panel-document"):
-        heading("description", "Kontrollbericht")
+        heading("description", "Kontrollbericht", python="fasst alles zusammen")
         st.caption(
             "Alles von dieser Seite als ein Dokument: Kennzahlen, Prognose, Verzug, Kosten bei "
             "gesetztem Stundensatz und, wenn erstellt, die Bewertung des Kontroll-Agenten."
@@ -408,7 +416,7 @@ if tracking is not None:
             st.markdown(document)
 
 with st.container(border=True, key="panel-effort"):
-    heading("timer", "Aufwand der Agenten")
+    heading("timer", "Aufwand der Agenten", python="zählt aus den Protokollen")
     runs = agent_runs()  # a damaged log is a row that says so
     if runs:
         st.dataframe(pd.DataFrame(runs), hide_index=True)

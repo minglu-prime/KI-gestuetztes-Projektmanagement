@@ -2,6 +2,7 @@
 
 import datetime
 import json
+import re
 import socket
 import tomllib
 from datetime import date
@@ -926,6 +927,54 @@ def tracked(site):
     """The site with an adopted project (in the temporary folder of `local`)."""
     tracking.adopt(PROJECT, TEAM, PLAN)
     return site
+
+
+def journey(at):
+    """The project path above an agent page, as HTML, or None."""
+    return next((h.value for h in at.html if 'class="journey"' in h.value), None)
+
+
+def test_every_agent_page_shows_the_project_path_with_the_page_marked(site):
+    for path, step in [
+        ("views/planung.py", "Planen"),
+        ("views/durchfuehrung.py", "Ausführen"),
+        ("views/kontrolle.py", "Prüfen"),
+    ]:
+        at = site.switch_page(path).run()
+        html = journey(at)
+        assert html is not None, path
+        assert re.search(rf'class="step[^"]*here[^"]*"[^>]*>.*?{step}', html), path
+    # Not on pages that are no agent.
+    assert journey(site.switch_page("views/startseite.py").run()) is None
+
+
+def test_without_a_project_the_path_waits_at_planen_and_says_nothing_twice(site):
+    at = site.switch_page("views/kontrolle.py").run()
+    assert not at.exception
+    assert 'class="step next' in journey(at).split("Ausführen")[0]  # Planen comes next
+    # The page itself already says there is no project: no second "Jetzt dran" for it.
+    assert not any("Jetzt dran" in m.value for m in at.markdown)
+
+
+def test_with_a_project_the_path_says_what_is_next_and_leads_there(tracked):
+    at = tracked.switch_page("views/durchfuehrung.py").run()
+    assert not at.exception
+    advice, where = tracking.next_step(tracking.load(), date.today())
+    assert '<span class="step done' in journey(at).split("Ausführen")[0]  # Planen is done
+    assert any("Jetzt dran" in m.value and advice in m.value for m in at.markdown)
+    target = {"durchfuehrung": "Zur Durchführung", "kontrolle": "Zur Kontrolle"}[where]
+    # A button to the page the advice points to, unless the advice is about this page.
+    assert any(b.label == target for b in at.button) == (where != "durchfuehrung")
+
+
+def test_each_part_of_an_agent_page_says_who_does_it(tracked):
+    at = tracked.switch_page("views/kontrolle.py").run()
+    roles = [h.value for h in at.html if 'class="roles"' in h.value]
+    # The agent: Claude proposes, Python checks, the project lead decides. In that order.
+    agent_roles = next(r for r in roles if "CLAUDE" in r)
+    assert agent_roles.index("CLAUDE") < agent_roles.index("PYTHON") < agent_roles.index("DU")
+    # The numbers are Python's alone.
+    assert any("PYTHON" in r and "CLAUDE" not in r and "DU" not in r for r in roles)
 
 
 def test_without_a_project_durchfuehrung_and_kontrolle_lead_to_the_planung(site):

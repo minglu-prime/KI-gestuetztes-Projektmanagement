@@ -340,6 +340,78 @@
   color: #77501e;
 }
 .chip-arrow { color: var(--muted); }
+
+/* ---- Project path and roles (every agent page) ------------------------------------------ */
+
+/* Planen, Ausführen, Prüfen: done in mint with a tick, next with a golden edge, this page
+   with a green one. Tick and number carry the state too, not the colour alone. */
+.journey {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  margin: 0;
+  font-size: 13px;
+}
+.journey .step {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  border: 1px solid var(--line);
+  background: #fff;
+  border-radius: 20px;
+  padding: 5px 12px;
+  color: var(--muted);
+}
+.journey .step small { font-size: 11px; }
+.journey .step.done {
+  border-color: #b7c9b2;
+  background: var(--mint);
+  color: #244e38;
+}
+.journey .step.next { border-color: var(--focus); color: var(--ink); }
+.journey .step.here {
+  border-color: var(--green);
+  box-shadow: inset 0 0 0 1px var(--green);
+  color: var(--ink);
+  font-weight: 600;
+}
+.journey .arrow,
+.journey .loop { color: var(--muted); }
+.journey .loop { font-size: 12px; margin-left: 4px; }
+/* What is next: one line and one button, set apart from the page below. */
+.st-key-next-step {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--focus);
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 12px;
+}
+/* Streamlit pulls a Markdown block up by 1rem to make up for the margin of its last
+   paragraph. With that margin gone here, the pull cut off the last line on a phone. */
+.st-key-next-step [data-testid="stMarkdownContainer"] { margin-bottom: 0; }
+.st-key-next-step [data-testid="stMarkdownContainer"] p { margin: 0; }
+@media (max-width: 640px) {
+  .journey .step small { display: none; }
+}
+
+/* Who does a part of a page: Claude proposes, Python computes and checks, du decides. */
+.roles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: -6px 0 6px;
+}
+.role {
+  font-size: 12px;
+  border-radius: 4px;
+  padding: 2px 8px;
+}
+.role b { font-size: 11px; letter-spacing: 0.06em; margin-right: 3px; }
+.role.claude { background: #ece7f6; color: #3d2f6b; }
+.role.python { background: #e2ebf2; color: #1f3f57; }
+.role.du { background: #fbf2df; color: #6b4818; }
 /* A document preview: a sheet of the page colour inside its white panel. */
 [class*="st-key-preview-"] { background: var(--paper); }
 
