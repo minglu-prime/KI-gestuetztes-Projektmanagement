@@ -18,7 +18,20 @@ from typing import Any, Literal, NamedTuple
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 from pm_agent.agent import LOG_DIR, run_submission
-from pm_agent.models import Charter, Criterion, Design, Project, Requirement, Requirements
+from pm_agent.models import (
+    Charter,
+    Component,
+    Criterion,
+    DataField,
+    Design,
+    ErrorCase,
+    Flow,
+    Interface,
+    Project,
+    Requirement,
+    Requirements,
+    Step,
+)
 from pm_agent.tools import Submission
 from pm_agent.tracking import _fill
 from pm_agent.workbench import DATA_DIR, InputError, _cell, _date, _md, _reason
@@ -376,6 +389,183 @@ def rows_to_requirements(rows: list[dict[str, Any]]) -> Requirements:
     if not items:
         raise InputError("Noch keine Anforderung: Trag mindestens eine Zeile ein.")
     return Requirements(items=items)
+
+
+COMPONENT_COLUMNS = ["ID", "Name", "Art", "Aufgabe"]
+INTERFACE_COLUMNS = ["ID", "Name", "Anbieter", "Nutzer", "Eingabe", "Ausgabe", "Fehler"]
+FLOW_COLUMNS = ["ID", "Titel", "Anforderungen"]
+STEP_COLUMNS = ["Ablauf", "Von", "An", "Art", "Schnittstelle", "Text"]
+# The four tables of the design, by key, with the name a message gives each.
+DESIGN_TABLES = {
+    "components": "Bausteine",
+    "interfaces": "Schnittstellen",
+    "flows": "Abläufe",
+    "steps": "Schritte",
+}
+
+
+def fields_text(fields: list[DataField]) -> str:
+    """Fields as "raum: Text, notiz?: Text"; the question mark marks an optional field."""
+    return ", ".join(f"{f.name}{'' if f.required else '?'}: {f.type}" for f in fields)
+
+
+def text_to_fields(text: str) -> list[DataField]:
+    fields, errors = [], []
+    for part in _split(text, ","):
+        name, colon, kind = part.partition(":")
+        name = name.strip()
+        try:
+            if not colon:
+                raise ValueError
+            fields.append(
+                DataField(
+                    name=name.removesuffix("?"), type=kind.strip(), required=not name.endswith("?")
+                )
+            )
+        except (ValueError, ValidationError):
+            errors.append(f"'{part}' braucht die Form 'name: Typ'")
+    if errors:
+        raise InputError("; ".join(errors))
+    return fields
+
+
+def errors_text(errors: list[ErrorCase]) -> str:
+    return "; ".join(f"{e.code} {e.meaning}" for e in errors)
+
+
+def text_to_errors(text: str) -> list[ErrorCase]:
+    cases, errors = [], []
+    for part in _split(text, ";"):
+        code, _, meaning = part.partition(" ")
+        try:
+            cases.append(ErrorCase(code=code, meaning=meaning.strip()))
+        except ValidationError:
+            errors.append(f"'{part}' braucht die Form 'Code Bedeutung'")
+    if errors:
+        raise InputError("; ".join(errors))
+    return cases
+
+
+def design_rows(design: Design) -> dict[str, list[dict[str, Any]]]:
+    """The design as the rows of its four tables. Steps carry the ID of their flow; their
+    order in the table is their order in the flow."""
+    return {
+        "components": [
+            {"ID": c.id, "Name": c.name, "Art": c.kind, "Aufgabe": c.purpose}
+            for c in design.components
+        ],
+        "interfaces": [
+            {
+                "ID": i.id,
+                "Name": i.name,
+                "Anbieter": i.provider,
+                "Nutzer": ", ".join(i.consumers),
+                "Eingabe": fields_text(i.input),
+                "Ausgabe": fields_text(i.output),
+                "Fehler": errors_text(i.errors),
+            }
+            for i in design.interfaces
+        ],
+        "flows": [
+            {"ID": f.id, "Titel": f.title, "Anforderungen": ", ".join(f.requirement_ids)}
+            for f in design.flows
+        ],
+        "steps": [
+            {
+                "Ablauf": f.id,
+                "Von": s.sender,
+                "An": s.receiver,
+                "Art": s.kind,
+                "Schnittstelle": s.interface or "",
+                "Text": s.text,
+            }
+            for f in design.flows
+            for s in f.steps
+        ],
+    }
+
+
+def rows_to_design(rows: dict[str, list[dict[str, Any]]]) -> Design:
+    """The four edited tables as a design. Raises InputError naming table and row of each
+    problem. Empty rows the editor adds are skipped."""
+    errors: list[str] = []
+
+    def read(table: str, key: str, make: Callable[[dict[str, Any]], Any]) -> list[Any]:
+        made = []
+        for number, row in enumerate(rows.get(table, []), start=1):
+            rid = _cell(row.get(key))
+            if not any(_cell(value) for value in row.values()):
+                continue
+            where = f"{DESIGN_TABLES[table]}, Zeile {number}" + (
+                f" ({rid})" if rid and key == "ID" else ""
+            )
+            try:
+                made.append(make(row))
+            except InputError as err:
+                errors.append(f"{where}: {err}")
+            except ValidationError as err:
+                errors.append(f"{where}: {_reason(err)}")
+        return made
+
+    components = read(
+        "components",
+        "ID",
+        lambda r: Component(
+            id=_cell(r.get("ID")),
+            name=_cell(r.get("Name")),
+            kind=_cell(r.get("Art")),
+            purpose=_cell(r.get("Aufgabe")),
+        ),
+    )
+    interfaces = read(
+        "interfaces",
+        "ID",
+        lambda r: Interface(
+            id=_cell(r.get("ID")),
+            name=_cell(r.get("Name")),
+            provider=_cell(r.get("Anbieter")),
+            consumers=_split(r.get("Nutzer"), ","),
+            input=text_to_fields(_cell(r.get("Eingabe"))),
+            output=text_to_fields(_cell(r.get("Ausgabe"))),
+            errors=text_to_errors(_cell(r.get("Fehler"))),
+        ),
+    )
+    flow_ids = {_cell(r.get("ID")) for r in rows.get("flows", [])} - {""}
+    steps: dict[str, list[Step]] = {}
+
+    def step(row: dict[str, Any]) -> None:
+        flow = _cell(row.get("Ablauf"))
+        if flow not in flow_ids:
+            raise InputError(f"unbekannter Ablauf '{flow}'")
+        steps.setdefault(flow, []).append(
+            Step(
+                sender=_cell(row.get("Von")),
+                receiver=_cell(row.get("An")),
+                kind=_cell(row.get("Art")) or "Aufruf",
+                interface=_cell(row.get("Schnittstelle")) or None,
+                text=_cell(row.get("Text")),
+            )
+        )
+
+    read("steps", "Ablauf", step)
+    flows = read(
+        "flows",
+        "ID",
+        lambda r: Flow(
+            id=_cell(r.get("ID")),
+            title=_cell(r.get("Titel")),
+            requirement_ids=_split(r.get("Anforderungen"), ","),
+            steps=steps.get(_cell(r.get("ID")), []),
+        ),
+    )
+    if errors:
+        raise InputError("\n".join(errors))
+    if not components and not flows:
+        raise InputError("Noch kein Entwurf: Trag mindestens einen Baustein und einen Ablauf ein.")
+    try:
+        return Design(components=components, interfaces=interfaces, flows=flows)
+    except ValidationError as err:
+        raise InputError(f"Entwurf: {_reason(err)}") from err
 
 
 def criteria_lines(criteria: list[Criterion]) -> str:

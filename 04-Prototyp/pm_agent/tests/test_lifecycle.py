@@ -18,11 +18,14 @@ from pm_agent.lifecycle import (
     check_design,
     check_requirements,
     criteria_lines,
+    design_rows,
     design_state,
     lines_to_criteria,
     requirement_rows,
     requirements_state,
+    rows_to_design,
     rows_to_requirements,
+    text_to_fields,
 )
 from pm_agent.models import Charter, Design, Requirements
 from pm_agent.workbench import InputError
@@ -475,3 +478,56 @@ def test_a_design_with_errors_cannot_be_approved_but_needs_no_approved_requireme
         )
     with pytest.raises(InputError, match="Noch kein Entwurf"):
         approve_design(Lifecycle(project=PROJECT), NOW)
+
+
+def test_design_rows_round_trip():
+    rows = design_rows(design())
+    assert rows["interfaces"][0] == {
+        "ID": "S1",
+        "Name": "Buchung anlegen",
+        "Anbieter": "B3",
+        "Nutzer": "B2",
+        "Eingabe": "raum: Text, datum: Datum",
+        "Ausgabe": "buchung_id: Ganzzahl",
+        "Fehler": "409 Raum belegt",
+    }
+    assert rows["steps"][2] == {
+        "Ablauf": "A1",
+        "Von": "B3",
+        "An": "B2",
+        "Art": "Antwort",
+        "Schnittstelle": "S1",
+        "Text": "",
+    }
+    assert rows_to_design(rows) == design()
+
+
+def test_a_field_marked_with_a_question_mark_is_optional():
+    assert [(f.name, f.required) for f in text_to_fields("raum: Text, notiz?: Text")] == [
+        ("raum", True),
+        ("notiz", False),
+    ]
+    with pytest.raises(InputError, match="'raum' braucht die Form 'name: Typ'"):
+        text_to_fields("raum")
+
+
+def test_unreadable_design_rows_say_which_table_and_row():
+    rows = design_rows(design())
+    rows["interfaces"][0]["Eingabe"] = "raum"
+    rows["steps"].append({"Ablauf": None, "Von": None})  # an empty row the editor adds
+    rows["steps"].insert(0, {**rows["steps"][0], "Ablauf": "A9"})
+    with pytest.raises(InputError) as err:
+        rows_to_design(rows)
+    assert str(err.value).splitlines() == [
+        "Schnittstellen, Zeile 1 (S1): 'raum' braucht die Form 'name: Typ'",
+        "Schritte, Zeile 1: unbekannter Ablauf 'A9'",
+    ]
+
+
+def test_a_flow_without_steps_and_an_empty_design_are_reported():
+    rows = design_rows(design())
+    rows["steps"] = []
+    with pytest.raises(InputError, match=r"Abläufe, Zeile 1 \(A1\): steps"):
+        rows_to_design(rows)
+    with pytest.raises(InputError, match="Noch kein Entwurf"):
+        rows_to_design({"components": [], "interfaces": [], "flows": [], "steps": []})
