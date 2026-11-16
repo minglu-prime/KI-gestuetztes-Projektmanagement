@@ -47,10 +47,10 @@ class PlanningTools:
             input_schema=Plan,
         )
 
-    def _check(self, **plan: Any) -> str:
+    def _check(self, /, **plan: Any) -> str:
         return self._review(plan)[1].model_dump_json(include=REPORTED)
 
-    def _submit(self, **plan: Any) -> str:
+    def _submit(self, /, **plan: Any) -> str:
         parsed, result = self._review(plan)
         if result.errors:
             raise ToolError(
@@ -68,10 +68,42 @@ class PlanningTools:
         return plan, check_plan(plan, self.team, self.project)
 
 
+# The project lead reads these too (each round is shown on the page): German for the usual
+# slips, pydantic's English text for the rest.
+GERMAN = {
+    "missing": "Feld fehlt",
+    "extra_forbidden": "Feld ist nicht vorgesehen",
+    "greater_than": "muss größer als {gt} sein",
+    "greater_than_equal": "muss mindestens {ge} sein",
+    "less_than_equal": "darf höchstens {le} sein",
+    "string_too_short": "darf nicht leer sein",
+    "too_short": "braucht mindestens {min_length} Einträge",
+    "string_type": "muss Text sein",
+    "float_type": "muss eine Zahl sein",
+    "float_parsing": "muss eine Zahl sein",
+    "int_type": "muss eine ganze Zahl sein",
+    "int_parsing": "muss eine ganze Zahl sein",
+    "finite_number": "muss eine endliche Zahl sein",
+    "list_type": "muss eine Liste sein",
+    "dict_type": "muss ein Objekt sein",
+    "model_type": "muss ein Objekt sein",
+}
+
+
 def invalid_input(err: ValidationError) -> list[str]:
-    return [
-        f"Ungültige Eingabe bei {'.'.join(map(str, e['loc']))}: {e['msg']}" for e in err.errors()
-    ]
+    messages = []
+    for e in err.errors():
+        where = ".".join(map(str, e["loc"]))
+        # Limits as written in German: 0 and 7,5, not 0.0 and 7.5.
+        limits = {
+            key: f"{value:g}".replace(".", ",") if isinstance(value, float) else value
+            for key, value in e.get("ctx", {}).items()
+        }
+        text = GERMAN[e["type"]].format(**limits) if e["type"] in GERMAN else e["msg"]
+        messages.append(
+            f"Ungültige Eingabe bei {where}: {text}" if where else f"Ungültige Eingabe: {text}"
+        )
+    return messages
 
 
 class Submission(Generic[T]):
@@ -92,7 +124,7 @@ class Submission(Generic[T]):
         self.result: T | None = None
         self.tool = beta_tool(self._submit, name=name, description=description, input_schema=schema)
 
-    def _submit(self, **data: Any) -> str:
+    def _submit(self, /, **data: Any) -> str:
         try:
             parsed = self.schema.model_validate(data)
             errors = self.check(parsed)

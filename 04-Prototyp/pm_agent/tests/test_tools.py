@@ -52,8 +52,8 @@ def test_check_plan_reports_invalid_input_as_errors():
     broken["tasks"][0]["hours"] = broken["tasks"][0].pop("estimate_hours")
     report = json.loads(PlanningTools(PROJECT, TEAM).check_plan.call(broken))
     assert report["errors"] == [
-        "Ungültige Eingabe bei tasks.0.estimate_hours: Field required",
-        "Ungültige Eingabe bei tasks.0.hours: Extra inputs are not permitted",
+        "Ungültige Eingabe bei tasks.0.estimate_hours: Feld fehlt",
+        "Ungültige Eingabe bei tasks.0.hours: Feld ist nicht vorgesehen",
     ]
 
 
@@ -61,7 +61,7 @@ def test_check_plan_reports_invalid_input_as_errors():
     "plan, reason",
     [
         (plan_input(member="Zoe"), "Task 'A' ist 'Zoe' zugewiesen, diese Person ist nicht im Team"),
-        (plan_input(hours=0), "tasks.0.estimate_hours: Input should be greater than 0"),
+        (plan_input(hours=0), "tasks.0.estimate_hours: muss größer als 0 sein"),
     ],
 )
 def test_submit_plan_rejects_a_broken_plan_and_says_why(plan, reason):
@@ -70,6 +70,30 @@ def test_submit_plan_rejects_a_broken_plan_and_says_why(plan, reason):
         tools.submit_plan.call(plan)
     assert reason in rejected.value.content
     assert tools.plan is None
+
+
+def test_input_that_is_no_plan_at_all_gets_a_message_with_a_place():
+    # Not an object: the error has no field, and the message must not end in "bei :".
+    report = json.loads(PlanningTools(PROJECT, TEAM).check_plan.call({"tasks": "A, B"}))
+    assert report["errors"] == [
+        "Ungültige Eingabe bei tasks: muss eine Liste sein",
+        "Ungültige Eingabe bei assignments: Feld fehlt",
+    ]
+    from pydantic import ValidationError
+
+    from pm_agent.tools import invalid_input
+
+    with pytest.raises(ValidationError) as err:
+        Plan.model_validate("kein Plan")
+    assert invalid_input(err.value) == ["Ungültige Eingabe: muss ein Objekt sein"]
+
+
+def test_a_field_named_self_is_an_unknown_field_not_a_crash():
+    # The tool functions took "self" as a keyword: Claude got a Python TypeError.
+    tools = PlanningTools(PROJECT, TEAM)
+    with pytest.raises(ToolError) as rejected:
+        tools.submit_plan.call({**plan_input(), "self": 1})
+    assert "Ungültige Eingabe bei self: Feld ist nicht vorgesehen" in rejected.value.content
 
 
 def test_submit_plan_accepts_a_plan_with_warnings_because_the_project_lead_decides():
