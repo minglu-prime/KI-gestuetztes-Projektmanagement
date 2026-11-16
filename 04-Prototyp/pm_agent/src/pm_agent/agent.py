@@ -14,7 +14,7 @@ from typing import Any, NamedTuple, TypeVar
 from anthropic import Anthropic
 
 from pm_agent.models import Member, Plan, Project, Requirement
-from pm_agent.tools import PlanningTools
+from pm_agent.tools import PlanningTools, Submission
 
 DEFAULT_MODEL = "claude-opus-5-5"
 # One round is one reply from Claude. Drafting, a few checks and the submission take about
@@ -125,6 +125,31 @@ def _plan_run(
             "team": [member.model_dump(mode="json") for member in team],
             "plan": plan.model_dump(mode="json") if plan is not None else None,
             **extra,
+        },
+        log_dir=log_dir,
+        on_round=on_round,
+    )
+
+
+def run_submission(
+    name: str,
+    submission: Submission[T],
+    data: str,
+    log_dir: Path | None = LOG_DIR,
+    on_round: Callable[[dict[str, Any]], None] | None = None,
+) -> T:
+    """An agent with one submit tool: the system prompt is prompts/<name>.md, the request
+    the JSON text `data`, and the log keeps input and result under the prefix `name`."""
+    return run_agent(
+        log_prefix=name,
+        noun=submission.noun,
+        system=(PROMPTS / f"{name}.md").read_text(encoding="utf-8"),
+        request=f"{data}\n\nReiche dein Ergebnis mit {submission.tool.name} ein.",
+        tools=[submission.tool],
+        result=lambda: submission.result,
+        record=lambda result: {
+            "input": json.loads(data),
+            "result": result.model_dump(mode="json") if result is not None else None,
         },
         log_dir=log_dir,
         on_round=on_round,

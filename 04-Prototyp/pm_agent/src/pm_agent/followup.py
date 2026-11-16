@@ -13,7 +13,7 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
-from pm_agent.agent import LOG_DIR, PROMPTS, run_agent
+from pm_agent.agent import LOG_DIR, run_submission
 from pm_agent.models import ControlReport, Member, StatusSummary
 from pm_agent.tools import Submission
 from pm_agent.tracking import Evaluation, Forecast, Tracking, evaluate, forecast
@@ -193,18 +193,4 @@ def _run(
     log_dir: Path | None,
     on_round: Callable[[dict[str, Any]], None] | None,
 ) -> Any:
-    data = facts(tracking, evaluation)
-    return run_agent(
-        log_prefix=name,
-        noun=submission.noun,
-        system=(PROMPTS / f"{name}.md").read_text(encoding="utf-8"),
-        request=f"{data}\n\nReiche dein Ergebnis mit {submission.tool.name} ein.",
-        tools=[submission.tool],
-        result=lambda: submission.result,
-        record=lambda result: {
-            "input": json.loads(data),
-            "result": result.model_dump(mode="json") if result is not None else None,
-        },
-        log_dir=log_dir,
-        on_round=on_round,
-    )
+    return run_submission(name, submission, facts(tracking, evaluation), log_dir, on_round)
