@@ -1,6 +1,7 @@
 """The whole agent loop offline: the real SDK tool runner talks to a scripted fake API."""
 
 import json
+from datetime import datetime
 
 import pytest
 from test_tools import PROJECT, TEAM, plan_input
@@ -30,6 +31,16 @@ def submit(plan, call_id):
 def read_log(log_dir, prefix="run"):
     (path,) = log_dir.glob(f"{prefix}-*.json")
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def test_two_runs_that_start_in_the_same_second_keep_both_logs(tmp_path):
+    # Two browser sessions can start a run at the same moment; the log name has seconds only.
+    started = datetime(2026, 11, 16, 9, 0, 0)
+    first = agent._write_log(tmp_path, "run", started, {"n": 1})
+    second = agent._write_log(tmp_path, "run", started, {"n": 2})
+    assert first != second
+    logs = [json.loads(p.read_text(encoding="utf-8")) for p in tmp_path.glob("run-*.json")]
+    assert sorted(log["n"] for log in logs) == [1, 2]
 
 
 def test_a_rejected_plan_goes_back_to_claude_and_every_round_is_logged(api, tmp_path):
