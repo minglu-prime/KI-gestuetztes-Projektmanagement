@@ -1,5 +1,6 @@
 """Streamlit pieces that several pages share."""
 
+import datetime
 import re
 from collections.abc import Callable
 from html import escape
@@ -12,7 +13,7 @@ from anthropic import APIError
 
 from pm_agent.agent import AgentError
 from pm_agent.models import Plan
-from pm_agent.tracking import PART, Tracking, history_rows, load
+from pm_agent.tracking import PART, Tracking, has_progress, history_rows, load, next_step
 from pm_agent.workbench import InputError, describe_round, round_summary
 
 T = TypeVar("T")
@@ -46,16 +47,111 @@ def adopted_project() -> Tracking | None:
     return tracking
 
 
-def heading(icon: str, text: str) -> None:
+def as_text(text: str) -> str:
+    """`text` for st.markdown, shown as written: Markdown in it is not applied."""
+    return re.sub(r"([\\`*_\[\]~|#!])", r"\\\1", text)
+
+
+def heading(icon: str, text: str, **who: str) -> None:
     """A panel heading with a Material icon in front. Written as a Material shortcode in
     Markdown, Streamlit labels the icon "name icon", and a screen reader reads that English
     word before the German heading. The icon only decorates, so here it is hidden from screen
-    readers. `text` shows as written: neither HTML nor Markdown in it is applied."""
-    plain = escape(re.sub(r"([\\`*_\[\]~|#])", r"\\\1", text))
+    readers. `text` shows as written: neither HTML nor Markdown in it is applied. `who` puts
+    the roles under the heading (see `roles`)."""
+    plain = escape(as_text(text))
     st.markdown(
         f'#### <span class="icon" aria-hidden="true">{escape(icon)}</span> {plain}',
         unsafe_allow_html=True,
     )
+    if who:
+        st.html(roles(**who))
+
+
+# The three who act on every agent page. One word each, the same everywhere, also on the
+# Startseite: a reader who does not know agents sees what the machine did and what is theirs.
+ROLES = {"claude": "CLAUDE", "python": "PYTHON", "du": "DU"}
+
+
+def roles(**who: str) -> str:
+    """Who does a part of a page, as HTML for st.html: Claude proposes, Python computes and
+    checks, the project lead ("du") enters and decides. Each keyword is a role, its value
+    what that role does here; the chips keep the order of the keywords."""
+    return (
+        '<div class="roles">'
+        + "".join(
+            f'<span class="role {role}"><b>{ROLES[role]}</b> {escape(does)}</span>'
+            for role, does in who.items()
+        )
+        + "</div>"
+    )
+
+
+# The loop of a project, one step per agent page, and who acts in each.
+JOURNEY = [
+    ("planung", "Planen", "Claude entwirft, du übernimmst"),
+    ("durchfuehrung", "Ausführen", "du trägst den Fortschritt ein"),
+    ("kontrolle", "Prüfen", "Python rechnet, Claude bewertet"),
+]
+PAGES = {
+    "planung": ("views/planung.py", "Zur Planung"),
+    "durchfuehrung": ("views/durchfuehrung.py", "Zur Durchführung"),
+    "kontrolle": ("views/kontrolle.py", "Zur Kontrolle"),
+}
+
+
+def journey(page: str) -> None:
+    """The project path above an agent page: which step is done, which is this page, which
+    comes next. With an adopted project, one line below says what is next (`next_step`) and,
+    if that is another page, a button leads there. Without a project Planen is next; the page
+    itself says why. With an unreadable project the path shows no state at all."""
+    try:
+        tracking, unreadable = load(), False
+    except InputError as err:
+        tracking, unreadable = None, True
+        # Durchführung and Kontrolle show this error themselves (`adopted_project`), the
+        # Planung only in its last step.
+        if page == "planung":
+            st.error(f"Das übernommene Projekt konnte nicht gelesen werden: {err}")
+    advice = None
+    if unreadable:
+        where = None
+    elif tracking is None:
+        where = "planung"
+    elif page == "planung":
+        where = None  # the Planung leads through its own steps and needs no forecast
+    else:
+        # Looked up when called, like the pages do: the day is the one they evaluate on.
+        advice, where = next_step(tracking, datetime.date.today())
+    done = {
+        "planung": tracking is not None,
+        "durchfuehrung": tracking is not None and has_progress(tracking),
+        "kontrolle": False,  # checking never ends while the project runs
+    }
+    steps = []
+    for number, (slug, name, who) in enumerate(JOURNEY, start=1):
+        marks = [m for m, on in [("done", done[slug]), ("next", slug == where)] if on]
+        here = slug == page
+        classes = " ".join(["step", *marks, *(["here"] if here else [])])
+        current = ' aria-current="step"' if here else ""
+        cue = " <em>als Nächstes</em>" if slug == where else ""
+        steps.append(
+            f'<span class="{classes}"{current}>'
+            f"<b>{'✓' if done[slug] else number}</b> {name}{cue} <small>{who}</small></span>"
+        )
+    arrow = '<span class="arrow" aria-hidden="true">→</span>'
+    st.html(
+        f'<nav class="journey" aria-label="Projektpfad">{arrow.join(steps)}'
+        '<span class="loop">↺ Bei Verzug: Rest in der Planung neu planen</span></nav>'
+    )
+    if advice is None:
+        return
+    with st.container(horizontal=True, vertical_alignment="center", key="next-step"):
+        below = " ↓ Unten auf dieser Seite." if where == page else ""
+        st.markdown(f"**Jetzt dran:** {as_text(advice)}{below}")
+        if where != page:
+            target, label = PAGES[where]
+            if st.button(label, key="journey-go", type="primary", icon=":material/arrow_forward:"):
+                st.switch_page(target)
 
 
 def history_table(tracking: Tracking) -> None:

@@ -2,6 +2,7 @@
 
 import datetime
 import json
+import re
 import socket
 import tomllib
 from datetime import date
@@ -14,7 +15,7 @@ import streamlit as st
 from streamlit.testing.v1 import AppTest
 from test_tools import PROJECT, TEAM, plan_input
 
-from pm_agent import agent, followup, lab_server, tracking, workbench
+from pm_agent import agent, followup, lab_server, tracking, ui, workbench
 from pm_agent.agent import AgentError, PlanningError
 from pm_agent.models import Absence, ControlReport, Plan, StatusSummary
 
@@ -139,6 +140,29 @@ def test_the_buttons_at_the_end_of_a_step_open_the_next_step(app):
     at = app.run()
     assert not at.exception
     assert at.session_state["step"] == "2 · Projekt"
+
+
+def now(at):
+    """The line "Jetzt dran" of the Planung."""
+    return next(m.value for m in at.markdown if "Jetzt dran" in m.value)
+
+
+def test_the_planung_says_what_is_next_and_opens_that_step(app, monkeypatch):
+    # The team is there, the consent is not.
+    assert "Zustimmung" in now(app) and "Schritt 1" in now(app)
+    app.checkbox(key="consent").check()
+    at = app.run()
+    assert "Projektidee und Deadline" in now(at) and "Schritt 2" in now(at)
+    button(at, "Zu Schritt 2").click()
+    at = at.run()
+    assert at.session_state["step"] == "2 · Projekt"
+
+    at = fill_project(at)
+    assert "Schritt 3" in now(at)
+    monkeypatch.setattr(agent, "run_planning", planned)
+    button(at, "Plan mit Claude erstellen").click()
+    at = at.run()
+    assert "übernimm" in now(at) and "Schritt 6" in now(at)
 
 
 WISH = "Das Datenmodell dauert doppelt so lange."
@@ -500,6 +524,14 @@ def test_the_site_says_that_it_is_german(site):
     assert any('document.documentElement.lang = "de"' in h.value for h in site.html)
 
 
+def test_the_startseite_introduces_the_roles_the_agent_pages_mark(site):
+    flow = next(h.value for h in site.html if 'class="flow"' in h.value)
+    # The same chips as on the agent pages, in the order of the work.
+    marks = ['class="role claude"', 'class="role python"', 'class="role du"']
+    assert all(m in flow for m in marks)
+    assert flow.index(marks[0]) < flow.index(marks[1]) < flow.index(marks[2])
+
+
 def test_every_menu_entry_opens_and_explains_its_empty_state(site):
     assert not site.exception
     assert [t.value for t in site.title] == ["Der Agent schlägt vor. *Du entscheidest.*"]
@@ -809,8 +841,8 @@ def test_nonzero_progress_survives_reopen_and_reaches_control_and_documents(flow
         "Planwert bis heute": "24 h",
         "Fertigstellungswert": "8 h",
         "Ist-Stunden": "14 h",
-        "SPI": "0,33",
-        "CPI": "0,57",
+        "Termin-Kennzahl (SPI)": "0,33",
+        "Aufwands-Kennzahl (CPI)": "0,57",
     }
     assert {label: metrics.get(label) for label in fixed} == fixed
     (tasks,) = [d.value for d in at.dataframe if "Geplantes Ende" in d.value.columns]
@@ -928,6 +960,91 @@ def tracked(site):
     return site
 
 
+def journey(at):
+    """The project path above an agent page, as HTML, or None."""
+    return next((h.value for h in at.html if 'class="journey"' in h.value), None)
+
+
+def test_every_agent_page_shows_the_project_path_with_the_page_marked(site):
+    for path, step in [
+        ("views/planung.py", "Planen"),
+        ("views/durchfuehrung.py", "Ausführen"),
+        ("views/kontrolle.py", "Prüfen"),
+    ]:
+        at = site.switch_page(path).run()
+        html = journey(at)
+        assert html is not None, path
+        assert re.search(rf'class="step[^"]*here[^"]*"[^>]*>.*?{step}', html), path
+    # Not on pages that are no agent.
+    assert journey(site.switch_page("views/startseite.py").run()) is None
+
+
+def test_without_a_project_the_path_waits_at_planen_and_says_nothing_twice(site):
+    at = site.switch_page("views/kontrolle.py").run()
+    assert not at.exception
+    planen = journey(at).split("Ausführen")[0]
+    assert 'class="step next' in planen  # Planen comes next
+    assert "als Nächstes" in planen  # in words too, not by colour alone
+    # The page itself already says there is no project: no second "Jetzt dran" for it.
+    assert not any("Jetzt dran" in m.value for m in at.markdown)
+
+
+def test_with_a_project_the_path_says_what_is_next_and_leads_there(tracked):
+    at = tracked.switch_page("views/durchfuehrung.py").run()
+    assert not at.exception
+    advice, where = tracking.next_step(tracking.load(), date.today())
+    assert '<span class="step done' in journey(at).split("Ausführen")[0]  # Planen is done
+    assert any("Jetzt dran" in m.value and advice in m.value for m in at.markdown)
+    target = {"durchfuehrung": "Zur Durchführung", "kontrolle": "Zur Kontrolle"}[where]
+    # A button to the page the advice points to, unless the advice is about this page.
+    assert any(b.label == target for b in at.button) == (where != "durchfuehrung")
+    # Otherwise the line says it is this page.
+    here = any("Unten auf dieser Seite" in m.value for m in at.markdown)
+    assert here == (where == "durchfuehrung")
+
+
+def test_a_damaged_project_leaves_the_path_without_a_state(site):
+    tracking.PROJECT_FILE.write_text("{kaputt", encoding="utf-8")
+    at = site.switch_page("views/kontrolle.py").run()
+    assert not at.exception
+    assert any("konnte nicht gelesen werden" in e.value for e in at.error)
+    # The page says the file is unreadable; the path must not say nothing was planned yet.
+    states = re.findall(r'class="step([^"]*)"', journey(at))
+    assert states and not any("done" in s or "next" in s for s in states)
+    assert not any("Jetzt dran" in m.value for m in at.markdown)
+
+
+def test_the_planung_does_not_forecast_the_adopted_project(tracked, monkeypatch):
+    # The Planung shows no "Jetzt dran" from the project: it must not depend on it either.
+    def unused(*args):
+        raise AssertionError("next_step on the Planung")
+
+    monkeypatch.setattr(ui, "next_step", unused)
+    at = tracked.switch_page("views/planung.py").run()
+    assert not at.exception
+    assert '<span class="step done' in journey(at)  # Planen is still done
+
+
+def test_the_advice_is_shown_as_text(tracked, monkeypatch):
+    # Task IDs from the plan end up in the advice; Markdown in them stays text.
+    monkeypatch.setattr(
+        ui, "next_step", lambda t, d: ("Task ![x](http://e/x.png) hängt", "kontrolle")
+    )
+    at = tracked.switch_page("views/durchfuehrung.py").run()
+    line = next(m.value for m in at.markdown if "Jetzt dran" in m.value)
+    assert r"!\[x\]" in line
+
+
+def test_each_part_of_an_agent_page_says_who_does_it(tracked):
+    at = tracked.switch_page("views/kontrolle.py").run()
+    roles = [h.value for h in at.html if 'class="roles"' in h.value]
+    # The agent: Claude proposes, Python checks, the project lead decides. In that order.
+    agent_roles = next(r for r in roles if "CLAUDE" in r)
+    assert agent_roles.index("CLAUDE") < agent_roles.index("PYTHON") < agent_roles.index("DU")
+    # The numbers are Python's alone.
+    assert any("PYTHON" in r and "CLAUDE" not in r and "DU" not in r for r in roles)
+
+
 def test_without_a_project_durchfuehrung_and_kontrolle_lead_to_the_planung(site):
     for path in ["views/durchfuehrung.py", "views/kontrolle.py"]:
         at = site.switch_page(path).run()
@@ -1010,7 +1127,12 @@ def test_kontrolle_shows_the_earned_value(tracked):
     at = tracked.switch_page("views/kontrolle.py").run()
     assert not at.exception
     labels = [m.label for m in at.metric]
-    for label in ["Planwert bis heute", "Fertigstellungswert", "SPI", "CPI"]:
+    for label in [
+        "Planwert bis heute",
+        "Fertigstellungswert",
+        "Termin-Kennzahl (SPI)",
+        "Aufwands-Kennzahl (CPI)",
+    ]:
         assert label in labels
 
 

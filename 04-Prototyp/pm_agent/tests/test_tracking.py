@@ -453,38 +453,36 @@ def test_a_finished_task_is_left_out_of_a_reassignment(two_people):
 
 
 def test_the_next_step_follows_from_the_state_of_the_project(tracking):
+    # The advice names no page: the page that shows it may be the one it points to. The
+    # second value says where; the page links there or says it is below.
     def advice(today, **status):
         project = progressed(tracking, **status) if status else tracking
         return next_step(project, today)
 
     # Before anything is recorded, and nothing is late yet.
     assert advice(date(2026, 11, 9)) == (
-        "Noch kein Fortschritt erfasst. Trage Status und Ist-Stunden auf der Seite "
-        "Durchführung ein.",
+        "Noch kein Fortschritt erfasst. Trage Status und Ist-Stunden ein.",
         "durchfuehrung",
     )
     assert advice(date(2026, 11, 10), A="fertig") == (
-        "Das Projekt liegt im Plan. Halte den Fortschritt auf der Seite Durchführung aktuell.",
+        "Das Projekt liegt im Plan. Halte den Fortschritt aktuell.",
         "durchfuehrung",
     )
     assert advice(date(2026, 11, 10)) == (
-        "1 Aufgabe ist im Verzug. Die Seite Kontrolle zeigt, was daran hängt und wohin das "
-        "Ende rückt.",
+        "1 Aufgabe ist im Verzug. Sieh nach, was daran hängt und wohin das Ende rückt.",
         "kontrolle",
     )
     assert advice(date(2026, 11, 12)) == (
-        "2 Aufgaben sind im Verzug. Die Seite Kontrolle zeigt, was daran hängt und wohin das "
-        "Ende rückt.",
+        "2 Aufgaben sind im Verzug. Sieh nach, was daran hängt und wohin das Ende rückt.",
         "kontrolle",
     )
     assert advice(date(2026, 12, 21)) == (
-        "Nach heutigem Stand wird die Deadline verpasst. Die Seite Kontrolle zeigt, welche "
-        "Aufgaben das Ende verschieben.",
+        "Nach heutigem Stand wird die Deadline verpasst. Sieh nach, welche Aufgaben das Ende "
+        "verschieben.",
         "kontrolle",
     )
     assert advice(date(2026, 11, 12), A="fertig", B="fertig") == (
-        "Alle Aufgaben sind fertig. Der Statusbericht auf der Seite Durchführung hält den "
-        "Abschluss fest.",
+        "Alle Aufgaben sind fertig. Halte den Abschluss im Statusbericht fest.",
         "durchfuehrung",
     )
 

@@ -65,7 +65,11 @@ st.progress(result.progress, text=f"{percent(result.progress)} der Planstunden f
 st.caption(f"Übernommen am {tracking.adopted:%d.%m.%Y %H:%M} · {len(tracking.plan.tasks)} Aufgaben")
 
 with st.container(border=True, key="panel-ahead"):
-    heading("event_upcoming", "Die nächsten fünf Arbeitstage")
+    heading(
+        "event_upcoming",
+        "Die nächsten fünf Arbeitstage",
+        python="plant aus deinem Fortschritt voraus",
+    )
     outlook = forecast(tracking, date.today())
     ahead = week_ahead(tracking, date.today())
     if outlook.problem:
@@ -86,7 +90,7 @@ with st.container(border=True, key="panel-ahead"):
         )
 
 with st.container(border=True, key="panel-progress"):
-    heading("edit_note", "Fortschritt")
+    heading("edit_note", "Fortschritt", du="trägst Status und Stunden ein")
     if state.pop("progress_saved", False):
         st.success("Fortschritt gespeichert (lokal in data/projekt.json, nicht im Repository).")
     table = pd.DataFrame(progress_rows(tracking), columns=PROGRESS_COLUMNS)
@@ -145,7 +149,13 @@ with st.container(border=True, key="panel-progress"):
                 st.rerun()
 
 with st.container(border=True, key="panel-agent"):
-    heading("smart_toy", "Durchführungs-Agent")
+    heading(
+        "smart_toy",
+        "Durchführungs-Agent",
+        claude="schreibt einen Vorschlag",
+        python="prüft ihn",
+        du="entscheidest, was gilt",
+    )
     st.caption(
         "Claude schlägt aus Plan und gespeichertem Fortschritt die Zusammenfassung und die "
         "nächsten Schritte für den Statusbericht vor. Python nimmt den Vorschlag nur an, wenn "
@@ -177,7 +187,7 @@ with st.container(border=True, key="panel-agent"):
         st.caption("Der Vorschlag steht jetzt auch im Statusbericht unten.")
 
 with st.container(border=True, key="panel-documents"):
-    heading("description", "Dokumente aus Vorlagen")
+    heading("description", "Dokumente aus Vorlagen", python="füllt sie aus")
     st.caption("Gefüllt aus dem übernommenen Plan und dem gespeicherten Fortschritt.")
     documents = {
         "Statusbericht": ("statusbericht", status_report(tracking, result, summary)),

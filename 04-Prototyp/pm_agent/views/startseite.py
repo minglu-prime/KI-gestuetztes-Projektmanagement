@@ -13,13 +13,16 @@ FLOW = """
 <div class="flow">
   <div class="flow-top"><span>SO ARBEITET JEDER AGENT</span><span>01 – 03</span></div>
   <div class="flow-nodes">
-    <div class="flow-node"><strong>1</strong>Claude schlägt vor</div>
-    <div class="flow-node"><strong>2</strong>Python prüft nach</div>
-    <div class="flow-node"><strong>3</strong>Du entscheidest</div>
+    <div class="flow-node"><strong>1</strong><span class="role claude"><b>CLAUDE</b></span>
+      schlägt vor</div>
+    <div class="flow-node"><strong>2</strong><span class="role python"><b>PYTHON</b></span>
+      prüft nach</div>
+    <div class="flow-node"><strong>3</strong><span class="role du"><b>DU</b></span>
+      entscheidest</div>
   </div>
   <div class="flow-result">
     Kein Ergebnis ohne deterministische Prüfung. Was sie ablehnt, geht mit Begründung zurück
-    an Claude.
+    an Claude. Auf jeder Agentenseite zeigen diese drei Marken, wer gerade handelt.
   </div>
 </div>
 """
