@@ -180,9 +180,12 @@ def adopt(
 
 
 def finished_again(tracking: Tracking, plan: Plan) -> list[str]:
-    """IDs of tasks finished under `tracking` that `plan` has again. Kept as history they
-    would count twice; the rest of a project (rest_plan) has none."""
-    return [t.id for t in plan.tasks if tracking.progress.get(t.id, Progress()).status == "fertig"]
+    """IDs of tasks finished under `tracking` or under a plan before it that `plan` has
+    again. Kept as history they would count twice; the rest of a project (rest_plan) has
+    none."""
+    done = {e.id for e in tracking.history if e.finished}
+    done |= {task_id for task_id, p in tracking.progress.items() if p.status == "fertig"}
+    return [t.id for t in plan.tasks if t.id in done]
 
 
 def _closed(tracking: Tracking, day: date) -> list[Earlier]:
@@ -304,7 +307,9 @@ def evaluate(tracking: Tracking, today: date) -> Evaluation:
         )
     finished_ids = {t.id for t in tasks if t.status == "fertig"}
     # Plan and actual of every piece of work: the tasks of the plan and the history. A part
-    # in the history is finished once the task it went on as is finished.
+    # in the history is finished once the task it went on as is finished, in this plan or in
+    # a later one that is history now itself.
+    finished_ids |= {e.id for e in tracking.history if e.finished}
     work = [(t.member, t.planned_hours, t.actual_hours, t.id in finished_ids) for t in tasks]
     work += [
         (e.member, e.planned_hours, e.actual_hours, e.finished or e.id in finished_ids)

@@ -913,24 +913,33 @@ with tabs[5]:
         with take_over.container(border=True, key="panel-adopt", height="stretch"):
             heading("flag", "Als Projekt übernehmen")
             st.caption("Der Plan wird zur Grundlage für die Seiten Durchführung und Kontrolle.")
+            overwrite, keep = True, None
             try:
                 adopted = load_tracking()
             except InputError as err:
                 adopted = None
                 st.error(f"Das übernommene Projekt konnte nicht gelesen werden: {err}")
-            overwrite, keep = True, None
+                # Its progress may still be rescued by hand: replaced only on purpose.
+                overwrite = st.checkbox(
+                    "Die beschädigte Datei durch diesen Plan ersetzen. Ihr Inhalt geht verloren.",
+                    key="adopt_replace_damaged",
+                )
             if adopted is not None and has_progress(adopted):
+                # No choice made in advance: keeping fits only the rest of this project.
                 choice = st.radio(
                     f"Das am {adopted.adopted:%d.%m.%Y} übernommene Projekt hat schon erfassten "
                     "Fortschritt.",
                     [KEEP, DROP],
+                    index=None,
                     key="adopt_progress",
                     help="Behalten passt, wenn dieser Plan der neu geplante Rest des Projekts "
                     "ist (Seite Kontrolle, „Rest mit Claude umplanen“): Fertige Aufgaben und "
                     "gebuchte Stunden bleiben in den Kennzahlen, begonnene Aufgaben gehen im "
                     "neuen Plan weiter.",
                 )
-                if choice == KEEP:
+                if choice is None:
+                    overwrite = False
+                elif choice == KEEP:
                     keep = adopted
                     if again := finished_again(adopted, state.plan):
                         overwrite = False

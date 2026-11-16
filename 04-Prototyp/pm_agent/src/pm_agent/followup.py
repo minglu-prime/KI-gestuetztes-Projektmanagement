@@ -85,8 +85,12 @@ def check_report(
     report: ControlReport, evaluation: Evaluation, team: list[Member] | None = None
 ) -> list[str]:
     """`team` is needed to check reassignments; without it they are not checked."""
-    known = {t.id for t in evaluation.tasks}
-    finished = {t.id for t in evaluation.tasks if t.status == "fertig"}
+    # The agent gets the work of earlier plans too ("frueher" in facts) and may name it.
+    # Unless its task goes on in the current plan, that work is closed: nothing to give away.
+    going_on = {t.id for t in evaluation.tasks if t.status != "fertig"}
+    earlier = {e.id for e in evaluation.history}
+    known = going_on | earlier | {t.id for t in evaluation.tasks}
+    finished = known - going_on
     names = {m.name for m in team} if team is not None else None
     errors = []
     for kind, items in (("Feststellung", report.findings), ("Gegenmaßnahme", report.measures)):
