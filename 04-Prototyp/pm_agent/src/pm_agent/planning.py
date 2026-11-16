@@ -18,6 +18,7 @@ from pm_agent.models import (
     MemberLoad,
     Plan,
     Project,
+    Requirement,
     ScheduledTask,
 )
 
@@ -32,13 +33,19 @@ def check_plan(
     team: list[Member],
     project: Project,
     dates_only: bool = False,
+    requirements: list[Requirement] | None = None,
+    covered: frozenset[str] = frozenset(),
 ) -> CheckResult:
     """Structural errors stop the check. Otherwise the plan is scheduled, and the warnings
     say what the project lead has to decide (deadline, buffer, overload, missing skills).
 
     `dates_only=True` leaves CheckResult.slack and critical_path empty. Both schedule the
-    plan again and again; who only wants the dates saves most of the time."""
-    errors = _structural_errors(plan, team, project)
+    plan again and again; who only wants the dates saves most of the time.
+
+    With `requirements` (the approved ones) the plan is traced as well: a task serving an
+    unknown requirement is an error, a requirement without a task and tasks serving none
+    are warnings. `covered`: requirements served by finished work outside this plan."""
+    errors = _structural_errors(plan, team, project) + _trace_errors(plan, requirements)
     if errors:
         return CheckResult(errors=errors)
 
@@ -167,6 +174,18 @@ def check_plan(
                     f"Task '{task.id}' braucht '{skill}', "
                     f"{member.name} hat diese Fähigkeit nicht angegeben",
                 )
+    if requirements is not None:
+        served = {rid for task in plan.tasks for rid in task.requirement_ids} | covered
+        for need in requirements:
+            if need.id not in served:
+                warn(
+                    ("uncovered", need.id),
+                    f"{need.priority}-Anforderung '{need.id}' ({need.title}) hat keine Task",
+                )
+        untraced = [task.id for task in plan.tasks if not task.requirement_ids]
+        if untraced:
+            subject = "1 Task dient" if len(untraced) == 1 else f"{len(untraced)} Tasks dienen"
+            warn(("untraced",), f"{subject} keiner Anforderung: {', '.join(untraced)}")
 
     return CheckResult(
         warnings=warnings,
@@ -274,6 +293,18 @@ def _next_workday(day: date) -> date:
     while day.weekday() >= 5:
         day += timedelta(days=1)
     return day
+
+
+def _trace_errors(plan: Plan, requirements: list[Requirement] | None) -> list[str]:
+    if requirements is None:
+        return []
+    known = {need.id for need in requirements}
+    return [
+        f"Task '{task.id}' dient der unbekannten Anforderung '{rid}'"
+        for task in plan.tasks
+        for rid in task.requirement_ids
+        if rid not in known
+    ]
 
 
 def _structural_errors(plan: Plan, team: list[Member], project: Project) -> list[str]:
