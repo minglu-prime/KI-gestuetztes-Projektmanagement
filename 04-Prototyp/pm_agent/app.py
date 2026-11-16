@@ -9,7 +9,7 @@ from pathlib import Path
 
 import streamlit as st
 
-from pm_agent.ui import journey
+from pm_agent.ui import PAGES, journey
 
 ROOT = Path(__file__).parent
 
@@ -68,6 +68,6 @@ state.page = page.url_path
 with st.container(key=f"page-{page.url_path or 'startseite'}"):
     if section:
         st.html(f'<p class="eyebrow">{section}</p>')
-    if section == "Agenten":
+    if page.url_path in PAGES:  # the pages of a phase
         journey(page.url_path)
     page.run()

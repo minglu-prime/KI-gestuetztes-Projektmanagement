@@ -981,6 +981,8 @@ def journey(at):
 
 def test_every_agent_page_shows_the_project_path_with_the_page_marked(site):
     for path, step in [
+        ("views/auftrag.py", "Auftrag"),
+        ("views/anforderungen.py", "Anforderungen"),
         ("views/planung.py", "Planen"),
         ("views/durchfuehrung.py", "Ausführen"),
         ("views/kontrolle.py", "Prüfen"),
@@ -1535,3 +1537,50 @@ def test_without_project_data_the_requirements_lead_to_the_auftrag(site):
     assert not at.exception
     assert button(at, "Anforderungen mit Claude entwerfen").disabled
     assert any("Noch keine Anforderungen." in i.value for i in at.info)
+
+
+def steps(at):
+    """Each step of the project path: its name and its classes."""
+    return {
+        name: set(classes.split())
+        for classes, name in re.findall(r'class="(step[^"]*)"[^>]*><b>[^<]*</b> (\w+)', journey(at))
+    }
+
+
+def test_the_path_starts_at_the_auftrag_and_ticks_what_is_approved(site):
+    at = site.switch_page("views/auftrag.py").run()
+    assert steps(at)["Auftrag"] >= {"here", "next"}
+
+    lifecycle.save(with_charter())
+    at = site.switch_page("views/planung.py").run()
+    path = steps(at)
+    assert "done" in path["Auftrag"] and "next" in path["Anforderungen"]
+
+    approved = lifecycle.approve_requirements(
+        with_charter().model_copy(update={"requirements": NEEDS}), APPROVED_AT
+    )
+    lifecycle.save(approved)
+    at = site.switch_page("views/kontrolle.py").run()
+    path = steps(at)
+    assert "done" in path["Anforderungen"] and "next" in path["Planen"]
+
+
+def test_a_draft_or_a_skipped_phase_is_marked_not_approved(tracked):
+    # A project is adopted without charter and requirements: both were skipped.
+    at = tracked.switch_page("views/kontrolle.py").run()
+    path = steps(at)
+    assert "warn" in path["Auftrag"] and "warn" in path["Anforderungen"]
+    assert journey(at).count("nicht freigegeben") == 2
+    # A draft is marked too, before any project is adopted.
+    tracking.PROJECT_FILE.unlink()
+    lifecycle.save(with_charter(approved=False))
+    path = steps(tracked.switch_page("views/planung.py").run())
+    assert "warn" in path["Auftrag"] and "warn" not in path["Anforderungen"]
+
+
+def test_an_unreadable_vorhaben_is_said_on_the_agent_pages(site):
+    lifecycle.FILE.write_text("{kaputt", encoding="utf-8")
+    at = site.switch_page("views/durchfuehrung.py").run()
+    assert not at.exception
+    assert any("vorhaben.json ist beschädigt" in c.value for c in at.caption)
+    assert "done" not in str(steps(at)) and "next" not in str(steps(at)["Auftrag"])

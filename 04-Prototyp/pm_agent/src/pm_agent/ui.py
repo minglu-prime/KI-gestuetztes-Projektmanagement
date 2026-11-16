@@ -131,11 +131,15 @@ def roles(**who: str) -> str:
 
 # The loop of a project, one step per agent page, and who acts in each.
 JOURNEY = [
+    ("auftrag", "Auftrag", "Claude entwirft, du gibst frei"),
+    ("anforderungen", "Anforderungen", "Python prüft die Abdeckung"),
     ("planung", "Planen", "Claude entwirft, du übernimmst"),
     ("durchfuehrung", "Ausführen", "du trägst den Fortschritt ein"),
     ("kontrolle", "Prüfen", "Python rechnet, Claude bewertet"),
 ]
 PAGES = {
+    "auftrag": ("views/auftrag.py", "Zum Projektauftrag"),
+    "anforderungen": ("views/anforderungen.py", "Zu den Anforderungen"),
     "planung": ("views/planung.py", "Zur Planung"),
     "durchfuehrung": ("views/durchfuehrung.py", "Zur Durchführung"),
     "kontrolle": ("views/kontrolle.py", "Zur Kontrolle"),
@@ -143,10 +147,13 @@ PAGES = {
 
 
 def journey(page: str) -> None:
-    """The project path above an agent page: which step is done, which is this page, which
-    comes next. With an adopted project, one line below says what is next (`next_step`) and,
-    if that is another page, a button leads there. Without a project Planen is next; the page
-    itself says why. With an unreadable project the path shows no state at all."""
+    """The project path above every page of a phase: which step is done, which is this page,
+    which comes next, and which phase before the plan is not approved (a draft, changed since
+    its approval, or skipped once a project is adopted: the gates are soft).
+
+    With an adopted project, one line below says what is next (`next_step`) and, if that is
+    another page, a button leads there. Before it, the first phase not approved is next.
+    What cannot be read shows no state: its page says why."""
     try:
         tracking, unreadable = load(), False
     except InputError as err:
@@ -155,28 +162,52 @@ def journey(page: str) -> None:
         # Planung only in its last step.
         if page == "planung":
             st.error(f"Das übernommene Projekt konnte nicht gelesen werden: {err}")
+    try:
+        life = lifecycle.load()
+    except InputError as err:
+        life, unreadable = None, True
+        if page not in ("auftrag", "anforderungen"):  # those two show it themselves
+            st.caption(f"Projektauftrag und Anforderungen sind nicht lesbar: {err}")
+    phases = {
+        "auftrag": lifecycle.charter_state(life),
+        "anforderungen": lifecycle.requirements_state(life),
+    }
     advice = None
     if unreadable:
         where = None
     elif tracking is None:
-        where = "planung"
-    elif page == "planung":
-        where = None  # the Planung leads through its own steps and needs no forecast
+        where = next((slug for slug, phase in phases.items() if phase != "freigegeben"), "planung")
+    elif page in ("auftrag", "anforderungen", "planung"):
+        where = None  # these lead through their own steps and need no forecast
     else:
         # Looked up when called, like the pages do: the day is the one they evaluate on.
         advice, where = next_step(tracking, datetime.date.today())
     done = {
+        **{slug: phase == "freigegeben" for slug, phase in phases.items()},
         "planung": tracking is not None,
         "durchfuehrung": tracking is not None and has_progress(tracking),
         "kontrolle": False,  # checking never ends while the project runs
     }
+    # Not approved: a draft or a changed one, or skipped although the project goes on.
+    skipped = {
+        slug
+        for slug, phase in phases.items()
+        if not unreadable
+        and (phase in ("entwurf", "geändert") or (phase == "offen" and tracking is not None))
+    }
     steps = []
     for number, (slug, name, who) in enumerate(JOURNEY, start=1):
-        marks = [m for m, on in [("done", done[slug]), ("next", slug == where)] if on]
+        marks = [
+            m
+            for m, on in [("done", done[slug]), ("next", slug == where), ("warn", slug in skipped)]
+            if on
+        ]
         here = slug == page
         classes = " ".join(["step", *marks, *(["here"] if here else [])])
         current = ' aria-current="step"' if here else ""
         cue = " <em>als Nächstes</em>" if slug == where else ""
+        if slug in skipped:
+            cue += " <em>nicht freigegeben</em>"
         steps.append(
             f'<span class="{classes}"{current}>'
             f"<b>{'✓' if done[slug] else number}</b> {name}{cue} <small>{who}</small></span>"
