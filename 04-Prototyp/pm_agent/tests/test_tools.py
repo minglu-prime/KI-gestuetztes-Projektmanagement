@@ -4,7 +4,7 @@ from datetime import date
 import pytest
 from anthropic.lib.tools import ToolError
 
-from pm_agent.models import Member, Plan, Project
+from pm_agent.models import Member, Plan, Project, Requirement
 from pm_agent.tools import PlanningTools
 
 PROJECT = Project(
@@ -109,3 +109,34 @@ def test_both_tools_show_claude_the_plan_schema():
         "check_plan": Plan.model_json_schema(),
         "submit_plan": Plan.model_json_schema(),
     }
+
+
+NEEDS = [
+    Requirement(
+        id="R1",
+        title="Raum buchen",
+        story="Als Studentin will ich einen Raum buchen.",
+        priority="Muss",
+        criteria=["Die Buchung steht sofort in der Liste"],
+    )
+]
+
+
+def test_check_plan_reports_missing_coverage_when_requirements_are_given():
+    report = json.loads(PlanningTools(PROJECT, TEAM, NEEDS).check_plan.call(plan_input()))
+    assert report["warnings"][-2:] == [
+        "Muss-Anforderung 'R1' (Raum buchen) hat keine Task",
+        "2 Tasks dienen keiner Anforderung: A, B",
+    ]
+    # Finished work outside the plan counts.
+    covered = PlanningTools(PROJECT, TEAM, NEEDS, frozenset({"R1"}))
+    assert "Muss-Anforderung" not in covered.check_plan.call(plan_input())
+
+
+def test_submit_plan_rejects_an_unknown_requirement():
+    traced = plan_input()
+    traced["tasks"][0]["requirement_ids"] = ["R9"]
+    tools = PlanningTools(PROJECT, TEAM, NEEDS)
+    with pytest.raises(ToolError, match="Task 'A' dient der unbekannten Anforderung 'R9'"):
+        tools.submit_plan.call(traced)
+    assert tools.plan is None

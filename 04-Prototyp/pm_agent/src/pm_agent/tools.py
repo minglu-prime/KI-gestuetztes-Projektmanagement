@@ -11,7 +11,7 @@ from anthropic import beta_tool
 from anthropic.lib.tools import ToolError
 from pydantic import BaseModel, ValidationError
 
-from pm_agent.models import CheckResult, Member, Plan, Project
+from pm_agent.models import CheckResult, Member, Plan, Project, Requirement
 from pm_agent.planning import check_plan
 
 T = TypeVar("T", bound=BaseModel)
@@ -23,9 +23,18 @@ REPORTED = {"errors", "warnings", "end_date", "critical_path", "load"}
 class PlanningTools:
     """The tools of one planning run. `plan` is set when submit_plan accepts a plan."""
 
-    def __init__(self, project: Project, team: list[Member]) -> None:
+    def __init__(
+        self,
+        project: Project,
+        team: list[Member],
+        requirements: list[Requirement] | None = None,
+        covered: frozenset[str] = frozenset(),
+    ) -> None:
         self.project = project
         self.team = team
+        # The approved requirements: with them the check traces each task (check_plan).
+        self.requirements = requirements
+        self.covered = covered
         self.plan: Plan | None = None
         self.check_plan = beta_tool(
             self._check,
@@ -65,7 +74,9 @@ class PlanningTools:
             plan = Plan.model_validate(data)
         except ValidationError as err:
             return None, CheckResult(errors=invalid_input(err))
-        return plan, check_plan(plan, self.team, self.project)
+        return plan, check_plan(
+            plan, self.team, self.project, requirements=self.requirements, covered=self.covered
+        )
 
 
 # The project lead reads these too (each round is shown on the page): German for the usual

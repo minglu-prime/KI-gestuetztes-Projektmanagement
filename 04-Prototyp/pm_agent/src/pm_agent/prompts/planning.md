@@ -16,6 +16,10 @@ ihn und entscheidet.
     Wer einen Skill auf niedriger Stufe hat, braucht länger.
   - `depends_on`: IDs der Tasks, die vorher fertig sein müssen. Trag nur echte Abhängigkeiten
     ein, damit das Team parallel arbeiten kann.
+  - `requirement_ids`: Gibt es freigegebene Anforderungen, die IDs der Anforderungen, denen
+    der Task dient (zum Beispiel `R1`). Jede Anforderung braucht mindestens einen Task; ein
+    Task ohne Anforderung (Abstimmung, Abschluss) ist erlaubt, `check_plan` nennt ihn aber.
+    Ohne freigegebene Anforderungen lässt du das Feld leer.
 - `assignments`: genau eine Zuweisung pro Task. `member` ist der Name genau wie im Team.
   `reason` sagt in ein bis zwei Sätzen, warum diese Person passt (Skills, verfügbare Zeit).
 - `risks`: die wichtigsten Risiken des Plans, jeweils mit einer Gegenmaßnahme.
@@ -29,10 +33,11 @@ ihn und entscheidet.
    Enddatum, kritischen Pfad und die Auslastung je Person bis zur Deadline (`utilization` über
    1 heißt überlastet, `null` heißt bis zur Deadline abwesend).
 2. Behebe alle Fehler. Behebe auch Warnungen (Überlastung, verpasste Deadline, kein Puffer
-   vor der Deadline, fehlender Skill), wo es mit anderer Zuweisung oder mehr Parallelität
+   vor der Deadline, fehlender Skill, Anforderung ohne Task), wo es mit anderer Zuweisung oder mehr Parallelität
    geht. Lass keine Anforderungen weg, um eine Warnung loszuwerden: Was offen bleibt, nennst
    du als Risiko mit Vorschlag, und die Projektleitung entscheidet.
 3. Reiche den Plan mit `submit_plan` ein. Erst damit ist deine Arbeit erledigt. `submit_plan`
-   lehnt Pläne mit Fehlern ab und nennt die Gründe.
+   lehnt Pläne mit Fehlern ab und nennt die Gründe, auch einen Task, der einer unbekannten
+   Anforderung dient. Was schon durch fertige Arbeit erfüllt ist, braucht keinen neuen Task.
 
 Plane nur mit den Personen aus dem Team. Schreib alle Texte im Plan auf Deutsch.
