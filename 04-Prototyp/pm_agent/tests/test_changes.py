@@ -288,3 +288,10 @@ def test_the_end_of_a_proposal_moves_in_working_days_of_the_project():
     assert check_changes(before, after)[0] == (
         "Planende: 23.12.2026 → 04.01.2027 (8 Arbeitstage später)"
     )
+
+
+def test_a_changed_trace_is_a_change():
+    # A proposal that only links tasks to requirements must not read as "no change".
+    assert plan_changes(PLAN, changed(requirement_ids=["R1"])) == [
+        "B · API: dient R1 (vorher keiner Anforderung)"
+    ]
