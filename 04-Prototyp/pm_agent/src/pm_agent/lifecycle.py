@@ -18,7 +18,7 @@ from typing import Any, Literal, NamedTuple
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 from pm_agent.agent import LOG_DIR, run_submission
-from pm_agent.models import Charter, Criterion, Project, Requirement, Requirements
+from pm_agent.models import Charter, Criterion, Design, Project, Requirement, Requirements
 from pm_agent.tools import Submission
 from pm_agent.tracking import _fill
 from pm_agent.workbench import DATA_DIR, InputError, _cell, _date, _md, _reason
@@ -54,6 +54,8 @@ class Lifecycle(BaseModel):
     charter_ok: Approval | None = None
     requirements: Requirements | None = None
     requirements_ok: Approval | None = None
+    design: Design | None = None
+    design_ok: Approval | None = None
 
 
 class Check(NamedTuple):
@@ -97,6 +99,10 @@ def _requirements_digest(life: Lifecycle) -> str:
     return _digest(life.project, life.charter, life.requirements)
 
 
+def _design_digest(life: Lifecycle) -> str:
+    return _digest(life.project, life.charter, life.requirements, life.design)
+
+
 def _state(artefact: Any, approval: Approval | None, digest: str) -> State:
     if artefact is None:
         return "offen"
@@ -115,6 +121,20 @@ def requirements_state(life: Lifecycle | None) -> State:
     if life is None:
         return "offen"
     return _state(life.requirements, life.requirements_ok, _requirements_digest(life))
+
+
+def design_state(life: Lifecycle | None) -> State:
+    if life is None:
+        return "offen"
+    return _state(life.design, life.design_ok, _design_digest(life))
+
+
+def approved_design(life: Lifecycle | None) -> Design | None:
+    """The design as approved, or None. It does not need approved requirements: the gates
+    are soft."""
+    if life is None or design_state(life) != "freigegeben":
+        return None
+    return life.design
 
 
 def approved_requirements(life: Lifecycle | None) -> list[Requirement] | None:

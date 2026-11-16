@@ -6,20 +6,23 @@ from test_tools import PROJECT
 
 from pm_agent import lifecycle
 from pm_agent.lifecycle import (
+    Approval,
     Lifecycle,
     approve_charter,
     approve_requirements,
+    approved_design,
     approved_requirements,
     charter_state,
     check_charter,
     check_requirements,
     criteria_lines,
+    design_state,
     lines_to_criteria,
     requirement_rows,
     requirements_state,
     rows_to_requirements,
 )
-from pm_agent.models import Charter, Requirements
+from pm_agent.models import Charter, Design, Requirements
 from pm_agent.workbench import InputError
 
 NOW = datetime(2026, 11, 16, 10, 0)
@@ -277,3 +280,64 @@ def test_an_acceptance_criterion_has_no_semicolon():
     assert invalid_input(err.value) == [
         "Ungültige Eingabe bei criteria.0: darf kein Semikolon enthalten"
     ]
+
+
+def design(**changes):
+    """Studierende use the web front end, which calls the server to book a room."""
+    data = {
+        "components": [
+            {"id": "B1", "name": "Studierende", "kind": "Rolle"},
+            {"id": "B2", "name": "Web", "kind": "Komponente", "purpose": "Oberfläche"},
+            {"id": "B3", "name": "Server", "kind": "Komponente"},
+        ],
+        "interfaces": [
+            {
+                "id": "S1",
+                "name": "Buchung anlegen",
+                "provider": "B3",
+                "consumers": ["B2"],
+                "input": [{"name": "raum", "type": "Text"}, {"name": "datum", "type": "Datum"}],
+                "output": [{"name": "buchung_id", "type": "Ganzzahl"}],
+                "errors": [{"code": "409", "meaning": "Raum belegt"}],
+            }
+        ],
+        "flows": [
+            {
+                "id": "A1",
+                "title": "Raum buchen",
+                "requirement_ids": ["R1"],
+                "steps": [
+                    {"sender": "B1", "receiver": "B2", "text": "wählt Raum und Datum"},
+                    {"sender": "B2", "receiver": "B3", "interface": "S1"},
+                    {"sender": "B3", "receiver": "B2", "kind": "Antwort", "interface": "S1"},
+                ],
+            }
+        ],
+    }
+    return Design.model_validate({**data, **changes})
+
+
+def test_an_old_file_without_a_design_still_loads(tmp_path):
+    path = tmp_path / "vorhaben.json"
+    old = Lifecycle(project=PROJECT).model_dump_json(exclude={"design", "design_ok"})
+    path.write_text(old, encoding="utf-8")
+    assert lifecycle.load(path).design is None
+
+
+def test_the_design_approval_holds_until_anything_upstream_changes():
+    life = Lifecycle(project=PROJECT, charter=charter(), requirements=requirements())
+    assert design_state(life) == "offen"
+    life = life.model_copy(update={"design": design()})
+    assert design_state(life) == "entwurf" and approved_design(life) is None
+    life = life.model_copy(
+        update={"design_ok": Approval(at=NOW, digest=lifecycle._design_digest(life))}
+    )
+    assert design_state(life) == "freigegeben" and approved_design(life) == design()
+    for upstream in [
+        {"requirements": requirements(need("R1"), need("R2", sources=["K2"], title="Neu"))},
+        {"charter": charter(goal="Mehr")},
+        {"project": PROJECT.model_copy(update={"deadline": date(2027, 1, 29)})},
+        {"design": design(interfaces=[])},
+    ]:
+        changed = life.model_copy(update=upstream)
+        assert design_state(changed) == "geändert" and approved_design(changed) is None
