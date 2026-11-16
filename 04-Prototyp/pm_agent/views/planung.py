@@ -315,7 +315,12 @@ with tabs[0]:
         st.info(
             "Noch kein Teammitglied. Trage pro Zeile eine Person mit Skills und Wochenstunden ein."
         )
-    if team and st.button("Team lokal speichern", icon=":material/save:"):
+    # The saved file could not be read; it may still be rescued by hand. Replaced on purpose.
+    replace = not state.team_file_error or st.checkbox(
+        "Die beschädigte Team-Datei durch dieses Team ersetzen. Ihr Inhalt geht verloren.",
+        key="team_replace_damaged",
+    )
+    if team and st.button("Team lokal speichern", icon=":material/save:", disabled=not replace):
         place = f"{TEAM_FILE.parent.name}/{TEAM_FILE.name}"
         try:
             save_team(team)
@@ -436,7 +441,7 @@ with tabs[2]:
         st.caption("Zeigt einen früheren Plan ohne neuen Aufruf von Claude.")
         try:
             runs = saved_runs()
-        except ValueError as err:  # a damaged log file
+        except (OSError, ValueError) as err:  # a damaged log file, or one that cannot be read
             runs = []
             st.error(f"Protokolle in logs/ konnten nicht gelesen werden: {err}")
         if not runs:

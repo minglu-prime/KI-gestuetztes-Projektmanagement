@@ -6,8 +6,10 @@ and asks its health endpoint. No Streamlit in here.
 
 import atexit
 import json
+import os
 import subprocess
 import sys
+import tempfile
 import time
 import urllib.error
 import urllib.request
@@ -17,7 +19,8 @@ from typing import Any
 KI_LAB_DIR = Path(__file__).resolve().parents[3] / "ki_lab"
 PORT = 8874  # the lab's default port
 
-_process: subprocess.Popen[str] | None = None
+_process: subprocess.Popen[bytes] | None = None
+_messages: Any = None  # the temporary file the running lab writes its messages to
 
 
 class LabError(RuntimeError):
@@ -63,32 +66,43 @@ def start(
 ) -> None:
     """Run the lab as a child process and return once it answers. `frame_origins` are the
     pages that may show it in a frame; the lab accepts only pages on this computer."""
-    global _process
+    global _process, _messages
     command = [sys.executable, "server.py", "--port", str(port)]
     for origin in frame_origins:
         command += ["--allow-frame", origin]
     if db is not None:
         command += ["--db", str(db)]
-    process = subprocess.Popen(
-        command,
-        cwd=KI_LAB_DIR,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.PIPE,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-    )
+    # The lab's messages go to a temporary file, not to a pipe: nobody reads a pipe once the
+    # lab runs, and a few tracebacks of aborted connections would fill it and block the lab.
+    # The file is deleted when it is closed; only the reason of a failed start is read.
+    messages = tempfile.TemporaryFile()
+    try:
+        process = subprocess.Popen(
+            command,
+            cwd=KI_LAB_DIR,
+            stdout=subprocess.DEVNULL,
+            stderr=messages,
+            # Otherwise Windows writes them in the code page of the computer.
+            env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+        )
+    except OSError as err:  # the folder is missing, or Python cannot be run
+        messages.close()
+        raise LabError(f"Das KI-Lab konnte nicht gestartet werden: {err}") from err
     deadline = time.monotonic() + wait
     while time.monotonic() < deadline:
         if process.poll() is not None:
-            said = (process.stderr.read() if process.stderr else "").strip().splitlines()
+            messages.seek(0)
+            said = messages.read().decode("utf-8", "replace").strip().splitlines()
+            messages.close()
             reason = said[-1] if said else f"Exit-Code {process.returncode}"
             raise LabError(f"Das KI-Lab hat sich beim Start beendet: {reason}")
         if health(port) is not None:
-            _process = process
+            _process, _messages = process, messages
             return
         time.sleep(0.2)
     process.kill()
+    process.wait()
+    messages.close()
     raise LabError(f"Das KI-Lab antwortet nach {wait:g} Sekunden nicht auf Port {port}.")
 
 
@@ -99,7 +113,7 @@ def started_here() -> bool:
 
 def stop() -> None:
     """End the lab this program started. A lab started elsewhere is left alone."""
-    global _process
+    global _process, _messages
     if _process is None:
         return
     _process.terminate()
@@ -109,6 +123,9 @@ def stop() -> None:
         _process.kill()
         _process.wait()
     _process = None
+    if _messages is not None:
+        _messages.close()
+        _messages = None
 
 
 atexit.register(stop)  # do not leave the child running when the app ends normally

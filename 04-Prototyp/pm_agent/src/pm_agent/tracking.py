@@ -220,7 +220,11 @@ def load(path: Path | None = None) -> Tracking | None:
     if not path.exists():
         return None
     try:
-        return Tracking.model_validate(json.loads(path.read_text(encoding="utf-8")))
+        text = path.read_text(encoding="utf-8")
+    except OSError as err:  # locked, no permission, a folder of that name
+        raise InputError(f"{path.name} konnte nicht gelesen werden: {err}") from err
+    try:
+        return Tracking.model_validate(json.loads(text))
     except (ValueError, ValidationError) as err:
         raise InputError(f"{path.name} ist beschädigt: {_reason(err)}") from err
 

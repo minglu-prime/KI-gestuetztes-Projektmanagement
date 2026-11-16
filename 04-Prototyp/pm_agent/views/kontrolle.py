@@ -121,9 +121,8 @@ if tracking is not None:
             st.caption(
                 "Lädt die unfertigen Aufgaben als Plan ab heute in die Planung. Dort lässt er "
                 "sich im Gespräch mit Claude ändern und wieder als Projekt übernehmen. Das "
-                "übernommene Projekt bleibt bis dahin, wie es ist. Wird der neue Plan "
-                "übernommen, ersetzt er es: Fertige Aufgaben und erfasste Stunden gehören "
-                "dann nicht mehr dazu."
+                "übernommene Projekt bleibt bis dahin, wie es ist. Beim Übernehmen entscheidest "
+                "du, ob fertige Aufgaben und erfasste Stunden als frühere Arbeit bleiben."
             )
 
             kinds = ["Plan", "Prognose"]
