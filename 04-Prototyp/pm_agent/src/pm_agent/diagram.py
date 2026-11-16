@@ -93,7 +93,10 @@ def sequence_svg(flow: Flow, design: Design) -> str:
 def _mermaid(text: str) -> str:
     # Mermaid reads ";" as a line break and "#" as the start of an entity.
     text = " ".join(text.split())
-    return text.translate({ord("#"): "#35;", ord(";"): "#59;"})  # one pass: "#35;" has a ";"
+    # A backtick could end the code block the document puts the diagram in.
+    return text.translate(
+        {ord("#"): "#35;", ord(";"): "#59;", ord("`"): "#96;"}
+    )  # one pass: "#35;" has a ";"
 
 
 def sequence_mermaid(flow: Flow, design: Design) -> str:

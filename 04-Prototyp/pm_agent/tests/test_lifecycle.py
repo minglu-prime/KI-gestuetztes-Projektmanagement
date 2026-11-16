@@ -531,3 +531,44 @@ def test_a_flow_without_steps_and_an_empty_design_are_reported():
         rows_to_design(rows)
     with pytest.raises(InputError, match="Noch kein Entwurf"):
         rows_to_design({"components": [], "interfaces": [], "flows": [], "steps": []})
+
+
+def test_a_design_that_misses_a_muss_requirement_goes_back_to_claude(api, tmp_path):
+    from test_agent_loop import read_log, reply
+
+    from pm_agent.tracking import agent_runs
+
+    replies, requests = api
+    two = requirements(need("R1"), need("R2", title="Stornieren", sources=["K2"]))
+    second = {**design().flows[0].model_dump(), "id": "A2", "requirement_ids": ["R2"]}
+    whole = design(flows=[*design().model_dump()["flows"], second])
+    replies += [
+        reply([call("submit_entwurf", design().model_dump(mode="json"), "c1")]),
+        reply([call("submit_entwurf", whole.model_dump(mode="json"), "c2")]),
+    ]
+    result = lifecycle.run_design(PROJECT, charter(), two, log_dir=tmp_path)
+    assert result == whole
+    sent = json.dumps(requests[0], ensure_ascii=False)
+    assert "Stornieren" in sent and "hours_per_week" not in sent  # no team data
+    assert "'R2' (Stornieren) hat keinen Ablauf" in json.dumps(
+        requests[1]["messages"][-1], ensure_ascii=False
+    )
+    assert read_log(tmp_path, "entwurf")["outcome"] == "entwurf"
+    assert [(r["Agent"], r["Ergebnis"]) for r in agent_runs(tmp_path)] == [("Entwurf", "Entwurf")]
+
+
+def test_the_design_document_lists_parts_contracts_and_draws_each_flow():
+    life = Lifecycle(project=PROJECT, charter=charter(), requirements=ONE, design=design())
+    text = lifecycle.design_document(life)
+    assert text.startswith("# Entwurf")
+    assert "**Stand:** Entwurf, nicht freigegeben" in text
+    assert "| B1 | Studierende | Rolle | – |" in text
+    assert (
+        "| S1 | Buchung anlegen | B3 | B2 | raum: Text, datum: Datum | buchung_id: Ganzzahl "
+        "| 409 Raum belegt |" in text
+    )
+    assert "### A1 · Raum buchen\n\nDient: R1\n\n```mermaid\nsequenceDiagram" in text
+    approved = lifecycle.design_document(approve_design(life, NOW))
+    assert "**Stand:** Freigegeben am 16.11.2026 10:00" in approved
+    with pytest.raises(InputError, match="kein Dokument"):
+        lifecycle.design_document(Lifecycle(project=PROJECT))

@@ -18,6 +18,7 @@ from typing import Any, Literal, NamedTuple
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 from pm_agent.agent import LOG_DIR, run_submission
+from pm_agent.diagram import sequence_mermaid
 from pm_agent.models import (
     Charter,
     Component,
@@ -652,6 +653,83 @@ def run_requirements(
         indent=2,
     )
     return run_submission("anforderungen", submission, data, log_dir, on_round)
+
+
+def run_design(
+    project: Project,
+    charter: Charter | None,
+    requirements: Requirements | None,
+    log_dir: Path | None = LOG_DIR,
+    on_round: Callable[[dict[str, Any]], None] | None = None,
+) -> Design:
+    """Claude drafts the design from charter and requirements; Python rejects it until it
+    passes `check_design`. No team data goes to the API. Raises AgentError."""
+    submission = Submission(
+        name="submit_entwurf",
+        noun="Entwurf",
+        description=(
+            "Reicht den Entwurf ein. Lehnt ihn ab, wenn ein Ablauf unbekannte Bausteine oder "
+            "Schnittstellen nennt, einem Vertrag widerspricht, eine Schnittstelle in keinem "
+            "Ablauf vorkommt, eine Muss-Anforderung keinen Ablauf hat oder eine ID doppelt "
+            "vorkommt, und nennt die Gründe."
+        ),
+        schema=Design,
+        check=lambda design: check_design(design, requirements).errors,
+    )
+    data = json.dumps(
+        {
+            "projekt": project.model_dump(mode="json"),
+            "projektauftrag": charter.model_dump(mode="json") if charter else None,
+            "anforderungen": requirements.model_dump(mode="json") if requirements else None,
+        },
+        ensure_ascii=False,
+        indent=2,
+    )
+    return run_submission("entwurf", submission, data, log_dir, on_round)
+
+
+def design_document(life: Lifecycle) -> str:
+    """The design as Markdown: parts, contracts, and each flow with its Mermaid diagram."""
+    design, project = life.design, life.project
+    if design is None or project is None:
+        raise InputError("Ohne Projektdaten und Entwurf gibt es kein Dokument.")
+    parts = "\n".join(
+        f"| {_md(c.id)} | {_md(c.name)} | {c.kind} | {_md(c.purpose) or '–'} |"
+        for c in design.components
+    )
+    contracts = "\n".join(
+        "| "
+        + " | ".join(
+            _md(cell) or "–"
+            for cell in [
+                i.id,
+                i.name,
+                i.provider,
+                ", ".join(i.consumers),
+                fields_text(i.input),
+                fields_text(i.output),
+                errors_text(i.errors),
+            ]
+        )
+        + " |"
+        for i in design.interfaces
+    )
+    flows = "\n\n".join(
+        f"### {_md(f.id)} · {_md(f.title)}\n\n"
+        f"Dient: {_md(', '.join(f.requirement_ids)) or 'keiner Anforderung'}\n\n"
+        f"```mermaid\n{sequence_mermaid(f, design)}\n```"
+        for f in design.flows
+    )
+    return _fill(
+        "entwurf.md",
+        projekt=_md(project.idea),
+        start=_date(project.start_date),
+        deadline=_date(project.deadline),
+        stand=_stand(design_state(life), life.design_ok),
+        bausteine=parts,
+        schnittstellen=contracts or "| – | | | | | | |",
+        ablaeufe=flows,
+    )
 
 
 def charter_document(life: Lifecycle) -> str:
