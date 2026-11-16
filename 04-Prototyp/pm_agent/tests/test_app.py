@@ -1657,3 +1657,28 @@ def test_the_rest_does_not_ask_for_requirements_that_are_done(site):
     assert at.session_state["covered"] == frozenset({"R1"})
     # R1 was served by the finished A, which is not in the rest: no warning about it.
     assert not any("'R1'" in w.value for w in at.warning)
+
+
+def test_the_kontrolle_shows_progress_per_requirement(site):
+    data = plan_input()
+    data["tasks"][0]["requirement_ids"] = ["R1"]
+    data["tasks"][1]["requirement_ids"] = ["R1"]
+    tracking.adopt(PROJECT, TEAM, Plan.model_validate(data), requirements=NEEDS.items)
+    tracking.save(tracking.apply_rows(tracking.load(), [{"ID": "A", "Status": "fertig"}]))
+    at = site.switch_page("views/kontrolle.py").run()
+    assert not at.exception
+    (table,) = [d.value for d in at.dataframe if "Anforderung" in d.value.columns]
+    assert table.to_dict("records") == [
+        {
+            "ID": "R1",
+            "Anforderung": "Raum buchen",
+            "Priorität": "Muss",
+            "Aufgaben": "A, B",
+            "Fertig": "1 von 2",
+        }
+    ]
+
+
+def test_without_requirements_the_kontrolle_says_why_it_cannot_trace(tracked):
+    at = tracked.switch_page("views/kontrolle.py").run()
+    assert any("ohne freigegebene Anforderungen übernommen" in c.value for c in at.caption)

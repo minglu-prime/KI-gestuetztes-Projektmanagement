@@ -23,6 +23,7 @@ from pm_agent.tracking import (
     measure_effect,
     percent,
     planned_curve,
+    requirement_progress,
     signed_hours,
 )
 from pm_agent.ui import (
@@ -316,6 +317,21 @@ if tracking is not None:
                 )
             },
         )
+
+    with st.container(border=True, key="panel-requirements"):
+        heading("checklist", "Plan und Ist je Anforderung", python="rechnet")
+        if tracking.requirements:
+            st.dataframe(pd.DataFrame(requirement_progress(tracking)), hide_index=True)
+            st.caption(
+                "Die Anforderungen, mit denen der Plan übernommen wurde. Mitgezählt sind "
+                "fertige Aufgaben früherer Pläne."
+            )
+        else:
+            st.caption(
+                "Der Plan wurde ohne freigegebene Anforderungen übernommen: Es gibt keinen "
+                "Stand je Anforderung. Gib sie auf der Seite Anforderungen frei und übernimm "
+                "den Plan erneut."
+            )
 
     with st.container(border=True, key="panel-cost"):
         heading("euro", "Kosten", du="setzt den Stundensatz", python="rechnet")
