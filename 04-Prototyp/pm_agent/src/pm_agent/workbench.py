@@ -676,7 +676,7 @@ def to_markdown(project: Project, plan: Plan, result: CheckResult) -> str:
     lines = [
         "# Projektplan",
         "",
-        f"**Projekt:** {project.idea}  ",
+        f"**Projekt:** {_md(project.idea)}  ",
         f"**Zeitraum:** {_date(project.start_date)} bis {_date(project.deadline)}  ",
         f"**Planende:** {_date(result.end_date) if result.end_date else 'nicht berechenbar'}",
         "",
@@ -688,7 +688,8 @@ def to_markdown(project: Project, plan: Plan, result: CheckResult) -> str:
     for t in plan.tasks:
         s, a = dates.get(t.id), owner.get(t.id)
         lines.append(
-            f"| {t.id} | {_md(t.title)} | {a.member if a else ''} | {t.estimate_hours:g} | "
+            f"| {_md(t.id)} | {_md(t.title)} | {_md(a.member) if a else ''} | "
+            f"{t.estimate_hours:g} | "
             f"{_date(s.start) if s else ''} | {_date(s.end) if s else ''} | "
             f"{_md(a.reason) if a else ''} |"
         )
@@ -700,22 +701,39 @@ def to_markdown(project: Project, plan: Plan, result: CheckResult) -> str:
         ("Risiken", plan.risks),
     ):
         if items:
-            lines += ["", f"## {title}", ""] + [f"- {item}" for item in items]
+            lines += ["", f"## {title}", ""] + [f"- {_md(item)}" for item in items]
     return "\n".join(lines) + "\n"
 
 
 def to_csv(plan: Plan, result: CheckResult) -> str:
+    """The plan for German Excel: semicolons, a decimal comma, and a byte order mark, without
+    which Excel reads UTF-8 as cp1252 ("BegrÃ¼ndung")."""
     dates = {s.task_id: s for s in result.schedule}
     out = io.StringIO()
+    out.write("﻿")
     writer = csv.writer(out, delimiter=";")  # semicolon: German Excel splits it into columns
     writer.writerow(PLAN_COLUMNS[:6] + ["Start", "Ende", "Begründung"])
     for row in plan_rows(plan):
         s = dates.get(row["ID"])
         writer.writerow(
-            [row[c] for c in PLAN_COLUMNS[:6]]
-            + [_date(s.start) if s else "", _date(s.end) if s else "", row["Begründung"]]
+            [_csv_cell(row[c]) for c in PLAN_COLUMNS[:6]]
+            + [
+                _date(s.start) if s else "",
+                _date(s.end) if s else "",
+                _csv_cell(row["Begründung"]),
+            ]
         )
     return out.getvalue()
+
+
+def _csv_cell(value: Any) -> Any:
+    """A number with a decimal comma; text that Excel would run as a formula (it begins with
+    = + - @ or a tab or line break) with an apostrophe in front, so Excel shows it as text."""
+    if isinstance(value, float):
+        return f"{value:g}".replace(".", ",")
+    if isinstance(value, str) and value[:1] in ("=", "+", "-", "@", "\t", "\r", "\n"):
+        return "'" + value
+    return value
 
 
 def _skills(text: str) -> dict[str, int]:

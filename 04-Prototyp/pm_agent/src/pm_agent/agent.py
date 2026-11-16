@@ -148,8 +148,7 @@ def run_agent(
                 "rounds": [{"round": n, **item} for n, item in enumerate(rounds, start=1)],
                 **record(accepted),
             }
-            path = log_dir / f"{log_prefix}-{started:%Y%m%d-%H%M%S}.json"
-            path.write_text(json.dumps(entry, ensure_ascii=False, indent=2), encoding="utf-8")
+            _write_log(log_dir, log_prefix, started, entry)
 
 
 def _run(
@@ -200,6 +199,22 @@ def _run(
         said = " ".join(block.text for block in message.content if block.type == "text")
         raise AgentError(f"Claude hat aufgehört, ohne einen {noun} einzureichen. {said}".rstrip())
     raise AgentError(f"Claude hat nach {MAX_ROUNDS} Runden noch keinen gültigen {noun}.")
+
+
+def _write_log(log_dir: Path, prefix: str, started: datetime, entry: dict[str, Any]) -> Path:
+    """Write a run log under a name of its own. The name has seconds only, and two runs can
+    start in the same second: the second one gets "-2", and so on. "x" never overwrites."""
+    stem = f"{prefix}-{started:%Y%m%d-%H%M%S}"
+    text = json.dumps(entry, ensure_ascii=False, indent=2)
+    number = 1
+    while True:
+        path = log_dir / (f"{stem}.json" if number == 1 else f"{stem}-{number}.json")
+        try:
+            with path.open("x", encoding="utf-8") as file:
+                file.write(text)
+            return path
+        except FileExistsError:
+            number += 1
 
 
 def raise_for_stop_reason(stop_reason: str | None, refusal_category: str | None) -> None:

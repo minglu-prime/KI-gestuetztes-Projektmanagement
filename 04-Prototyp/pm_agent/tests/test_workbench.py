@@ -390,6 +390,46 @@ def test_export_contains_dates_reasons_and_warnings():
     assert result.end_date == date(2026, 11, 11)
 
 
+def tricky_plan(title, member="Anna", hours=2.5):
+    data = plan_input(member=member)
+    data["tasks"][0].update(title=title, estimate_hours=hours)
+    return Plan.model_validate(data)
+
+
+def test_the_csv_opens_in_german_excel_as_written():
+    # Excel reads UTF-8 without a byte order mark as cp1252 ("BegrÃ¼ndung"), and a German
+    # Excel reads "2.5" as a date, not as hours.
+    plan = tricky_plan("Datenmodell", hours=2.5)
+    text = to_csv(plan, check_plan(plan, TEAM, PROJECT))
+    assert text.startswith("﻿")
+    rows = list(csv.reader(io.StringIO(text.removeprefix("﻿")), delimiter=";"))
+    assert rows[1][:4] == ["A", "Datenmodell", "Anna", "2,5"]
+
+
+@pytest.mark.parametrize("title", ['=HYPERLINK("http://x")', "+1", "-2+3", "@SUMME(A1)"])
+def test_no_cell_of_the_csv_runs_as_a_formula(title):
+    # Titles come from Claude and from the editable table: Excel must show them, not run them.
+    plan = tricky_plan(title)
+    text = to_csv(plan, check_plan(plan, TEAM, PROJECT)).removeprefix("﻿")
+    rows = list(csv.reader(io.StringIO(text), delimiter=";"))
+    assert rows[1][1] == "'" + title
+
+
+def test_markdown_keeps_every_cell_and_line_in_its_place():
+    plan = tricky_plan("Daten")
+    idea = PROJECT.model_copy(update={"idea": "Raumbuchung\nfür Lerngruppen"})
+    data = plan.model_dump()
+    data["risks"] = ["Raumdaten\nfehlen"]
+    data["tasks"][0]["id"] = "A|1"
+    data["tasks"][1]["depends_on"] = ["A|1"]
+    data["assignments"][0]["task_id"] = "A|1"
+    plan = Plan.model_validate(data)
+    markdown = to_markdown(idea, plan, check_plan(plan, TEAM, idea))
+    assert "**Projekt:** Raumbuchung für Lerngruppen  " in markdown
+    assert "| A\\|1 | Daten | Anna |" in markdown
+    assert "- Raumdaten fehlen" in markdown
+
+
 def test_a_task_that_ends_on_the_deadline_does_not_cross_the_deadline_line():
     # The plan ends on Wed 11.11. With that day as the deadline the plan is on time (not
     # reported as late), so no bar may reach beyond the line.
