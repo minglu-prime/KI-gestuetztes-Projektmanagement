@@ -170,7 +170,11 @@ def load_team(path: Path = TEAM_FILE) -> list[Member]:
     if not path.exists():
         return []
     try:
-        return [Member.model_validate(m) for m in json.loads(path.read_text(encoding="utf-8"))]
+        text = path.read_text(encoding="utf-8")
+    except OSError as err:  # locked, no permission, a folder of that name
+        raise InputError(f"{path.name} konnte nicht gelesen werden: {err}") from err
+    try:
+        return [Member.model_validate(m) for m in json.loads(text)]
     except (ValueError, ValidationError) as err:
         raise InputError(f"{path.name} ist beschädigt: {_reason(err)}") from err
 
