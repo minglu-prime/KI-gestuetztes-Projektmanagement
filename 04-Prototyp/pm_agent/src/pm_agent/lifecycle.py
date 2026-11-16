@@ -213,6 +213,128 @@ def check_requirements(requirements: Requirements, charter: Charter | None) -> C
     return Check(errors, warnings)
 
 
+def _twice(ids: list[str], text: str) -> list[str]:
+    """One message per ID that occurs more than once; `text` has a {} for the ID."""
+    return [text.format(i) for i in dict.fromkeys(ids) if ids.count(i) > 1]
+
+
+def check_design(design: Design, requirements: Requirements | None) -> Check:
+    """Errors: duplicates, parts and interfaces that do not exist, steps against the
+    contract, unused interfaces, and, with requirements, flows for unknown ones and Muss
+    requirements without a flow. Checked against the requirements as they stand."""
+    parts = {c.id: c for c in design.components}
+    contracts = {i.id: i for i in design.interfaces}
+    errors = _twice([c.id for c in design.components], "Die Baustein-ID '{}' ist mehrfach vergeben")
+    errors += _twice(
+        [i.id for i in design.interfaces], "Die Schnittstellen-ID '{}' ist mehrfach vergeben"
+    )
+    errors += _twice([f.id for f in design.flows], "Die Ablauf-ID '{}' ist mehrfach vergeben")
+    for i in design.interfaces:
+        where = f"Schnittstelle '{i.id}': "
+        errors += _twice(
+            [f.name for f in i.input], where + "das Eingabefeld '{}' ist mehrfach vergeben"
+        )
+        errors += _twice(
+            [f.name for f in i.output], where + "das Ausgabefeld '{}' ist mehrfach vergeben"
+        )
+        errors += _twice(
+            [e.code for e in i.errors], where + "der Fehlercode '{}' ist mehrfach vergeben"
+        )
+        if i.provider not in parts:
+            errors.append(f"{where}der Anbieter '{i.provider}' ist kein bekannter Baustein")
+        elif parts[i.provider].kind == "Rolle":
+            errors.append(
+                f"{where}der Anbieter '{i.provider}' ist eine Rolle; eine Rolle bietet keine "
+                "Schnittstelle an"
+            )
+        errors += [
+            f"{where}der Nutzer '{c}' ist kein bekannter Baustein"
+            for c in i.consumers
+            if c not in parts
+        ]
+    loose = []
+    for flow in design.flows:
+        for number, step in enumerate(flow.steps, start=1):
+            where = f"Ablauf '{flow.id}', Schritt {number}: "
+            unknown = [
+                f"{where}der {role} '{part}' ist kein bekannter Baustein"
+                for role, part in [("Absender", step.sender), ("Empfänger", step.receiver)]
+                if part not in parts
+            ]
+            errors += unknown
+            if step.interface is None:
+                if (
+                    not unknown
+                    and step.sender != step.receiver
+                    and "Rolle" not in (parts[step.sender].kind, parts[step.receiver].kind)
+                ):
+                    loose.append(
+                        f"{where}{step.sender} und {step.receiver} reden ohne Schnittstelle "
+                        "miteinander"
+                    )
+                continue
+            contract = contracts.get(step.interface)
+            if contract is None:
+                errors.append(f"{where}die Schnittstelle '{step.interface}' ist unbekannt")
+                continue
+            if unknown:
+                continue
+            users = ", ".join(contract.consumers)
+            if step.kind == "Aufruf":
+                ok = step.receiver == contract.provider and step.sender in contract.consumers
+                rule = f"ein Aufruf von '{contract.id}' geht von {users} an {contract.provider}"
+            else:
+                ok = step.sender == contract.provider and step.receiver in contract.consumers
+                rule = f"eine Antwort von '{contract.id}' geht von {contract.provider} an {users}"
+            if not ok:
+                errors.append(f"{where}{rule}, nicht von {step.sender} an {step.receiver}")
+    used = {step.interface for flow in design.flows for step in flow.steps}
+    errors += [
+        f"Die Schnittstelle '{i.id}' ({i.name}) kommt in keinem Ablauf vor"
+        for i in design.interfaces
+        if i.id not in used
+    ]
+    warnings = []
+    if requirements is None:
+        warnings.append("Ohne Anforderungen lässt sich der Entwurf nicht gegen sie prüfen")
+    else:
+        known = {r.id for r in requirements.items}
+        errors += [
+            f"Ablauf '{flow.id}' dient der unbekannten Anforderung '{rid}'"
+            for flow in design.flows
+            for rid in flow.requirement_ids
+            if rid not in known
+        ]
+        served = {rid for flow in design.flows for rid in flow.requirement_ids}
+        for r in requirements.items:
+            if r.id not in served:
+                text = f"{r.priority}-Anforderung '{r.id}' ({r.title}) hat keinen Ablauf"
+                (errors if r.priority == "Muss" else warnings).append(text)
+    warnings += [
+        f"Ablauf '{f.id}' dient keiner Anforderung" for f in design.flows if not f.requirement_ids
+    ]
+    warnings += loose
+    present = {part for flow in design.flows for s in flow.steps for part in (s.sender, s.receiver)}
+    warnings += [
+        f"Der Baustein '{c.id}' ({c.name}) kommt in keinem Ablauf vor"
+        for c in design.components
+        if c.id not in present
+    ]
+    # Two interfaces with the same ID give the same messages twice.
+    return Check(list(dict.fromkeys(errors)), list(dict.fromkeys(warnings)))
+
+
+def approve_design(life: Lifecycle, now: datetime) -> Lifecycle:
+    """The project lead approves the design. Raises InputError while it has errors. The
+    requirements need not be approved: the gates are soft."""
+    if life.design is None:
+        raise InputError("Noch kein Entwurf zum Freigeben.")
+    errors = check_design(life.design, life.requirements).errors
+    if errors:
+        raise InputError("\n".join(errors))
+    return life.model_copy(update={"design_ok": Approval(at=now, digest=_design_digest(life))})
+
+
 def requirement_rows(requirements: Requirements) -> list[dict[str, Any]]:
     """The requirements as rows of the table editor. Acceptance criteria are separated by
     semicolons, success criteria by commas."""

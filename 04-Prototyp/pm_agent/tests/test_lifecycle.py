@@ -9,11 +9,13 @@ from pm_agent.lifecycle import (
     Approval,
     Lifecycle,
     approve_charter,
+    approve_design,
     approve_requirements,
     approved_design,
     approved_requirements,
     charter_state,
     check_charter,
+    check_design,
     check_requirements,
     criteria_lines,
     design_state,
@@ -341,3 +343,135 @@ def test_the_design_approval_holds_until_anything_upstream_changes():
     ]:
         changed = life.model_copy(update=upstream)
         assert design_state(changed) == "geändert" and approved_design(changed) is None
+
+
+ONE = requirements(need("R1"))
+
+
+def steps(*items):
+    return [{"id": "A1", "title": "Raum buchen", "requirement_ids": ["R1"], "steps": list(items)}]
+
+
+CALL = {"sender": "B2", "receiver": "B3", "interface": "S1"}
+REPLY = {"sender": "B3", "receiver": "B2", "kind": "Antwort", "interface": "S1"}
+
+
+def test_a_sound_design_passes_the_check():
+    assert check_design(design(), ONE) == ([], [])
+
+
+def test_ids_fields_and_error_codes_are_unique():
+    s1 = design().interfaces[0].model_dump()
+    twice = {
+        **s1,
+        "input": s1["input"] + [{"name": "raum", "type": "Zahl"}],
+        "output": s1["output"] * 2,
+        "errors": s1["errors"] * 2,
+    }
+    components = design().model_dump()["components"]
+    result = check_design(
+        design(components=components + [components[0]], interfaces=[twice, twice]), ONE
+    )
+    assert result.errors == [
+        "Die Baustein-ID 'B1' ist mehrfach vergeben",
+        "Die Schnittstellen-ID 'S1' ist mehrfach vergeben",
+        "Schnittstelle 'S1': das Eingabefeld 'raum' ist mehrfach vergeben",
+        "Schnittstelle 'S1': das Ausgabefeld 'buchung_id' ist mehrfach vergeben",
+        "Schnittstelle 'S1': der Fehlercode '409' ist mehrfach vergeben",
+    ]
+
+
+def test_providers_and_consumers_are_known_parts_and_no_role_provides():
+    s1 = design().interfaces[0].model_dump()
+    result = check_design(
+        design(interfaces=[{**s1, "provider": "B1", "consumers": ["B2", "B9"]}]), ONE
+    )
+    assert result.errors[:2] == [
+        "Schnittstelle 'S1': der Anbieter 'B1' ist eine Rolle; eine Rolle bietet keine "
+        "Schnittstelle an",
+        "Schnittstelle 'S1': der Nutzer 'B9' ist kein bekannter Baustein",
+    ]
+
+
+def test_steps_name_known_parts_and_interfaces_and_follow_the_contract():
+    result = check_design(
+        design(
+            flows=steps(
+                {"sender": "B1", "receiver": "B9"},
+                {"sender": "B2", "receiver": "B3", "interface": "S9"},
+                {"sender": "B3", "receiver": "B2", "interface": "S1"},
+                {"sender": "B2", "receiver": "B3", "kind": "Antwort", "interface": "S1"},
+            )
+        ),
+        ONE,
+    )
+    assert result.errors == [
+        "Ablauf 'A1', Schritt 1: der Empfänger 'B9' ist kein bekannter Baustein",
+        "Ablauf 'A1', Schritt 2: die Schnittstelle 'S9' ist unbekannt",
+        "Ablauf 'A1', Schritt 3: ein Aufruf von 'S1' geht von B2 an B3, nicht von B3 an B2",
+        "Ablauf 'A1', Schritt 4: eine Antwort von 'S1' geht von B3 an B2, nicht von B2 an B3",
+    ]
+
+
+def test_a_step_to_itself_without_interface_is_fine():
+    flows = steps(
+        {"sender": "B1", "receiver": "B2"}, CALL, {"sender": "B3", "receiver": "B3"}, REPLY
+    )
+    assert check_design(design(flows=flows), ONE) == ([], [])
+
+
+def test_a_removed_provider_is_an_error_not_a_crash():
+    components = [c for c in design().model_dump()["components"] if c["id"] != "B3"]
+    errors = check_design(design(components=components), ONE).errors
+    assert errors == [
+        "Schnittstelle 'S1': der Anbieter 'B3' ist kein bekannter Baustein",
+        "Ablauf 'A1', Schritt 2: der Empfänger 'B3' ist kein bekannter Baustein",
+        "Ablauf 'A1', Schritt 3: der Absender 'B3' ist kein bekannter Baustein",
+    ]
+
+
+def test_every_interface_is_used_and_every_muss_requirement_has_a_flow():
+    s2 = {**design().interfaces[0].model_dump(), "id": "S2", "name": "Buchung löschen"}
+    flows = [{**steps(CALL)[0], "requirement_ids": ["R1", "R9"]}]
+    reqs = requirements(need("R1"), need("R2", title="Stornieren"), need("R3", "Kann"))
+    result = check_design(
+        design(interfaces=[*design().model_dump()["interfaces"], s2], flows=flows), reqs
+    )
+    assert result.errors == [
+        "Die Schnittstelle 'S2' (Buchung löschen) kommt in keinem Ablauf vor",
+        "Ablauf 'A1' dient der unbekannten Anforderung 'R9'",
+        "Muss-Anforderung 'R2' (Stornieren) hat keinen Ablauf",
+    ]
+    assert result.warnings == [
+        "Kann-Anforderung 'R3' (Anforderung R3) hat keinen Ablauf",
+        "Der Baustein 'B1' (Studierende) kommt in keinem Ablauf vor",
+    ]
+
+
+def test_loose_ends_are_warnings():
+    flows = [{**steps({"sender": "B2", "receiver": "B3"}, CALL, REPLY)[0], "requirement_ids": []}]
+    result = check_design(design(flows=flows), ONE)
+    assert result.errors == ["Muss-Anforderung 'R1' (Anforderung R1) hat keinen Ablauf"]
+    assert result.warnings == [
+        "Ablauf 'A1' dient keiner Anforderung",
+        "Ablauf 'A1', Schritt 1: B2 und B3 reden ohne Schnittstelle miteinander",
+        "Der Baustein 'B1' (Studierende) kommt in keinem Ablauf vor",
+    ]
+
+
+def test_without_requirements_the_trace_is_a_warning():
+    flows = [{**steps(CALL, REPLY)[0], "requirement_ids": ["R9"]}]
+    result = check_design(design(flows=flows), None)
+    assert result.errors == []
+    assert result.warnings[0] == "Ohne Anforderungen lässt sich der Entwurf nicht gegen sie prüfen"
+
+
+def test_a_design_with_errors_cannot_be_approved_but_needs_no_approved_requirements():
+    life = Lifecycle(project=PROJECT, requirements=ONE, design=design())
+    assert design_state(approve_design(life, NOW)) == "freigegeben"
+    with pytest.raises(InputError, match="kein bekannter Baustein"):
+        approve_design(
+            life.model_copy(update={"design": design(components=[design().components[0]])}), NOW
+        )
+    with pytest.raises(InputError, match="Noch kein Entwurf"):
+        approve_design(Lifecycle(project=PROJECT), NOW)
