@@ -391,6 +391,13 @@ def hours_text(value: float) -> str:
     return f"{round(value, 1) + 0.0:.1f}".removesuffix(".0").replace(".", ",")
 
 
+def signed_hours(value: float) -> str:
+    """A deviation in hours, with its sign: +2, -1,5, +0. Sums of floats leave noise such as
+    2.8e-17; hours_text rounds it away."""
+    text = hours_text(value)
+    return text if text.startswith("-") else f"+{text}"
+
+
 def index_text(value: float | None, missing: str) -> str:
     """An index of the earned value analysis, the German way: 0.5 -> "0,50"."""
     return missing if value is None else f"{value:.2f}".replace(".", ",")
@@ -427,7 +434,8 @@ def _left(task: Task, done: Progress) -> float:
     of an open task and the estimate minus the booked hours of a started one."""
     if done.remaining_hours is not None:
         return done.remaining_hours
-    if done.status == "in Arbeit":
+    # Booked hours count even if the status was left at "offen".
+    if done.status == "in Arbeit" or done.actual_hours:
         left = round(task.estimate_hours - done.actual_hours, 6)
         # Only when nothing is left by the numbers. A rest under an hour is a rest; and
         # never more than the task itself, if that is shorter than the hour.
@@ -639,6 +647,13 @@ def next_step(tracking: Tracking, today: date) -> tuple[str, str]:
             "Ende rückt.",
             "kontrolle",
         )
+    if outlook.shift > 0:
+        days = "1 Arbeitstag" if outlook.shift == 1 else f"{outlook.shift} Arbeitstage"
+        return (
+            f"Nach heutigem Stand endet das Projekt {days} später als geplant; die Deadline "
+            "hält noch. Die Seite Kontrolle zeigt, welche Aufgaben das Ende verschieben.",
+            "kontrolle",
+        )
     if not has_progress(tracking):
         return (
             "Noch kein Fortschritt erfasst. Trage Status und Ist-Stunden auf der Seite "
@@ -785,7 +800,9 @@ def status_report(
             "Durchführung vor."
         )
     else:
-        steps = "\n".join(f"- **{step.task_id}:** {step.action}" for step in summary.next_steps)
+        steps = "\n".join(
+            f"- **{_md(step.task_id)}:** {_md(step.action)}" for step in summary.next_steps
+        )
         note = "*Vorschlag des Durchführungs-Agenten (Claude), von der Projektleitung zu prüfen.*"
         text = "\n\n".join(filter(None, [summary.summary, steps, note]))
     count = {status: sum(t.status == status for t in tasks) for status in STATUSES}
@@ -802,12 +819,13 @@ def status_report(
         head = ["| Person | ID | Aufgabe | Beginn | Ende | Status |", "|---|---|---|---|---|---|"]
         coming = "\n".join(head + rows)
     overdue = [
-        f"- {t.id} · {t.title} ({t.member}), geplant bis {_date(t.planned_end)}, Status: {t.status}"
+        f"- {_md(t.id)} · {_md(t.title)} ({_md(t.member)}), geplant bis "
+        f"{_date(t.planned_end)}, Status: {t.status}"
         for t in evaluation.overdue
     ]
     return _fill(
         "statusbericht.md",
-        projekt=project.idea,
+        projekt=_md(project.idea),
         stand=_date(evaluation.today),
         start=_date(project.start_date),
         deadline=_date(project.deadline),
@@ -818,18 +836,18 @@ def status_report(
         fertig=count["fertig"],
         in_arbeit=count["in Arbeit"],
         offen=count["offen"],
-        plan_h=f"{evaluation.planned_hours:g}",
-        ist_h=f"{evaluation.actual_hours:g}",
-        abweichung=f"{evaluation.finished_deviation:+g}",
+        plan_h=hours_text(evaluation.planned_hours),
+        ist_h=hours_text(evaluation.actual_hours),
+        abweichung=signed_hours(evaluation.finished_deviation),
         zusammenfassung=text,
         verzug="\n".join(overdue) or "Keine Aufgabe im Verzug.",
         aufgaben="\n".join(
-            f"| {t.id} | {_md(t.title)} | {t.member} | {t.status} | {t.planned_hours:g} | "
-            f"{t.actual_hours:g} | {_md(t.note)} |"
+            f"| {_md(t.id)} | {_md(t.title)} | {_md(t.member)} | {t.status} | "
+            f"{hours_text(t.planned_hours)} | {hours_text(t.actual_hours)} | {_md(t.note)} |"
             for t in tasks
         ),
         frueher=_history_text(tracking),
-        risiken="\n".join(f"- {r}" for r in tracking.plan.risks) or "Keine Risiken erfasst.",
+        risiken="\n".join(f"- {_md(r)}" for r in tracking.plan.risks) or "Keine Risiken erfasst.",
     )
 
 
@@ -894,16 +912,16 @@ def control_document(
         judgement = "\n\n".join([f"**Bewertung:** {report.assessment}", findings, table, note])
     return _fill(
         "kontrollbericht.md",
-        projekt=project.idea,
+        projekt=_md(project.idea),
         stand=_date(today),
         start=_date(project.start_date),
         deadline=_date(project.deadline),
         planende=_date(max(t.planned_end for t in evaluation.tasks)),
         prognose=forecast_text(outlook, project.deadline),
         fortschritt=percent(evaluation.progress),
-        plan_h=f"{evaluation.planned_hours:g}",
-        ist_h=f"{evaluation.actual_hours:g}",
-        abweichung=f"{evaluation.finished_deviation:+g}",
+        plan_h=hours_text(evaluation.planned_hours),
+        ist_h=hours_text(evaluation.actual_hours),
+        abweichung=signed_hours(evaluation.finished_deviation),
         kosten=cost,
         planwert=hours_text(value.planned),
         fertigwert=hours_text(value.earned),
@@ -911,8 +929,8 @@ def control_document(
         cpi=index_text(value.cost_index, NO_COST_INDEX),
         verzug="\n".join(overdue) or "Keine Aufgabe im Verzug.",
         personen="\n".join(
-            f"| {_md(row['Person'])} | {row['Plan (h)']:g} | {row['Ist (h)']:g} | "
-            f"{row['Fertig (Plan-h)']:g} |"
+            f"| {_md(row['Person'])} | {hours_text(row['Plan (h)'])} | "
+            f"{hours_text(row['Ist (h)'])} | {hours_text(row['Fertig (Plan-h)'])} |"
             for row in evaluation.by_member
         ),
         frueher=_history_text(tracking),
@@ -930,12 +948,12 @@ def work_packages(tracking: Tracking) -> str:
         packages.append(
             "\n".join(
                 [
-                    f"## {task.id} · {task.title}",
+                    f"## {_md(task.id)} · {_md(task.title)}",
                     "",
                     "| | |",
                     "|---|---|",
-                    f"| Verantwortlich | {state.member} |",
-                    f"| Aufwand | {task.estimate_hours:g} h |",
+                    f"| Verantwortlich | {_md(state.member)} |",
+                    f"| Aufwand | {hours_text(task.estimate_hours)} h |",
                     f"| Zeitraum | {_date(state.planned_start)} bis {_date(state.planned_end)} |",
                     f"| Abhängig von | {', '.join(task.depends_on) or '–'} |",
                     f"| Benötigte Skills | {_md(', '.join(task.required_skills)) or '–'} |",
@@ -948,7 +966,7 @@ def work_packages(tracking: Tracking) -> str:
         )
     return _fill(
         "arbeitspakete.md",
-        projekt=project.idea,
+        projekt=_md(project.idea),
         start=_date(project.start_date),
         deadline=_date(project.deadline),
         pakete="\n\n".join(packages),
@@ -965,7 +983,25 @@ def agent_runs(log_dir: Path | None = None) -> list[dict[str, Any]]:
     ]
     runs = []
     for _, agent, path in sorted(paths, key=lambda item: item[0], reverse=True):
-        record = json.loads(path.read_text(encoding="utf-8"))
+        try:
+            record = json.loads(path.read_text(encoding="utf-8"))
+            if not isinstance(record, dict):
+                raise ValueError("kein JSON-Objekt")
+        except (OSError, ValueError) as err:
+            # A log cut off while it was written. It stays in the overview with the reason;
+            # its time and tokens are not known.
+            runs.append(
+                {
+                    "Lauf": path.name,
+                    "Agent": agent,
+                    "Ergebnis": f"Protokoll unlesbar: {err}",
+                    "Dauer (s)": None,
+                    "Runden": None,
+                    "Eingabe-Token": None,
+                    "Ausgabe-Token": None,
+                }
+            )
+            continue
         usages = [r.get("usage", {}) for r in record.get("rounds", [])]
         outcome = record.get("outcome", "error")
         runs.append(

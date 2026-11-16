@@ -23,6 +23,7 @@ from pm_agent.tracking import (
     measure_effect,
     percent,
     planned_curve,
+    signed_hours,
 )
 from pm_agent.ui import (
     LEGEND,
@@ -56,9 +57,9 @@ if tracking is not None:
         st.info("Noch kein Fortschritt erfasst. Trage ihn auf der Seite Durchführung ein.")
     a, b, c, d = st.columns(4)
     a.metric("Fortschritt", percent(result.progress))
-    b.metric("Planstunden", f"{result.planned_hours:g} h")
-    c.metric("Ist-Stunden bisher", f"{result.actual_hours:g} h")
-    d.metric("Abweichung fertiger Aufgaben", f"{result.finished_deviation:+g} h")
+    b.metric("Planstunden", f"{hours_text(result.planned_hours)} h")
+    c.metric("Ist-Stunden bisher", f"{hours_text(result.actual_hours)} h")
+    d.metric("Abweichung fertiger Aufgaben", f"{signed_hours(result.finished_deviation)} h")
 
     if result.overdue:
         st.warning(
@@ -409,11 +410,7 @@ if tracking is not None:
 
 with st.container(border=True, key="panel-effort"):
     heading("timer", "Aufwand der Agenten")
-    try:
-        runs = agent_runs()
-    except ValueError as err:  # a damaged log file
-        runs = []
-        st.error(f"Protokolle in logs/ konnten nicht gelesen werden: {err}")
+    runs = agent_runs()  # a damaged log is a row that says so
     if runs:
         st.dataframe(pd.DataFrame(runs), hide_index=True)
         st.caption(
