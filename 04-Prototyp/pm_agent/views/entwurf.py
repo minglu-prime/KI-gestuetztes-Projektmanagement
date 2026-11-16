@@ -194,7 +194,11 @@ if life.design is not None:
             key="design_flow",
         )
         if chosen is not None:
-            st.html(f'<div class="diagram">{sequence_svg(flows[chosen], life.design)}</div>')
+            # st.html sanitizes SVG away. The SVG is built by Python with every text escaped.
+            st.markdown(
+                f'<div class="diagram">{sequence_svg(flows[chosen], life.design)}</div>',
+                unsafe_allow_html=True,
+            )
 
 # 5 · Freigabe ---------------------------------------------------------------------------
 with st.container(border=True, key="panel-approve"):

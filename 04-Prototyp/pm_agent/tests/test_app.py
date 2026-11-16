@@ -1760,7 +1760,7 @@ def test_a_design_from_claude_is_drawn_checked_and_approved(site, monkeypatch):
     tables = design_tables(at)
     assert sorted(tables) == ["components", "flows", "interfaces", "steps"]
     assert list(tables["steps"]["Von"]) == ["B1", "B2", "B3"]
-    assert any("<svg" in h.value and "Buchung anlegen" in h.value for h in at.html)
+    assert any("<svg" in m.value and "Buchung anlegen" in m.value for m in at.markdown)
 
     button(at, "Entwurf freigeben").click()
     at = at.run()
