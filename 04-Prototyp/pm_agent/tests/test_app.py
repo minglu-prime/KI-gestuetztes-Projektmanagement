@@ -15,9 +15,9 @@ import streamlit as st
 from streamlit.testing.v1 import AppTest
 from test_tools import PROJECT, TEAM, plan_input
 
-from pm_agent import agent, followup, lab_server, tracking, ui, workbench
+from pm_agent import agent, followup, lab_server, lifecycle, tracking, ui, workbench
 from pm_agent.agent import AgentError, PlanningError
-from pm_agent.models import Absence, ControlReport, Plan, StatusSummary
+from pm_agent.models import Absence, Charter, ControlReport, Criterion, Plan, StatusSummary
 
 SITE = Path(__file__).parents[1] / "app.py"
 PAGES = "views"
@@ -33,6 +33,7 @@ def local(monkeypatch, tmp_path):
     monkeypatch.setattr(workbench, "RUNS_CSV", tmp_path / "runs.csv")
     monkeypatch.setattr(tracking, "PROJECT_FILE", tmp_path / "projekt.json")
     monkeypatch.setattr(tracking, "LOG_DIR", tmp_path)
+    monkeypatch.setattr(lifecycle, "FILE", tmp_path / "vorhaben.json")
     with socket.socket() as probe:  # a port where nothing listens
         probe.bind(("127.0.0.1", 0))
         monkeypatch.setattr(lab_server, "PORT", probe.getsockname()[1])
@@ -543,6 +544,7 @@ def test_every_menu_entry_opens_and_explains_its_empty_state(site):
         "views/durchfuehrung.py": ("Durchführung", "Noch kein Projekt übernommen."),
         "views/kontrolle.py": ("Kontrolle", "Noch kein Projekt übernommen."),
         "views/ki_lab.py": ("KI-Lab", "Das KI-Lab läuft noch nicht."),
+        "views/auftrag.py": ("Projektauftrag", "Noch kein Projektauftrag."),
     }
     for path, (header, info) in expected.items():
         at = site.switch_page(path).run()
@@ -1330,3 +1332,106 @@ def test_a_failing_agent_shows_the_reason_and_no_result(tracked, monkeypatch):
         "Kein Zugang zur Claude API: ANTHROPIC_API_KEY ist nicht gesetzt."
     ]
     assert "Bewertung" not in {m.label for m in at.metric}
+
+
+CHARTER = Charter(
+    goal="Lerngruppen buchen Räume online",
+    benefit="Kein Weg mehr zum Infoschalter",
+    in_scope=["Buchen", "Stornieren"],
+    stakeholders=["Studierende"],
+    success_criteria=[{"id": "K1", "text": "Eine Buchung dauert unter einer Minute"}],
+)
+
+
+def enter_project(at):
+    at.text_area(key="auftrag_idea").input(PROJECT.idea)
+    at.date_input(key="auftrag_start").set_value(PROJECT.start_date)
+    at.date_input(key="auftrag_deadline").set_value(PROJECT.deadline)
+    return at.run()
+
+
+def test_a_charter_from_claude_is_saved_as_draft_and_approved_by_the_lead(site, monkeypatch):
+    def drafted(project, on_round=None):
+        assert project == PROJECT
+        return CHARTER
+
+    monkeypatch.setattr(lifecycle, "run_charter", drafted)
+    at = enter_project(site.switch_page("views/auftrag.py").run())
+    button(at, "Projektauftrag mit Claude entwerfen").click()
+    at = at.run()
+    assert not at.exception and not at.error
+    saved = lifecycle.load()
+    assert (saved.project, saved.charter) == (PROJECT, CHARTER)
+    assert lifecycle.charter_state(saved) == "entwurf"
+    # What Claude drafted is in the fields, ready to change.
+    assert at.text_area(key="charter_goal").value == CHARTER.goal
+
+    button(at, "Projektauftrag freigeben").click()
+    at = at.run()
+    assert lifecycle.charter_state(lifecycle.load()) == "freigegeben"
+    assert "✓ Projektauftrag: freigegeben<" in chips(at)
+
+
+def test_a_charter_changed_after_approval_says_so(site):
+    life = lifecycle.Lifecycle(project=PROJECT, charter=CHARTER)
+    lifecycle.save(lifecycle.approve_charter(life, datetime.datetime(2026, 11, 16, 10, 0)))
+    at = site.switch_page("views/auftrag.py").run()
+    at.text_area(key="charter_goal").input("Räume und Geräte online buchen")
+    at = at.run()
+    assert any("nicht gespeichert" in c.value for c in at.caption)
+    assert button(at, "Projektauftrag freigeben").disabled  # unsaved edits first
+    button(at, "Änderungen speichern und prüfen").click()
+    at = at.run()
+    assert lifecycle.load().charter.goal == "Räume und Geräte online buchen"
+    assert "! Projektauftrag: seit der Freigabe geändert<" in chips(at)
+    assert not button(at, "Projektauftrag freigeben").disabled
+
+
+def test_a_charter_with_errors_cannot_be_approved(site):
+    twice = CHARTER.model_copy(
+        update={"success_criteria": [Criterion(id="K1", text="a"), Criterion(id="K1", text="b")]}
+    )
+    lifecycle.save(lifecycle.Lifecycle(project=PROJECT, charter=twice))
+    at = site.switch_page("views/auftrag.py").run()
+    assert any("'K1' ist mehrfach vergeben" in e.value for e in at.error)
+    assert button(at, "Projektauftrag freigeben").disabled
+
+
+def test_a_charter_written_by_hand_needs_no_claude(site):
+    at = enter_project(site.switch_page("views/auftrag.py").run())
+    at.text_area(key="charter_goal").input(CHARTER.goal)
+    at.text_area(key="charter_benefit").input(CHARTER.benefit)
+    at.text_area(key="charter_in_scope").input("Buchen\nStornieren")
+    at.text_area(key="charter_criteria").input("K1: Eine Buchung dauert unter einer Minute")
+    at = at.run()
+    button(at, "Änderungen speichern und prüfen").click()
+    at = at.run()
+    assert not at.exception and not at.error
+    assert lifecycle.load().charter.in_scope == ["Buchen", "Stornieren"]
+
+
+def test_an_agent_error_on_the_auftrag_is_shown(site, monkeypatch):
+    def failing(project, on_round=None):
+        raise AgentError("Kein Zugang zur Claude API: ANTHROPIC_API_KEY ist nicht gesetzt.")
+
+    monkeypatch.setattr(lifecycle, "run_charter", failing)
+    at = enter_project(site.switch_page("views/auftrag.py").run())
+    button(at, "Projektauftrag mit Claude entwerfen").click()
+    at = at.run()
+    assert not at.exception
+    assert "ANTHROPIC_API_KEY ist nicht gesetzt" in at.error[0].value
+    assert lifecycle.load() is None or lifecycle.load().charter is None
+
+
+def test_a_damaged_vorhaben_file_is_said_not_thrown(site):
+    lifecycle.FILE.write_text("{kaputt", encoding="utf-8")
+    at = site.switch_page("views/auftrag.py").run()
+    assert not at.exception
+    assert any("vorhaben.json ist beschädigt" in e.value for e in at.error)
+    # The damaged file is only replaced on purpose.
+    assert button(at, "Neu beginnen").disabled
+    at.checkbox(key="vorhaben_replace").check()
+    at = at.run()
+    button(at, "Neu beginnen").click()
+    at = at.run()
+    assert lifecycle.load() == lifecycle.Lifecycle()

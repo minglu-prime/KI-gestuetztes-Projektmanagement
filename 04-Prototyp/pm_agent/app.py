@@ -18,6 +18,9 @@ state = st.session_state
 
 MENU = {
     "": [st.Page("views/startseite.py", title="Startseite", icon=":material/home:")],
+    "Vorbereiten": [
+        st.Page("views/auftrag.py", title="Projektauftrag", icon=":material/flag:"),
+    ],
     "Agenten": [
         st.Page("views/planung.py", title="Planung", icon=":material/view_timeline:"),
         st.Page("views/durchfuehrung.py", title="Durchführung", icon=":material/task_alt:"),

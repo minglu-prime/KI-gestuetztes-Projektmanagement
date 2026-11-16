@@ -11,7 +11,9 @@ import pandas as pd
 import streamlit as st
 from anthropic import APIError
 
+from pm_agent import lifecycle
 from pm_agent.agent import AgentError
+from pm_agent.lifecycle import Lifecycle
 from pm_agent.models import Plan
 from pm_agent.tracking import PART, Tracking, has_progress, history_rows, load, next_step
 from pm_agent.workbench import InputError, describe_round, round_summary
@@ -50,6 +52,47 @@ def adopted_project() -> Tracking | None:
 def as_text(text: str) -> str:
     """`text` for st.markdown, shown as written: Markdown in it is not applied."""
     return re.sub(r"([\\`*_\[\]~|#!])", r"\\\1", text)
+
+
+def saved_lifecycle() -> Lifecycle | None:
+    """The Vorhaben (charter, requirements); an empty one before anything was started. A
+    damaged file shows why, with a way to start over, and gives None."""
+    try:
+        return lifecycle.load() or Lifecycle()
+    except InputError as err:
+        st.error(f"Das Vorhaben konnte nicht gelesen werden: {err}")
+        replace = st.checkbox(
+            "Die beschädigte Datei durch ein leeres Vorhaben ersetzen. Ihr Inhalt geht verloren.",
+            key="vorhaben_replace",
+        )
+        if st.button("Neu beginnen", icon=":material/restart_alt:", disabled=not replace):
+            if store(None, Lifecycle()) is not None:
+                st.rerun()
+        return None
+
+
+def store(old: Lifecycle | None, new: Lifecycle) -> Lifecycle | None:
+    """Save the Vorhaben. Gives what is saved now: `new`, or `old` if writing failed."""
+    try:
+        lifecycle.save(new)
+    except OSError as err:
+        st.error(f"vorhaben.json konnte nicht gespeichert werden: {err}. Sie bleibt, wie sie war.")
+        return old
+    return new
+
+
+# How far a phase before the plan is, as a chip of the status strip.
+PHASE_CHIPS = {
+    "offen": ("noch keiner", ""),
+    "entwurf": ("Entwurf, nicht freigegeben", ""),
+    "geändert": ("seit der Freigabe geändert", "warn"),
+    "freigegeben": ("freigegeben", "on"),
+}
+
+
+def phase_chip(name: str, phase: str) -> str:
+    text, mark = PHASE_CHIPS[phase]
+    return chip(f"{name}: {text}", mark)
 
 
 def heading(icon: str, text: str, **who: str) -> None:
