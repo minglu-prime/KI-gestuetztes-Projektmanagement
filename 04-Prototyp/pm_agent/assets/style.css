@@ -355,6 +355,7 @@
 }
 .journey .step {
   display: inline-flex;
+  flex-wrap: wrap;
   align-items: baseline;
   gap: 6px;
   border: 1px solid var(--line);
@@ -392,9 +393,7 @@
    paragraph. With that margin gone here, the pull cut off the last line on a phone. */
 [class*="st-key-next-step"] [data-testid="stMarkdownContainer"] { margin-bottom: 0; }
 [class*="st-key-next-step"] [data-testid="stMarkdownContainer"] p { margin: 0; }
-@media (max-width: 640px) {
-  .journey .step small { display: none; }
-}
+.journey .step em { font-style: normal; font-size: 11px; color: #77501e; }
 
 /* Who does a part of a page: Claude proposes, Python computes and checks, du decides. */
 .roles {

@@ -1018,9 +1018,7 @@ elif project is None:
     todo, step = "Beschreibe Projektidee und Deadline.", 1
 elif state.plan is None:
     todo, step = "Lass Claude einen Plan erstellen oder öffne einen protokollierten Lauf.", 2
-elif result is None:
-    todo, step = "Der Plan lässt sich nicht prüfen. Das Ergebnis sagt, warum.", 3
-elif result.errors:
+elif result.errors:  # team, project and plan are there, so the plan was checked
     todo, step = "Der Plan hat Fehler. Ändere ihn von Hand oder mit Claude.", 4
 else:
     todo, step = "Der Plan ist geprüft. Sieh dir das Ergebnis an und übernimm ihn als Projekt.", 5

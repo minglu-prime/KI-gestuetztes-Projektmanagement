@@ -15,7 +15,7 @@ import streamlit as st
 from streamlit.testing.v1 import AppTest
 from test_tools import PROJECT, TEAM, plan_input
 
-from pm_agent import agent, followup, lab_server, tracking, workbench
+from pm_agent import agent, followup, lab_server, tracking, ui, workbench
 from pm_agent.agent import AgentError, PlanningError
 from pm_agent.models import Absence, ControlReport, Plan, StatusSummary
 
@@ -982,7 +982,9 @@ def test_every_agent_page_shows_the_project_path_with_the_page_marked(site):
 def test_without_a_project_the_path_waits_at_planen_and_says_nothing_twice(site):
     at = site.switch_page("views/kontrolle.py").run()
     assert not at.exception
-    assert 'class="step next' in journey(at).split("Ausführen")[0]  # Planen comes next
+    planen = journey(at).split("Ausführen")[0]
+    assert 'class="step next' in planen  # Planen comes next
+    assert "als Nächstes" in planen  # in words too, not by colour alone
     # The page itself already says there is no project: no second "Jetzt dran" for it.
     assert not any("Jetzt dran" in m.value for m in at.markdown)
 
@@ -999,6 +1001,38 @@ def test_with_a_project_the_path_says_what_is_next_and_leads_there(tracked):
     # Otherwise the line says it is this page.
     here = any("Unten auf dieser Seite" in m.value for m in at.markdown)
     assert here == (where == "durchfuehrung")
+
+
+def test_a_damaged_project_leaves_the_path_without_a_state(site):
+    tracking.PROJECT_FILE.write_text("{kaputt", encoding="utf-8")
+    at = site.switch_page("views/kontrolle.py").run()
+    assert not at.exception
+    assert any("konnte nicht gelesen werden" in e.value for e in at.error)
+    # The page says the file is unreadable; the path must not say nothing was planned yet.
+    states = re.findall(r'class="step([^"]*)"', journey(at))
+    assert states and not any("done" in s or "next" in s for s in states)
+    assert not any("Jetzt dran" in m.value for m in at.markdown)
+
+
+def test_the_planung_does_not_forecast_the_adopted_project(tracked, monkeypatch):
+    # The Planung shows no "Jetzt dran" from the project: it must not depend on it either.
+    def unused(*args):
+        raise AssertionError("next_step on the Planung")
+
+    monkeypatch.setattr(ui, "next_step", unused)
+    at = tracked.switch_page("views/planung.py").run()
+    assert not at.exception
+    assert '<span class="step done' in journey(at)  # Planen is still done
+
+
+def test_the_advice_is_shown_as_text(tracked, monkeypatch):
+    # Task IDs from the plan end up in the advice; Markdown in them stays text.
+    monkeypatch.setattr(
+        ui, "next_step", lambda t, d: ("Task ![x](http://e/x.png) hängt", "kontrolle")
+    )
+    at = tracked.switch_page("views/durchfuehrung.py").run()
+    line = next(m.value for m in at.markdown if "Jetzt dran" in m.value)
+    assert r"!\[x\]" in line
 
 
 def test_each_part_of_an_agent_page_says_who_does_it(tracked):
