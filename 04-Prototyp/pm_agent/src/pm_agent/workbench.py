@@ -794,6 +794,36 @@ def to_markdown(
     return "\n".join(lines) + "\n"
 
 
+def demo_rows(plan: Plan, result: CheckResult, project: Project) -> list[dict[str, Any]]:
+    """One row per demo, in week order: until when, what, which tasks, and whether the
+    schedule has them done by the end of that week."""
+    if not plan.demos:
+        return []
+    weeks = max(d.week for d in plan.demos)
+    last = {
+        n: day for n, _, day in islice(project_weeks(project.start_date, project.deadline), weeks)
+    }
+    ends = {s.task_id: s.end for s in result.schedule}
+    rows = []
+    for demo in sorted(plan.demos, key=lambda d: d.week):
+        friday = last.get(demo.week)
+        late = [
+            f"{tid} endet am {_date(ends[tid])}"
+            for tid in demo.task_ids
+            if friday is not None and tid in ends and ends[tid] > friday
+        ]
+        rows.append(
+            {
+                "Woche": demo.week,
+                "Bis": _date(friday) if friday else "nach der Deadline",
+                "Demo": demo.title,
+                "Aufgaben": ", ".join(demo.task_ids),
+                "Rechtzeitig fertig": f"nein: {', '.join(late)}" if late else "ja",
+            }
+        )
+    return rows
+
+
 def to_csv(plan: Plan, result: CheckResult) -> str:
     """The plan for German Excel: semicolons, a decimal comma, and a byte order mark, without
     which Excel reads UTF-8 as cp1252 ("BegrÃ¼ndung")."""

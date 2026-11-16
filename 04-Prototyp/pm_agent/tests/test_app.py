@@ -1868,3 +1868,17 @@ def test_check_messages_on_the_lifecycle_pages_show_no_link(site):
         shown += [e.value for e in at.error] + [w.value for w in at.warning]
     assert any("evil.example" in text for text in shown)
     assert not [text for text in shown if re.search(r"(?<!\\)\[", text)]
+
+
+def test_the_planung_shows_the_demos_of_the_plan(app, monkeypatch):
+    with_demo = Plan.model_validate(
+        {**PLAN.model_dump(), "demos": [{"week": 1, "title": "API zeigen", "task_ids": ["A"]}]}
+    )
+    monkeypatch.setattr(agent, "run_planning", lambda *args, **kwargs: with_demo)
+    at = fill_project(app.run())
+    button(at, "Plan mit Claude erstellen").click()
+    at = at.run()
+    assert not at.exception
+    (demos,) = [d.value for d in at.dataframe if "Demo" in d.value.columns]
+    assert list(demos["Demo"]) == ["API zeigen"]
+    assert "✓ Wochen-Demos: 1<" in chips(at)

@@ -26,6 +26,12 @@ ihn und entscheidet.
 - `assignments`: genau eine Zuweisung pro Task. `member` ist der Name genau wie im Team.
   `reason` sagt in ein bis zwei Sätzen, warum diese Person passt (Skills, verfügbare Zeit).
 - `risks`: die wichtigsten Risiken des Plans, jeweils mit einer Gegenmaßnahme.
+- `demos`: für jede Projektwoche, in der gearbeitet wird, ein Ergebnis, das das Team am Ende
+  der Woche vorführt. Woche 1 ist die Woche des Startdatums (Montag bis Freitag). Jede Demo
+  hat `week`, `title` (was gezeigt wird, zum Beispiel „Buchen im Browser vorführen“) und
+  `task_ids` (die Tasks, die dafür fertig sein müssen). Am besten ist laufende Software; in
+  frühen Wochen darf es auch ein Klick-Prototyp, ein Entwurf oder ein Testbericht sein. Schneide
+  und ordne die Tasks so, dass jede Demo bis zum Freitag ihrer Woche fertig ist.
 
 ## Vorgehen
 
@@ -36,7 +42,7 @@ ihn und entscheidet.
    Enddatum, kritischen Pfad und die Auslastung je Person bis zur Deadline (`utilization` über
    1 heißt überlastet, `null` heißt bis zur Deadline abwesend).
 2. Behebe alle Fehler. Behebe auch Warnungen (Überlastung, verpasste Deadline, kein Puffer
-   vor der Deadline, fehlender Skill, Anforderung ohne Task), wo es mit anderer Zuweisung oder mehr Parallelität
+   vor der Deadline, fehlender Skill, Anforderung ohne Task, Woche ohne Demo, Demo nicht rechtzeitig fertig), wo es mit anderer Zuweisung oder mehr Parallelität
    geht. Lass keine Anforderungen weg, um eine Warnung loszuwerden: Was offen bleibt, nennst
    du als Risiko mit Vorschlag, und die Projektleitung entscheidet.
 3. Reiche den Plan mit `submit_plan` ein. Erst damit ist deine Arbeit erledigt. `submit_plan`
