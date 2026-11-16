@@ -13,6 +13,9 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 NonEmpty = Annotated[str, Field(min_length=1)]
 SkillLevel = Annotated[int, Field(ge=1, le=5)]
+# The ID of a success criterion or a requirement. No comma and no space: the plan table
+# lists several of them in one cell, separated by commas.
+Ref = Annotated[str, Field(pattern=r"^[A-Za-z0-9._-]+$")]
 
 
 class _Model(BaseModel):
@@ -65,6 +68,8 @@ class Task(_Model):
     required_skills: list[NonEmpty] = Field(default_factory=list)
     estimate_hours: float = Field(gt=0, allow_inf_nan=False)
     depends_on: list[NonEmpty] = Field(default_factory=list)
+    # The requirements this task serves. Empty in plans made before requirements existed.
+    requirement_ids: list[Ref] = Field(default_factory=list)
 
 
 class Assignment(_Model):
@@ -78,6 +83,41 @@ class Plan(_Model):
     tasks: list[Task] = Field(min_length=1)
     assignments: list[Assignment]
     risks: list[NonEmpty] = Field(default_factory=list)
+
+
+class Criterion(_Model):
+    """A success criterion of the project: how to tell at the end that it worked."""
+
+    id: Ref
+    text: NonEmpty
+
+
+class Charter(_Model):
+    """Projektauftrag: why the project exists, what belongs to it and when it has succeeded.
+    Claude drafts it from the idea; the project lead changes and approves it."""
+
+    goal: NonEmpty
+    benefit: NonEmpty
+    in_scope: list[NonEmpty] = Field(min_length=1)
+    out_of_scope: list[NonEmpty] = Field(default_factory=list)
+    stakeholders: list[NonEmpty] = Field(default_factory=list)  # roles, not names
+    success_criteria: list[Criterion] = Field(min_length=1)
+    constraints: list[NonEmpty] = Field(default_factory=list)
+
+
+class Requirement(_Model):
+    """One requirement of the PRD, with the criteria for accepting it."""
+
+    id: Ref
+    title: NonEmpty
+    story: NonEmpty  # who wants what, and why
+    priority: Literal["Muss", "Soll", "Kann"]
+    criteria: list[NonEmpty] = Field(min_length=1)  # acceptance criteria
+    sources: list[Ref] = Field(default_factory=list)  # success criteria of the charter
+
+
+class Requirements(_Model):
+    items: list[Requirement] = Field(min_length=1)
 
 
 class ScheduledTask(_Model):

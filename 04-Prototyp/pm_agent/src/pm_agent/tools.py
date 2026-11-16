@@ -87,6 +87,9 @@ GERMAN = {
     "list_type": "muss eine Liste sein",
     "dict_type": "muss ein Objekt sein",
     "model_type": "muss ein Objekt sein",
+    "string_pattern_mismatch": "darf nur Buchstaben, Ziffern, Punkt, Binde- und Unterstrich "
+    "enthalten",
+    "literal_error": "muss {expected} sein",
 }
 
 
@@ -99,6 +102,8 @@ def invalid_input(err: ValidationError) -> list[str]:
             key: f"{value:g}".replace(".", ",") if isinstance(value, float) else value
             for key, value in e.get("ctx", {}).items()
         }
+        if isinstance(limits.get("expected"), str):  # "'Muss', 'Soll' or 'Kann'"
+            limits["expected"] = limits["expected"].replace("'", "").replace(" or ", " oder ")
         text = GERMAN[e["type"]].format(**limits) if e["type"] in GERMAN else e["msg"]
         messages.append(
             f"Ungültige Eingabe bei {where}: {text}" if where else f"Ungültige Eingabe: {text}"

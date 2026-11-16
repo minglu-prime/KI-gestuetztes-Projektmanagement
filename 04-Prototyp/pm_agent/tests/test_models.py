@@ -3,7 +3,18 @@ from datetime import date
 import pytest
 from pydantic import ValidationError
 
-from pm_agent.models import Absence, Assignment, Member, Plan, Project, Task
+from pm_agent.models import (
+    Absence,
+    Assignment,
+    Charter,
+    Criterion,
+    Member,
+    Plan,
+    Project,
+    Requirement,
+    Task,
+)
+from pm_agent.tools import invalid_input
 
 
 @pytest.mark.parametrize("hours", [0, -4, float("inf")])
@@ -75,3 +86,65 @@ def test_an_absence_is_a_day_or_a_range_and_cannot_end_before_it_starts():
 
 def test_a_member_saved_before_absences_existed_still_loads():
     assert Member.model_validate({"name": "Anna", "hours_per_week": 20}).absences == []
+
+
+def test_a_task_saved_before_requirements_existed_still_loads():
+    task = Task.model_validate({"id": "A", "title": "Login", "estimate_hours": 4})
+    assert task.requirement_ids == []
+
+
+def requirement(**changes):
+    data = {
+        "id": "R1",
+        "title": "Raum buchen",
+        "story": "Als Studentin will ich einen Raum buchen, damit meine Gruppe arbeiten kann.",
+        "priority": "Muss",
+        "criteria": ["Eine Buchung erscheint sofort in der Liste"],
+        "sources": ["K1"],
+    }
+    return {**data, **changes}
+
+
+def test_a_requirement_needs_a_criterion_and_a_known_priority():
+    assert Requirement.model_validate(requirement()).priority == "Muss"
+    for broken in [requirement(criteria=[]), requirement(priority="Wichtig")]:
+        with pytest.raises(ValidationError):
+            Requirement.model_validate(broken)
+
+
+@pytest.mark.parametrize("ref", ["R 1", "R1,R2", ""])
+def test_ids_have_no_separator(ref):
+    # The plan table lists several requirements in one cell, separated by commas.
+    with pytest.raises(ValidationError):
+        Requirement.model_validate(requirement(id=ref))
+    with pytest.raises(ValidationError):
+        Task(id="A", title="Login", estimate_hours=4, requirement_ids=[ref])
+    with pytest.raises(ValidationError):
+        Criterion(id=ref, text="Buchung in unter einer Minute")
+
+
+def test_a_charter_needs_scope_and_a_success_criterion():
+    charter = {
+        "goal": "Gruppenräume online buchen",
+        "benefit": "Weniger Wege zum Infoschalter",
+        "in_scope": ["Buchen und Stornieren"],
+        "success_criteria": [{"id": "K1", "text": "Buchung in unter einer Minute"}],
+    }
+    assert Charter.model_validate(charter).stakeholders == []
+    for broken in [{**charter, "in_scope": []}, {**charter, "success_criteria": []}]:
+        with pytest.raises(ValidationError):
+            Charter.model_validate(broken)
+
+
+def test_the_new_rules_are_explained_in_german():
+    with pytest.raises(ValidationError) as bad_id:
+        Requirement.model_validate(requirement(id="R 1"))
+    with pytest.raises(ValidationError) as bad_priority:
+        Requirement.model_validate(requirement(priority="Wichtig"))
+    assert invalid_input(bad_id.value) == [
+        "Ungültige Eingabe bei id: darf nur Buchstaben, Ziffern, Punkt, Binde- und "
+        "Unterstrich enthalten"
+    ]
+    assert invalid_input(bad_priority.value) == [
+        "Ungültige Eingabe bei priority: muss Muss, Soll oder Kann sein"
+    ]
