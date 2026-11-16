@@ -54,3 +54,21 @@ def test_mermaid_special_characters_are_entities():
     flows[0]["steps"][0]["text"] = "Raum #3; dann\nweiter"
     text = sequence_mermaid(design(flows=flows).flows[0], design(flows=flows))
     assert "  p1->>p2: Raum #35;3#59; dann weiter" in text.splitlines()
+
+
+def test_a_blank_line_in_a_text_cannot_end_the_html_block():
+    # The page shows the SVG through st.markdown: a blank line would end the HTML block and
+    # the rest would be read as Markdown (links, emphasis) inside the picture.
+    flows = design().model_dump()["flows"]
+    flows[0]["title"] = "Raum\n\nbuchen"
+    flows[0]["steps"][0]["text"] = "erst\n\n[klick](https://x)"
+    svg = sequence_svg(design(flows=flows).flows[0], design(flows=flows))
+    assert "\n" not in svg
+    assert "erst [klick](https://x)" in svg
+
+
+def test_angle_brackets_are_entities_in_mermaid():
+    components = design().model_dump()["components"]
+    components[0]["name"] = "Nutzer <b>x</b>"
+    text = sequence_mermaid(design().flows[0], design(components=components))
+    assert "  actor p1 as Nutzer #60;b#62;x#60;/b#62;" in text.splitlines()

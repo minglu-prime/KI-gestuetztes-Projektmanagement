@@ -16,6 +16,12 @@ TOP = 64  # px down to the first step
 SIDE = 20
 
 
+def _text(text: str) -> str:
+    """Text for the SVG: escaped, and on one line. The page shows the SVG through
+    st.markdown, where a blank line would end the HTML block."""
+    return escape(" ".join(text.split()))
+
+
 def _participants(flow: Flow) -> list[str]:
     """Part IDs in the order they first appear in the flow."""
     return list(dict.fromkeys(part for s in flow.steps for part in (s.sender, s.receiver)))
@@ -43,7 +49,7 @@ def sequence_svg(flow: Flow, design: Design) -> str:
     out = [
         f'<svg xmlns="http://www.w3.org/2000/svg" class="sequence" role="img" '
         f'viewBox="0 0 {width} {height}" width="{width}" height="{height}" '
-        f'aria-label="{escape(f"Sequenzdiagramm {flow.id}: {flow.title}")}" '
+        f'aria-label="{_text(f"Sequenzdiagramm {flow.id}: {flow.title}")}" '
         'font-family="sans-serif" font-size="12" fill="currentColor" stroke="currentColor">',
         '<defs><marker id="head" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="8" '
         'markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z"/></marker>'
@@ -61,7 +67,7 @@ def sequence_svg(flow: Flow, design: Design) -> str:
             f'<g class="participant">{figure}'
             f'<rect x="{cx - 70}" y="8" width="140" height="28" rx="{14 if role else 4}" '
             'fill="none"/>'
-            f'<text x="{cx}" y="26" text-anchor="middle" stroke="none">{escape(name)}</text>'
+            f'<text x="{cx}" y="26" text-anchor="middle" stroke="none">{_text(name)}</text>'
             f'<line class="lifeline" x1="{cx}" y1="36" x2="{cx}" y2="{height - 8}" '
             'stroke-dasharray="4 4" stroke-opacity="0.5"/></g>'
         )
@@ -84,19 +90,26 @@ def sequence_svg(flow: Flow, design: Design) -> str:
             label_x, anchor = (a + b) // 2, "middle"
         out.append(
             f'<g class="step">{arrow}<text x="{label_x}" y="{y - 6}" text-anchor="{anchor}" '
-            f'stroke="none">{escape(_label(step, design))}</text></g>'
+            f'stroke="none">{_text(_label(step, design))}</text></g>'
         )
     out.append("</svg>")
     return "".join(out)
 
 
 def _mermaid(text: str) -> str:
-    # Mermaid reads ";" as a line break and "#" as the start of an entity.
+    # Mermaid reads ";" as a line break, "#" as the start of an entity and "<…>" as HTML; a
+    # backtick could end the code block the document puts the diagram in. One pass, since
+    # "#35;" itself has a ";".
     text = " ".join(text.split())
-    # A backtick could end the code block the document puts the diagram in.
     return text.translate(
-        {ord("#"): "#35;", ord(";"): "#59;", ord("`"): "#96;"}
-    )  # one pass: "#35;" has a ";"
+        {
+            ord("#"): "#35;",
+            ord(";"): "#59;",
+            ord("`"): "#96;",
+            ord("<"): "#60;",
+            ord(">"): "#62;",
+        }
+    )
 
 
 def sequence_mermaid(flow: Flow, design: Design) -> str:

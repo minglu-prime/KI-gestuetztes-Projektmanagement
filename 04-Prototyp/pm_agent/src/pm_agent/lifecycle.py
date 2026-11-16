@@ -549,16 +549,19 @@ def rows_to_design(rows: dict[str, list[dict[str, Any]]]) -> Design:
         )
 
     read("steps", "Ablauf", step)
-    flows = read(
-        "flows",
-        "ID",
-        lambda r: Flow(
-            id=_cell(r.get("ID")),
-            title=_cell(r.get("Titel")),
-            requirement_ids=_split(r.get("Anforderungen"), ","),
-            steps=steps.get(_cell(r.get("ID")), []),
-        ),
-    )
+
+    def flow(row: dict[str, Any]) -> Flow:
+        fid = _cell(row.get("ID"))
+        if fid and fid not in steps:  # say it in words, not as the model's "at least 1 item"
+            raise InputError(f"Ablauf '{fid}' hat keine Schritte")
+        return Flow(
+            id=fid,
+            title=_cell(row.get("Titel")),
+            requirement_ids=_split(row.get("Anforderungen"), ","),
+            steps=steps.get(fid, []),
+        )
+
+    flows = read("flows", "ID", flow)
     if errors:
         raise InputError("\n".join(errors))
     if not components and not flows:

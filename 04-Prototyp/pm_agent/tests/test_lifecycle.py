@@ -527,7 +527,7 @@ def test_unreadable_design_rows_say_which_table_and_row():
 def test_a_flow_without_steps_and_an_empty_design_are_reported():
     rows = design_rows(design())
     rows["steps"] = []
-    with pytest.raises(InputError, match=r"Abläufe, Zeile 1 \(A1\): steps"):
+    with pytest.raises(InputError, match=r"Zeile 1 \(A1\): Ablauf 'A1' hat keine Schritte"):
         rows_to_design(rows)
     with pytest.raises(InputError, match="Noch kein Entwurf"):
         rows_to_design({"components": [], "interfaces": [], "flows": [], "steps": []})
@@ -572,3 +572,13 @@ def test_the_design_document_lists_parts_contracts_and_draws_each_flow():
     assert "**Stand:** Freigegeben am 16.11.2026 10:00" in approved
     with pytest.raises(InputError, match="kein Dokument"):
         lifecycle.design_document(Lifecycle(project=PROJECT))
+
+
+def test_a_renamed_flow_whose_steps_still_name_the_old_id_says_so():
+    rows = design_rows(design())
+    rows["flows"][0]["ID"] = "A2"
+    with pytest.raises(InputError) as err:
+        rows_to_design(rows)
+    lines = str(err.value).splitlines()
+    assert lines[0] == "Schritte, Zeile 1: unbekannter Ablauf 'A1'"
+    assert lines[-1] == "Abläufe, Zeile 1 (A2): Ablauf 'A2' hat keine Schritte"
