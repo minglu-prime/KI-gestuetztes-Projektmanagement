@@ -165,7 +165,9 @@ wer in den nächsten fünf Arbeitstagen womit beginnt.
 
 Von dort geht es zurück in die Planung: „Rest mit Claude umplanen“ lädt die unfertigen Aufgaben
 als Plan ab heute, und das Gespräch mit Claude beginnt mit genau dem Problem, das die Prognose
-gezeigt hat.
+gezeigt hat. Wer den neuen Plan übernimmt, wählt, ob die bisherige Arbeit erhalten bleibt: Fertige
+Aufgaben und gebuchte Stunden zählen dann als frühere Arbeit in allen Kennzahlen und Berichten
+weiter.
 
 ```mermaid
 flowchart LR
