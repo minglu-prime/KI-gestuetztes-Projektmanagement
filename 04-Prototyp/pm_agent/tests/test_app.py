@@ -618,6 +618,52 @@ def edit_progress(at, edits):
     return at.run()
 
 
+def progress_editor(at):
+    (frame,) = [f for f in at.dataframe if f.key and f.key.startswith("progress_editor_")]
+    return frame.value
+
+
+def test_unsaved_progress_survives_a_visit_to_another_page(flow_site):
+    at, _ = flow_site
+    at = adopt_from_planning(at)
+    at = at.switch_page("views/durchfuehrung.py").run()
+    at = edit_progress(at, {0: {"Status": "in Arbeit", "Ist (h)": 3, "Notiz": "läuft"}})
+    before = tracking.PROJECT_FILE.read_bytes()
+
+    at = at.switch_page("views/kontrolle.py").run()
+    at = at.switch_page("views/durchfuehrung.py").run()
+
+    assert not at.exception
+    row = progress_editor(at).iloc[0]
+    assert (row["Status"], row["Ist (h)"], row["Notiz"]) == ("in Arbeit", 3, "läuft")
+    assert tracking.PROJECT_FILE.read_bytes() == before  # still not saved
+    # A further edit after the return keeps the restored ones.
+    # (AppTest shows the editor's input data, not its edits: the save shows both.)
+    at = edit_progress(at, {1: {"Notiz": "wartet"}})
+    button(at, "Fortschritt speichern").click()
+    at.run()
+    stored = tracking.load().progress
+    assert (stored["A"].status, stored["A"].actual_hours, stored["B"].note) == (
+        "in Arbeit",
+        3,
+        "wartet",
+    )
+
+
+def test_unsaved_progress_is_dropped_when_the_project_changed_meanwhile(flow_site):
+    at, _ = flow_site
+    at = adopt_from_planning(at)
+    at = at.switch_page("views/durchfuehrung.py").run()
+    at = edit_progress(at, {0: {"Notiz": "alt"}})
+    at = at.switch_page("views/kontrolle.py").run()
+    tracking.save(tracking.apply_rows(tracking.load(), [{"ID": "A", "Notiz": "neu"}]))
+
+    at = at.switch_page("views/durchfuehrung.py").run()
+
+    assert not at.exception
+    assert progress_editor(at).iloc[0]["Notiz"] == "neu"
+
+
 @pytest.mark.parametrize("host_day", [date(2000, 1, 1), date(2099, 12, 31)])
 def test_flow_pages_use_fixed_evaluation_date_despite_host_today(flow_site, monkeypatch, host_day):
     at, downloads = flow_site
