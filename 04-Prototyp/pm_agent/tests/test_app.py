@@ -1780,3 +1780,34 @@ def test_a_step_against_the_contract_blocks_the_approval(site):
     at = at.run()
     assert any("ein Aufruf von 'S1' geht von B2 an B3" in e.value for e in at.error)
     assert button(at, "Entwurf freigeben").disabled
+
+
+def test_the_planner_gets_the_design_only_while_it_is_approved(app, monkeypatch):
+    from test_lifecycle import design
+
+    approve_needs()
+    life = lifecycle.load().model_copy(update={"design": design()})
+    lifecycle.save(lifecycle.approve_design(life, APPROVED_AT))
+    seen = []
+
+    def planning(project, team, on_round=None, **context):
+        seen.append(context.get("design"))
+        return PLAN
+
+    monkeypatch.setattr(agent, "run_planning", planning)
+    at = fill_project(app.run())
+    button(at, "Plan mit Claude erstellen").click()
+    at = at.run()
+    assert "✓ Entwurf: freigegeben<" in chips(at)
+
+    # The requirements change after the approval: the design no longer counts.
+    changed = NEEDS.model_copy(
+        update={"items": [NEEDS.items[0].model_copy(update={"title": "Neu"})]}
+    )
+    lifecycle.save(lifecycle.load().model_copy(update={"requirements": changed}))
+    at = at.run()
+    button(at, "Plan mit Claude erstellen").click()
+    at = at.run()
+    assert not at.exception
+    assert seen == [design(), None]
+    assert "! Entwurf: seit der Freigabe geändert<" in chips(at)

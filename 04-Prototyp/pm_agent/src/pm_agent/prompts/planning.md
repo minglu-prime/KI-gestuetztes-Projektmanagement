@@ -20,6 +20,9 @@ ihn und entscheidet.
     der Task dient (zum Beispiel `R1`). Jede Anforderung braucht mindestens einen Task; ein
     Task ohne Anforderung (Abstimmung, Abschluss) ist erlaubt, `check_plan` nennt ihn aber.
     Ohne freigegebene Anforderungen lässt du das Feld leer.
+  Gibt es einen freigegebenen Entwurf, schneide die Tasks entlang seiner Komponenten und
+  Schnittstellen (zum Beispiel „S1 Buchung anlegen umsetzen“) und nenne die Schnittstelle im
+  Titel oder in der Beschreibung.
 - `assignments`: genau eine Zuweisung pro Task. `member` ist der Name genau wie im Team.
   `reason` sagt in ein bis zwei Sätzen, warum diese Person passt (Skills, verfügbare Zeit).
 - `risks`: die wichtigsten Risiken des Plans, jeweils mit einer Gegenmaßnahme.
