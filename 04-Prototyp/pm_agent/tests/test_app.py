@@ -835,9 +835,11 @@ def test_an_adopted_project_with_progress_requires_explicit_overwrite(flow_site,
     assert not at.exception
     assert at.session_state["plan"] == replacement
     assert tracking.load().plan == PLAN
-    # Keeping is the default, but A is finished and in the new plan again: it would count
-    # twice.
-    assert at.radio(key="adopt_progress").value == "Als frühere Arbeit behalten"
+    # Nothing is chosen for the project lead: no button before a choice.
+    assert at.radio(key="adopt_progress").value is None
+    assert button(at, "Plan als Projekt übernehmen").disabled
+    # Keeping does not fit: A is finished and in the new plan again, it would count twice.
+    at.radio(key="adopt_progress").set_value("Als frühere Arbeit behalten").run()
     assert any("Schon fertig und wieder im Plan: A" in w.value for w in at.warning)
     assert button(at, "Plan als Projekt übernehmen").disabled
 
@@ -945,7 +947,7 @@ def test_the_rest_of_the_project_goes_from_kontrolle_into_the_planung(site):
     # page it ran, Kontrolle, not the one the script switched to.)
     at = at.switch_page(PLANUNG).run()
     assert [t.id for t in at.session_state["plan"].tasks] == ["B"]
-    assert at.radio(key="adopt_progress").value == "Als frühere Arbeit behalten"
+    at.radio(key="adopt_progress").set_value("Als frühere Arbeit behalten").run()
     button(at, "Plan als Projekt übernehmen").click()
     at.run()
     assert not at.exception and not at.error
@@ -985,6 +987,23 @@ def test_kontrolle_shows_no_table_with_cells_left_out(tracked):
     assert not at.exception
     assert any("runs.csv konnte nicht gelesen werden" in e.value for e in at.error)
     assert not any("quelle" in frame.value.columns for frame in at.dataframe)
+
+
+def test_a_damaged_project_is_replaced_only_when_confirmed(flow_site):
+    # The file may hold progress that a hand can still rescue: no silent overwrite.
+    at, _ = flow_site
+    tracking.PROJECT_FILE.write_text("{kaputt", encoding="utf-8")
+    at = fill_project(at.switch_page(PLANUNG).run())
+    button(at, "Plan mit Claude erstellen").click()
+    at.run()
+    assert any("konnte nicht gelesen werden" in e.value for e in at.error)
+    assert button(at, "Plan als Projekt übernehmen").disabled
+
+    at.checkbox(key="adopt_replace_damaged").check().run()
+    button(at, "Plan als Projekt übernehmen").click()
+    at.run()
+    assert not at.exception
+    assert tracking.load().plan == PLAN
 
 
 def test_kontrolle_opens_before_there_is_a_logs_folder(tracked, monkeypatch, tmp_path):

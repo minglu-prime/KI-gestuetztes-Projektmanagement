@@ -6,8 +6,8 @@ from datetime import date
 import pytest
 from test_tools import PROJECT, TEAM, plan_input
 
-from pm_agent.followup import facts
-from pm_agent.models import Plan
+from pm_agent.followup import check_report, facts
+from pm_agent.models import ControlReport, Plan
 from pm_agent.tracking import (
     Earlier,
     adopt,
@@ -137,6 +137,44 @@ def test_a_finished_task_cannot_come_back_in_the_plan_that_keeps_it(path):
     with pytest.raises(InputError, match="Fertige Aufgabe wieder im Plan: A"):
         adopt(PROJECT, TEAM, PLAN, path=path, keep=first)
     assert load(path) == first  # nothing was saved
+
+
+def test_a_part_counts_once_its_task_finished_under_a_later_plan(replanned, path):
+    # B is finished under the second plan; a third plan has only new work. B's part from the
+    # first plan still counts as finished.
+    done = apply_rows(replanned, [{"ID": "B", "Status": "fertig", "Ist (h)": 13}])
+    extra = Plan.model_validate(
+        {
+            "tasks": [{"id": "C", "title": "Tests", "estimate_hours": 6}],
+            "assignments": [{"task_id": "C", "member": "Anna", "reason": "kennt Python"}],
+        }
+    )
+    third = adopt(PROJECT, TEAM, extra, path=path, keep=done)
+    finished = apply_rows(third, [{"ID": "C", "Status": "fertig", "Ist (h)": 6}])
+    result = evaluate(finished, THURSDAY)
+    assert result.planned_hours == 30  # 8 + 4 + 12 + 6
+    assert (result.earned, result.progress) == (30, 1)
+
+
+def test_a_task_finished_under_an_earlier_plan_cannot_come_back_either(replanned, path):
+    # A was finished under the first plan and is in the history of the second.
+    assert finished_again(replanned, PLAN) == ["A"]
+    with pytest.raises(InputError, match="Fertige Aufgabe wieder im Plan: A"):
+        adopt(PROJECT, TEAM, PLAN, path=path, keep=replanned)
+
+
+def test_the_control_agent_may_name_work_of_earlier_plans_but_not_give_it_away(replanned):
+    result = evaluate(replanned, THURSDAY)
+    report = ControlReport(
+        assessment="gefährdet",
+        findings=[{"task_ids": ["A"], "observation": "A brauchte 2 h mehr."}],
+        measures=[
+            {"task_ids": ["A"], "action": "Nacharbeit", "effect": "sauber", "reassign_to": "Anna"}
+        ],
+    )
+    assert check_report(report, result, TEAM) == [
+        "Gegenmaßnahme will die fertige Aufgabe 'A' neu vergeben"
+    ]
 
 
 def test_without_keep_the_new_plan_starts_without_history(replanned, path):

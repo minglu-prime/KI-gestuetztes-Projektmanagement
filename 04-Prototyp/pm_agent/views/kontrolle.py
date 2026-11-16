@@ -290,6 +290,11 @@ if tracking is not None:
             width="stretch",
         )
         st.dataframe(per_task, hide_index=True)
+        if tracking.history:
+            st.caption(
+                "Nur die Aufgaben des aktuellen Plans. Die Stunden früherer Pläne stehen "
+                "darunter; die Kennzahlen oben zählen beides."
+            )
         history_table(tracking)
 
     with st.container(border=True, key="panel-members"):
