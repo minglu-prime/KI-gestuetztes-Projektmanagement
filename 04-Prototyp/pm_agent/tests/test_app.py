@@ -1433,7 +1433,8 @@ def test_an_agent_error_on_the_auftrag_is_shown(site, monkeypatch):
     button(at, "Projektauftrag mit Claude entwerfen").click()
     at = at.run()
     assert not at.exception
-    assert "ANTHROPIC_API_KEY ist nicht gesetzt" in at.error[0].value
+    # Unescaped for the page: the underscores may come escaped for Markdown.
+    assert "ANTHROPIC_API_KEY ist nicht gesetzt" in at.error[0].value.replace("\\_", "_")
     assert lifecycle.load() is None or lifecycle.load().charter is None
 
 
