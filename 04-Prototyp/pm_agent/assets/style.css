@@ -380,7 +380,7 @@
 .journey .loop { color: var(--muted); }
 .journey .loop { font-size: 12px; margin-left: 4px; }
 /* What is next: one line and one button, set apart from the page below. */
-.st-key-next-step {
+[class*="st-key-next-step"] {
   background: #fff;
   border: 1px solid var(--line);
   border-left: 3px solid var(--focus);
@@ -390,8 +390,8 @@
 }
 /* Streamlit pulls a Markdown block up by 1rem to make up for the margin of its last
    paragraph. With that margin gone here, the pull cut off the last line on a phone. */
-.st-key-next-step [data-testid="stMarkdownContainer"] { margin-bottom: 0; }
-.st-key-next-step [data-testid="stMarkdownContainer"] p { margin: 0; }
+[class*="st-key-next-step"] [data-testid="stMarkdownContainer"] { margin-bottom: 0; }
+[class*="st-key-next-step"] [data-testid="stMarkdownContainer"] p { margin: 0; }
 @media (max-width: 640px) {
   .journey .step small { display: none; }
 }

@@ -133,7 +133,8 @@ def journey(page: str) -> None:
     if advice is None or page == "planung":
         return  # the Planung leads through its own steps
     with st.container(horizontal=True, vertical_alignment="center", key="next-step"):
-        st.markdown(f"**Jetzt dran:** {advice}")
+        below = " ↓ Unten auf dieser Seite." if where == page else ""
+        st.markdown(f"**Jetzt dran:** {advice}{below}")
         if where != page:
             target, label = PAGES[where]
             if st.button(label, key="journey-go", type="primary", icon=":material/arrow_forward:"):

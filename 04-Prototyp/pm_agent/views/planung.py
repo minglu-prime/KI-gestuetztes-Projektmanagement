@@ -273,7 +273,7 @@ st.caption(
 )
 if rest_error:
     st.error(f"Der Rest des Projekts konnte nicht geladen werden: {rest_error}")
-status_strip = st.empty()  # filled at the end, when team, project and plan are known
+status = st.container()  # filled at the end, when team, project and plan are known
 # on_change="rerun" makes the selection a value in the session state, so buttons can open a
 # step. Every step is still rendered on every run (see the module docstring).
 tabs = st.tabs(STEPS, key="step", on_change="rerun")
@@ -1009,11 +1009,38 @@ else:
     notes = f", {count} Warnung{'' if count == 1 else 'en'}" if count else ""
     plan_chip = chip(f"Plan geprüft{notes}", "on")
 people = f"Team: {len(team)} Person{'' if len(team) == 1 else 'en'}" if team else "Team fehlt"
-status_strip.html(
-    strip(
-        chip(people, "on" if team else ""),
-        chip("Zustimmung", "on" if consent else ""),
-        chip("Projekt", "on" if project is not None else ""),
-        plan_chip,
+# What is next, in the order of the steps: one line, and a button that opens that step.
+if not team:
+    todo, step = "Trage das Team ein: Name, Skills und Stunden pro Woche.", 0
+elif not consent:
+    todo, step = "Bestätige die Zustimmung des Teams, dass seine Angaben an Claude gehen.", 0
+elif project is None:
+    todo, step = "Beschreibe Projektidee und Deadline.", 1
+elif state.plan is None:
+    todo, step = "Lass Claude einen Plan erstellen oder öffne einen protokollierten Lauf.", 2
+elif result is None:
+    todo, step = "Der Plan lässt sich nicht prüfen. Das Ergebnis sagt, warum.", 3
+elif result.errors:
+    todo, step = "Der Plan hat Fehler. Ändere ihn von Hand oder mit Claude.", 4
+else:
+    todo, step = "Der Plan ist geprüft. Sieh dir das Ergebnis an und übernimm ihn als Projekt.", 5
+with status:
+    st.html(
+        strip(
+            chip(people, "on" if team else ""),
+            chip("Zustimmung", "on" if consent else ""),
+            chip("Projekt", "on" if project is not None else ""),
+            plan_chip,
+        )
     )
-)
+    with st.container(horizontal=True, vertical_alignment="center", key="next-step-planung"):
+        st.markdown(f"**Jetzt dran (Schritt {step + 1}):** {todo}")
+        if state.get("step", STEPS[0]) != STEPS[step]:
+            st.button(
+                f"Zu Schritt {step + 1}",
+                key="planung-go",
+                type="primary",
+                icon=":material/arrow_forward:",
+                on_click=go,
+                args=(STEPS[step],),
+            )

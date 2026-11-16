@@ -142,6 +142,29 @@ def test_the_buttons_at_the_end_of_a_step_open_the_next_step(app):
     assert at.session_state["step"] == "2 · Projekt"
 
 
+def now(at):
+    """The line "Jetzt dran" of the Planung."""
+    return next(m.value for m in at.markdown if "Jetzt dran" in m.value)
+
+
+def test_the_planung_says_what_is_next_and_opens_that_step(app, monkeypatch):
+    # The team is there, the consent is not.
+    assert "Zustimmung" in now(app) and "Schritt 1" in now(app)
+    app.checkbox(key="consent").check()
+    at = app.run()
+    assert "Projektidee und Deadline" in now(at) and "Schritt 2" in now(at)
+    button(at, "Zu Schritt 2").click()
+    at = at.run()
+    assert at.session_state["step"] == "2 · Projekt"
+
+    at = fill_project(at)
+    assert "Schritt 3" in now(at)
+    monkeypatch.setattr(agent, "run_planning", planned)
+    button(at, "Plan mit Claude erstellen").click()
+    at = at.run()
+    assert "übernimm" in now(at) and "Schritt 6" in now(at)
+
+
 WISH = "Das Datenmodell dauert doppelt so lange."
 
 
@@ -973,6 +996,9 @@ def test_with_a_project_the_path_says_what_is_next_and_leads_there(tracked):
     target = {"durchfuehrung": "Zur Durchführung", "kontrolle": "Zur Kontrolle"}[where]
     # A button to the page the advice points to, unless the advice is about this page.
     assert any(b.label == target for b in at.button) == (where != "durchfuehrung")
+    # Otherwise the line says it is this page.
+    here = any("Unten auf dieser Seite" in m.value for m in at.markdown)
+    assert here == (where == "durchfuehrung")
 
 
 def test_each_part_of_an_agent_page_says_who_does_it(tracked):
