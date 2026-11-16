@@ -32,16 +32,18 @@ wir?
 ## Datenformat
 
 ```python
-class Demo(_Model):          # in models.py, Teil des Plans
+class Demo(_Model):  # in models.py, Teil des Plans
     week: int = Field(ge=1)  # Projektwoche: Woche 1 beginnt am Startdatum
-    title: NonEmpty          # „Raum buchen im Browser vorführen“
+    title: NonEmpty  # „Raum buchen im Browser vorführen“
     task_ids: list[NonEmpty] = Field(min_length=1)
 
-class Plan(_Model):          # neu: demos, Standard leer (alte Pläne und Logs bleiben lesbar)
+
+class Plan(_Model):  # neu: demos, Standard leer (alte Pläne und Logs bleiben lesbar)
     ...
     demos: list[Demo] = Field(default_factory=list)
 
-class Retro(BaseModel):      # in tracking.py, Teil des übernommenen Projekts
+
+class Retro(BaseModel):  # in tracking.py, Teil des übernommenen Projekts
     week: int
     shown: Literal["ja", "teilweise", "nein"]
     went_wrong: str = ""
@@ -49,7 +51,8 @@ class Retro(BaseModel):      # in tracking.py, Teil des übernommenen Projekts
     measure: str = ""
     measure_done: bool = False
 
-class Tracking(...):         # neu: retros, Standard leer
+
+class Tracking(...):  # neu: retros, Standard leer
     retros: list[Retro] = []
 ```
 

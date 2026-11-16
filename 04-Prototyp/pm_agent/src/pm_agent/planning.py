@@ -8,6 +8,7 @@ first Mon-Fri on or after the start date.
 
 import math
 from collections import Counter
+from collections.abc import Iterator
 from datetime import date, timedelta
 from graphlib import CycleError, TopologicalSorter
 
@@ -45,7 +46,11 @@ def check_plan(
     With `requirements` (the approved ones) the plan is traced as well: a task serving an
     unknown requirement is an error, a requirement without a task and tasks serving none
     are warnings. `covered`: requirements served by finished work outside this plan."""
-    errors = _structural_errors(plan, team, project) + _trace_errors(plan, requirements)
+    errors = (
+        _structural_errors(plan, team, project)
+        + _trace_errors(plan, requirements)
+        + _demo_errors(plan, project)
+    )
     if errors:
         return CheckResult(errors=errors)
 
@@ -186,6 +191,33 @@ def check_plan(
         if untraced:
             subject = "1 Task dient" if len(untraced) == 1 else f"{len(untraced)} Tasks dienen"
             warn(("untraced",), f"{subject} keiner Anforderung: {', '.join(untraced)}")
+    if plan.demos:  # without demos the plan is checked as before
+        ends = {s.task_id: s.end for s in schedule}
+        demos = {d.week: d for d in plan.demos}
+        # Every week in which work is planned shows something.
+        # Weeks run to the deadline (or the later end of the plan); those after the work
+        # need no demo.
+        for week, first, last in project_weeks(project.start_date, max(project.deadline, end_date)):
+            if first > end_date:
+                break
+            demo = demos.get(week)
+            if demo is None:
+                warn(
+                    ("demo_missing", str(week)),
+                    f"Woche {week} ({_fmt(first)} bis {_fmt(last)}) hat keine Demo",
+                )
+                continue
+            late = [
+                f"Task '{tid}' endet am {_fmt(ends[tid])}"
+                for tid in demo.task_ids
+                if ends[tid] > last
+            ]
+            if late:
+                warn(
+                    ("demo_late", str(week)),
+                    f"Die Demo der Woche {week} ({demo.title}) ist nicht rechtzeitig fertig: "
+                    f"{', '.join(late)}, nach dem {_fmt(last)}",
+                )
 
     return CheckResult(
         warnings=warnings,
@@ -293,6 +325,53 @@ def _next_workday(day: date) -> date:
     while day.weekday() >= 5:
         day += timedelta(days=1)
     return day
+
+
+def project_weeks(start: date, until: date) -> Iterator[tuple[int, date, date]]:
+    """(n, first, last) for each week of the project from `start` to `until`: Monday to
+    Friday, cut to both ends. Week 1 is the week of the first workday. A generator: a
+    deadline on 31.12.9999 has half a million weeks, and no date past it exists."""
+    first = _next_workday(start)
+    monday = first - timedelta(days=first.weekday())
+    n = 1
+    while monday <= until:
+        left = (until - monday).days
+        yield n, max(monday, first), monday + timedelta(days=min(4, left))
+        if left < 7:
+            return
+        monday += timedelta(weeks=1)
+        n += 1
+
+
+def week_count(start: date, until: date) -> int:
+    """How many project weeks lie between `start` and `until`."""
+    first = _next_workday(start)
+    if first > until:
+        return 0
+    return (until - (first - timedelta(days=first.weekday()))).days // 7 + 1
+
+
+def _demo_errors(plan: Plan, project: Project) -> list[str]:
+    if not plan.demos:
+        return []
+    known = {t.id for t in plan.tasks}
+    count = week_count(project.start_date, project.deadline)
+    errors = [
+        f"Die Demo der Woche {d.week} nennt die unbekannte Task '{tid}'"
+        for d in plan.demos
+        for tid in d.task_ids
+        if tid not in known
+    ]
+    errors += [
+        f"Die Demo der Woche {d.week} liegt außerhalb des Projekts (Woche 1 bis {count})"
+        for d in plan.demos
+        if d.week > count
+    ]
+    weeks = [d.week for d in plan.demos]
+    errors += [
+        f"Woche {w} hat mehr als eine Demo" for w in sorted(set(weeks)) if weeks.count(w) > 1
+    ]
+    return errors
 
 
 def _trace_errors(plan: Plan, requirements: list[Requirement] | None) -> list[str]:

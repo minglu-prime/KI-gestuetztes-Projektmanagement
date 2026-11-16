@@ -795,3 +795,69 @@ def test_a_requirement_done_earlier_counts_as_covered():
         traced(A=["R1"], B=["R1"]), [ANNA], project(), requirements=needs, covered=frozenset({"R2"})
     )
     assert result.warnings == []
+
+
+def test_project_weeks_run_monday_to_friday_within_start_and_end():
+    from pm_agent.planning import project_weeks
+
+    wed, tue = date(2026, 11, 11), date(2026, 11, 24)
+    assert list(project_weeks(wed, tue)) == [
+        (1, wed, date(2026, 11, 13)),
+        (2, date(2026, 11, 16), date(2026, 11, 20)),
+        (3, date(2026, 11, 23), tue),
+    ]
+    # A start on a Saturday: week 1 is the week of the first workday.
+    assert next(project_weeks(date(2026, 11, 14), date(2026, 11, 20)))[1] == date(2026, 11, 16)
+
+
+def demo_plan(b_hours=16, demos=()):
+    from test_tools import plan_input
+
+    data = plan_input()
+    data["tasks"][1]["estimate_hours"] = b_hours
+    return Plan.model_validate({**data, "demos": list(demos)})
+
+
+def test_a_demo_whose_tasks_are_done_in_its_week_passes():
+    plan = demo_plan(demos=[{"week": 1, "title": "API zeigen", "task_ids": ["B"]}])
+    result = check_plan(plan, [ANNA], project())
+    assert result.ok and not [k for k in result.warning_kinds if k[0].startswith("demo")]
+
+
+def test_a_late_demo_and_a_week_without_demo_are_warnings():
+    plan = demo_plan(b_hours=40, demos=[{"week": 1, "title": "API zeigen", "task_ids": ["A", "B"]}])
+    result = check_plan(plan, [ANNA], project())
+    demo = [
+        (k, w)
+        for k, w in zip(result.warning_kinds, result.warnings, strict=True)
+        if k[0].startswith("demo")
+    ]
+    assert demo == [
+        (
+            ("demo_late", "1"),
+            "Die Demo der Woche 1 (API zeigen) ist nicht rechtzeitig fertig: Task 'B' endet am "
+            "16.11.2026, nach dem 13.11.2026",
+        ),
+        (("demo_missing", "2"), "Woche 2 (16.11.2026 bis 20.11.2026) hat keine Demo"),
+    ]
+
+
+def test_demos_name_known_tasks_and_weeks_once_each():
+    plan = demo_plan(
+        demos=[
+            {"week": 1, "title": "a", "task_ids": ["X"]},
+            {"week": 1, "title": "b", "task_ids": ["A"]},
+            {"week": 9, "title": "c", "task_ids": ["B"]},
+        ]
+    )
+    assert check_plan(plan, [ANNA], project()).errors == [
+        "Die Demo der Woche 1 nennt die unbekannte Task 'X'",
+        "Die Demo der Woche 9 liegt außerhalb des Projekts (Woche 1 bis 6)",
+        "Woche 1 hat mehr als eine Demo",
+    ]
+
+
+def test_demos_with_a_deadline_at_the_end_of_the_calendar():
+    plan = demo_plan(demos=[{"week": 1, "title": "API zeigen", "task_ids": ["B"]}])
+    result = check_plan(plan, [ANNA], project(deadline=date.max), dates_only=True)
+    assert result.ok and not [k for k in result.warning_kinds if k[0].startswith("demo")]
