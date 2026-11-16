@@ -10,13 +10,16 @@ No Streamlit in here. The file lives in data/ like the adopted project and is gi
 
 import hashlib
 import json
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal, NamedTuple
 
 from pydantic import BaseModel, ConfigDict, ValidationError
 
+from pm_agent.agent import LOG_DIR, run_submission
 from pm_agent.models import Charter, Criterion, Project, Requirement, Requirements
+from pm_agent.tools import Submission
 from pm_agent.workbench import DATA_DIR, InputError, _cell, _reason
 
 FILE = DATA_DIR / "vorhaben.json"
@@ -262,3 +265,55 @@ def lines(text: str) -> list[str]:
 
 def _split(value: Any, separator: str) -> list[str]:
     return [part.strip() for part in _cell(value).split(separator) if part.strip()]
+
+
+def run_charter(
+    project: Project,
+    log_dir: Path | None = LOG_DIR,
+    on_round: Callable[[dict[str, Any]], None] | None = None,
+) -> Charter:
+    """Claude drafts the Projektauftrag from idea and dates. Only these go to the API, no
+    team data. Raises AgentError."""
+    submission = Submission(
+        name="submit_auftrag",
+        noun="Projektauftrag",
+        description=(
+            "Reicht den Projektauftrag ein. Lehnt ihn ab, wenn eine ID eines "
+            "Erfolgskriteriums doppelt vorkommt, und nennt die Gründe."
+        ),
+        schema=Charter,
+        check=lambda charter: check_charter(charter).errors,
+    )
+    data = json.dumps({"projekt": project.model_dump(mode="json")}, ensure_ascii=False, indent=2)
+    return run_submission("auftrag", submission, data, log_dir, on_round)
+
+
+def run_requirements(
+    project: Project,
+    charter: Charter | None,
+    log_dir: Path | None = LOG_DIR,
+    on_round: Callable[[dict[str, Any]], None] | None = None,
+) -> Requirements:
+    """Claude drafts the requirements from the charter (or from the idea alone, without
+    one). Python rejects them until every success criterion is served. Raises AgentError."""
+    submission = Submission(
+        name="submit_anforderungen",
+        noun="Anforderungskatalog",
+        description=(
+            "Reicht die Anforderungen ein. Lehnt sie ab, wenn ein Erfolgskriterium des "
+            "Projektauftrags von keiner Anforderung abgedeckt ist, eine Anforderung ein "
+            "unbekanntes Erfolgskriterium nennt, eine ID doppelt vorkommt oder es keine "
+            "Muss-Anforderung gibt, und nennt die Gründe."
+        ),
+        schema=Requirements,
+        check=lambda requirements: check_requirements(requirements, charter).errors,
+    )
+    data = json.dumps(
+        {
+            "projekt": project.model_dump(mode="json"),
+            "projektauftrag": charter.model_dump(mode="json") if charter else None,
+        },
+        ensure_ascii=False,
+        indent=2,
+    )
+    return run_submission("anforderungen", submission, data, log_dir, on_round)

@@ -47,7 +47,13 @@ TEMPLATES = Path(__file__).parent / "templates"
 Status = Literal["offen", "in Arbeit", "fertig"]
 STATUSES = list(get_args(Status))
 # Log file prefix of each agent (agent.run_agent) and its name in the UI.
-AGENTS = {"run": "Planung", "durchfuehrung": "Durchführung", "kontrolle": "Kontrolle"}
+AGENTS = {
+    "auftrag": "Projektauftrag",
+    "anforderungen": "Anforderungen",
+    "run": "Planung",
+    "durchfuehrung": "Durchführung",
+    "kontrolle": "Kontrolle",
+}
 PROGRESS_COLUMNS = [
     "ID",
     "Aufgabe",

@@ -1,3 +1,4 @@
+import json
 from datetime import date, datetime
 
 import pytest
@@ -173,3 +174,57 @@ def test_criteria_lines_round_trip():
     assert lines_to_criteria(text + "\n\n") == criteria
     with pytest.raises(InputError, match="Zeile 1: 'schnell' braucht die Form"):
         lines_to_criteria("schnell")
+
+
+def call(name, data, call_id):
+    return {"type": "tool_use", "id": call_id, "name": name, "input": data}
+
+
+def test_a_rejected_charter_goes_back_to_claude(api, tmp_path):
+    from test_agent_loop import read_log, reply
+
+    replies, requests = api
+    twice = charter(success_criteria=[{"id": "K1", "text": "a"}, {"id": "K1", "text": "b"}])
+    replies += [
+        reply([call("submit_auftrag", twice.model_dump(mode="json"), "c1")]),
+        reply([call("submit_auftrag", charter().model_dump(mode="json"), "c2")]),
+    ]
+    result = lifecycle.run_charter(PROJECT, log_dir=tmp_path)
+    assert result == charter()
+    assert PROJECT.idea in json.dumps(requests[0]["messages"], ensure_ascii=False)
+    (rejection,) = requests[1]["messages"][-1]["content"]
+    assert rejection["is_error"] is True
+    assert "'K1' ist mehrfach vergeben" in json.dumps(rejection, ensure_ascii=False)
+    log = read_log(tmp_path, "auftrag")
+    assert log["outcome"] == "projektauftrag" and log["result"] == charter().model_dump(mode="json")
+
+
+def test_requirements_that_miss_a_criterion_are_rejected(api, tmp_path):
+    from test_agent_loop import read_log, reply
+
+    replies, requests = api
+    replies += [
+        reply(
+            [call("submit_anforderungen", requirements(need("R1")).model_dump(mode="json"), "c1")]
+        ),
+        reply([call("submit_anforderungen", requirements().model_dump(mode="json"), "c2")]),
+    ]
+    result = lifecycle.run_requirements(PROJECT, charter(), log_dir=tmp_path)
+    assert result == requirements()
+    # Claude works from the charter, and learns which success criterion is not covered.
+    assert "Doppelbuchungen sind ausgeschlossen" in json.dumps(requests[0], ensure_ascii=False)
+    assert "'K2'" in json.dumps(requests[1]["messages"][-1], ensure_ascii=False)
+    assert read_log(tmp_path, "anforderungen")["outcome"] == "anforderungskatalog"
+
+
+def test_runs_of_the_new_agents_are_counted(api, tmp_path):
+    from test_agent_loop import reply
+
+    from pm_agent.tracking import agent_runs
+
+    replies, _ = api
+    replies += [reply([call("submit_auftrag", charter().model_dump(mode="json"), "c1")])]
+    lifecycle.run_charter(PROJECT, log_dir=tmp_path)
+    assert [(r["Agent"], r["Ergebnis"]) for r in agent_runs(tmp_path)] == [
+        ("Projektauftrag", "Projektauftrag")
+    ]
