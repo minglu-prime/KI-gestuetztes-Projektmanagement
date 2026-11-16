@@ -1562,15 +1562,15 @@ def test_the_path_starts_at_the_auftrag_and_ticks_what_is_approved(site):
     lifecycle.save(approved)
     at = site.switch_page("views/kontrolle.py").run()
     path = steps(at)
-    assert "done" in path["Anforderungen"] and "next" in path["Planen"]
+    assert "done" in path["Anforderungen"] and "next" in path["Entwurf"]
 
 
 def test_a_draft_or_a_skipped_phase_is_marked_not_approved(tracked):
     # A project is adopted without charter and requirements: both were skipped.
     at = tracked.switch_page("views/kontrolle.py").run()
     path = steps(at)
-    assert "warn" in path["Auftrag"] and "warn" in path["Anforderungen"]
-    assert journey(at).count("nicht freigegeben") == 2
+    assert all("warn" in path[name] for name in ["Auftrag", "Anforderungen", "Entwurf"])
+    assert journey(at).count("nicht freigegeben") == 3
     # A draft is marked too, before any project is adopted.
     tracking.PROJECT_FILE.unlink()
     lifecycle.save(with_charter(approved=False))
@@ -1723,3 +1723,60 @@ def test_starting_over_clears_the_fields_too(site):
     at = at.run()  # the fields of the old project must not save it again
     assert lifecycle.load() == lifecycle.Lifecycle()
     assert at.text_area(key="auftrag_idea").value == ""
+
+
+def design_tables(at):
+    return {
+        f.key.split("_")[1]: f.value
+        for f in at.dataframe
+        if f.key and f.key.startswith("design_") and f.key.endswith(tuple("0123456789"))
+    }
+
+
+def test_without_requirements_the_design_page_leads_to_them(site):
+    at = site.switch_page("views/entwurf.py").run()
+    assert not at.exception
+    assert button(at, "Entwurf mit Claude entwerfen").disabled
+    lifecycle.save(with_charter())
+    at = site.switch_page("views/entwurf.py").run()
+    assert any("Noch keine Anforderungen" in i.value for i in at.info)
+    assert not button(at, "Entwurf mit Claude entwerfen").disabled
+
+
+def test_a_design_from_claude_is_drawn_checked_and_approved(site, monkeypatch):
+    from test_lifecycle import design
+
+    def drafted(project, charter, requirements, on_round=None):
+        assert (project, charter, requirements) == (PROJECT, CHARTER, NEEDS)
+        return design()
+
+    monkeypatch.setattr(lifecycle, "run_design", drafted)
+    approve_needs()
+    at = site.switch_page("views/entwurf.py").run()
+    button(at, "Entwurf mit Claude entwerfen").click()
+    at = at.run()
+    assert not at.exception and not at.error
+    assert lifecycle.load().design == design()
+    tables = design_tables(at)
+    assert sorted(tables) == ["components", "flows", "interfaces", "steps"]
+    assert list(tables["steps"]["Von"]) == ["B1", "B2", "B3"]
+    assert any("<svg" in h.value and "Buchung anlegen" in h.value for h in at.html)
+
+    button(at, "Entwurf freigeben").click()
+    at = at.run()
+    assert lifecycle.approved_design(lifecycle.load()) == design()
+    assert "✓ Entwurf: freigegeben<" in chips(at)
+    assert steps(at)["Entwurf"] >= {"done", "here"}
+
+
+def test_a_step_against_the_contract_blocks_the_approval(site):
+    from test_lifecycle import design
+
+    approve_needs()
+    lifecycle.save(lifecycle.load().model_copy(update={"design": design()}))
+    at = site.switch_page("views/entwurf.py").run()
+    at = edit_table(at, "design_steps_", {1: {"Von": "B3", "An": "B2"}})
+    button(at, "Änderungen speichern und prüfen").click()
+    at = at.run()
+    assert any("ein Aufruf von 'S1' geht von B2 an B3" in e.value for e in at.error)
+    assert button(at, "Entwurf freigeben").disabled
