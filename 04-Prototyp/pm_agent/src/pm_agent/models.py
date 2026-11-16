@@ -36,9 +36,10 @@ class Absence(_Model):
 class Member(_Model):
     name: NonEmpty
     skills: dict[NonEmpty, SkillLevel] = Field(default_factory=dict)
-    # A week has 168 hours. Below 1 h a member cannot be planned, and tiny values
-    # underflow to 0 h per workday.
-    hours_per_week: float = Field(ge=1, le=7 * 24)
+    # The plan spreads the weekly hours over the five workdays: more than 5 x 24 h would
+    # make a workday longer than a day. Below 1 h a member cannot be planned, and tiny
+    # values underflow to 0 h per workday.
+    hours_per_week: float = Field(ge=1, le=5 * 24)
     absences: list[Absence] = Field(default_factory=list)
     note: str = ""
 

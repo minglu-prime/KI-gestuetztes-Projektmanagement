@@ -24,14 +24,16 @@ def test_skill_levels_1_and_5_are_valid(level):
     assert member.skills == {"Python": level}
 
 
-@pytest.mark.parametrize("hours", [0, 0.5, 169, float("inf")])
-def test_weekly_hours_must_fit_into_a_week(hours):
+# The plan spreads the weekly hours over Monday to Friday: more than 5 x 24 h would make a
+# workday longer than a day (168 h gave 33.6 h a day).
+@pytest.mark.parametrize("hours", [0, 0.5, 121, 168, float("inf")])
+def test_weekly_hours_must_fit_into_five_workdays(hours):
     with pytest.raises(ValidationError):
         Member(name="Anna", hours_per_week=hours)
 
 
-@pytest.mark.parametrize("hours", [1, 168])
-def test_weekly_hours_from_1_to_168_are_valid(hours):
+@pytest.mark.parametrize("hours", [1, 120])
+def test_weekly_hours_from_1_to_120_are_valid(hours):
     assert Member(name="Anna", hours_per_week=hours).hours_per_week == hours
 
 
