@@ -6,12 +6,13 @@ from html import escape
 from typing import Any, TypeVar
 
 import altair as alt
+import pandas as pd
 import streamlit as st
 from anthropic import APIError
 
 from pm_agent.agent import AgentError
 from pm_agent.models import Plan
-from pm_agent.tracking import Tracking, load
+from pm_agent.tracking import PART, Tracking, history_rows, load
 from pm_agent.workbench import InputError, describe_round, round_summary
 
 T = TypeVar("T")
@@ -55,6 +56,20 @@ def heading(icon: str, text: str) -> None:
         f'#### <span class="icon" aria-hidden="true">{escape(icon)}</span> {plain}',
         unsafe_allow_html=True,
     )
+
+
+def history_table(tracking: Tracking) -> None:
+    """The work kept from earlier plans, if the project was adopted again."""
+    if not tracking.history:
+        return
+    with st.expander(f"Aus früheren Plänen ({len(tracking.history)})"):
+        st.dataframe(pd.DataFrame(history_rows(tracking)), hide_index=True)
+        st.caption(
+            f"Bevor der Rest des Projekts neu übernommen wurde. In allen Kennzahlen "
+            f"mitgezählt. „{PART}“: die gebuchten Stunden einer Aufgabe, deren Rest im "
+            "aktuellen Plan steht; ihr Plananteil zählt als fertig, sobald die Aufgabe fertig "
+            "ist."
+        )
 
 
 MARKS = {"on": "✓", "warn": "!", "": "○", "plain": ""}

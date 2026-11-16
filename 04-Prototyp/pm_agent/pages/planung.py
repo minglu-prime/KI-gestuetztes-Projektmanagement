@@ -20,7 +20,7 @@ from pydantic import ValidationError
 from pm_agent.agent import PlanningError, run_planning, run_replanning
 from pm_agent.models import Project
 from pm_agent.planning import check_plan
-from pm_agent.tracking import adopt, has_progress, rest_project
+from pm_agent.tracking import adopt, finished_again, has_progress, rest_project
 from pm_agent.tracking import load as load_tracking
 from pm_agent.ui import (
     BUSY_HINT,
@@ -62,6 +62,9 @@ from pm_agent.workbench import (
 
 state = st.session_state
 STEPS = ["1 · Team", "2 · Projekt", "3 · Planung", "4 · Ergebnis", "5 · Anpassen", "6 · Export"]
+# What becomes of the recorded progress when a plan is adopted again.
+KEEP = "Als frühere Arbeit behalten"
+DROP = "Verwerfen"
 
 
 def init() -> None:
@@ -915,13 +918,31 @@ with tabs[5]:
             except InputError as err:
                 adopted = None
                 st.error(f"Das übernommene Projekt konnte nicht gelesen werden: {err}")
-            overwrite = True
+            overwrite, keep = True, None
             if adopted is not None and has_progress(adopted):
-                overwrite = st.checkbox(
+                choice = st.radio(
                     f"Das am {adopted.adopted:%d.%m.%Y} übernommene Projekt hat schon erfassten "
-                    "Fortschritt. Überschreiben und den Fortschritt verwerfen.",
-                    key="adopt_overwrite",
+                    "Fortschritt.",
+                    [KEEP, DROP],
+                    key="adopt_progress",
+                    help="Behalten passt, wenn dieser Plan der neu geplante Rest des Projekts "
+                    "ist (Seite Kontrolle, „Rest mit Claude umplanen“): Fertige Aufgaben und "
+                    "gebuchte Stunden bleiben in den Kennzahlen, begonnene Aufgaben gehen im "
+                    "neuen Plan weiter.",
                 )
+                if choice == KEEP:
+                    keep = adopted
+                    if again := finished_again(adopted, state.plan):
+                        overwrite = False
+                        st.warning(
+                            f"Schon fertig und wieder im Plan: {', '.join(again)}. Behalten "
+                            "würde diese Arbeit doppelt zählen. Plane den Rest über die Seite "
+                            "Kontrolle („Rest mit Claude umplanen“), oder verwirf den Fortschritt."
+                        )
+                else:
+                    overwrite = st.checkbox(
+                        "Ja, den erfassten Fortschritt verwerfen.", key="adopt_overwrite"
+                    )
             elif adopted is not None:
                 st.caption(f"Ersetzt das am {adopted.adopted:%d.%m.%Y} übernommene Projekt.")
             if result.errors:
@@ -933,7 +954,9 @@ with tabs[5]:
                 disabled=bool(result.errors) or not overwrite,
             ):
                 try:
-                    adopt(project, team, state.plan)
+                    adopt(project, team, state.plan, keep=keep)
+                except InputError as err:  # the checks above already keep the button off
+                    st.error(f"Nicht übernommen: {err}.")
                 except OSError as err:
                     st.error(
                         f"data/projekt.json konnte nicht gespeichert werden: {err}. Das "

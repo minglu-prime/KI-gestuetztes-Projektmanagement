@@ -824,6 +824,13 @@ def test_an_adopted_project_with_progress_requires_explicit_overwrite(flow_site,
     assert not at.exception
     assert at.session_state["plan"] == replacement
     assert tracking.load().plan == PLAN
+    # Keeping is the default, but A is finished and in the new plan again: it would count
+    # twice.
+    assert at.radio(key="adopt_progress").value == "Als frühere Arbeit behalten"
+    assert any("Schon fertig und wieder im Plan: A" in w.value for w in at.warning)
+    assert button(at, "Plan als Projekt übernehmen").disabled
+
+    at.radio(key="adopt_progress").set_value("Verwerfen").run()
     assert at.checkbox(key="adopt_overwrite").value is False
     assert "Fortschritt verwerfen" in at.checkbox(key="adopt_overwrite").label
     assert button(at, "Plan als Projekt übernehmen").disabled
@@ -922,6 +929,22 @@ def test_the_rest_of_the_project_goes_from_kontrolle_into_the_planung(site):
     assert at.session_state["step"] == "5 · Anpassen"  # where the conversation is
     assert at.date_input(key="start").value == max(date.today(), PROJECT.start_date)
     assert list(at.session_state["team_df"]["Name"]) == ["Anna"]
+
+    # Adopted again, the finished A stays as work of the earlier plan. (AppTest reruns the
+    # page it ran, Kontrolle, not the one the script switched to.)
+    at = at.switch_page(PLANUNG).run()
+    assert [t.id for t in at.session_state["plan"].tasks] == ["B"]
+    assert at.radio(key="adopt_progress").value == "Als frühere Arbeit behalten"
+    button(at, "Plan als Projekt übernehmen").click()
+    at.run()
+    assert not at.exception and not at.error
+    again = tracking.load()
+    assert [t.id for t in again.plan.tasks] == ["B"]
+    assert [(e.id, e.finished) for e in again.history] == [("A", True)]
+
+    at = at.switch_page("pages/durchfuehrung.py").run()
+    assert not at.exception
+    assert "Aus früheren Plänen (1)" in [e.label for e in at.expander]
 
 
 def test_kontrolle_shows_the_earned_value(tracked):

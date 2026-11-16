@@ -32,6 +32,10 @@ $naechste
 |---|---|---|---|---|---|---|
 $aufgaben
 
+## Aus früheren Plänen
+
+$frueher
+
 ## Risiken
 
 $risiken

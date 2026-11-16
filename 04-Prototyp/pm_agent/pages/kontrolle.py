@@ -30,6 +30,7 @@ from pm_agent.ui import (
     adopted_project,
     consent,
     heading,
+    history_table,
     on_panel,
     run_with_progress,
 )
@@ -289,13 +290,15 @@ if tracking is not None:
             width="stretch",
         )
         st.dataframe(per_task, hide_index=True)
+        history_table(tracking)
 
     with st.container(border=True, key="panel-members"):
         heading("groups", "Plan und Ist je Person")
         per_member = pd.DataFrame(result.by_member)
-        # Every person in this table has at least one task, so the planned hours are not zero.
-        share = per_member["Fertig (Plan-h)"] / per_member["Plan (h)"]
-        per_member["Erledigt"] = share.round(2)  # the column shows whole per cent
+        # A person with only a part from an earlier plan whose booked hours stood for none
+        # of its estimate has 0 planned hours: nothing to show a share of.
+        planned = per_member["Plan (h)"].where(per_member["Plan (h)"] > 0)
+        per_member["Erledigt"] = (per_member["Fertig (Plan-h)"] / planned).round(2)
         st.dataframe(
             per_member,
             hide_index=True,
