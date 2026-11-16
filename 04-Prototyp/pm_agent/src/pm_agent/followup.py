@@ -16,7 +16,7 @@ from typing import Any
 from pm_agent.agent import LOG_DIR, PROMPTS, run_agent
 from pm_agent.models import ControlReport, Member, StatusSummary
 from pm_agent.tools import Submission
-from pm_agent.tracking import Evaluation, Tracking, evaluate, forecast
+from pm_agent.tracking import Evaluation, Forecast, Tracking, evaluate, forecast
 
 
 def run_status_summary(
@@ -48,6 +48,7 @@ def run_control_report(
 ) -> ControlReport:
     """Kontrolle agent: assessment, findings and countermeasures. Raises AgentError."""
     evaluation = evaluate(tracking, today)
+    outlook = forecast(tracking, today)
     submission = Submission(
         name="submit_control",
         noun="Kontrollbericht",
@@ -57,7 +58,7 @@ def run_control_report(
             "ist, und nennt die Gründe."
         ),
         schema=ControlReport,
-        check=lambda report: check_report(report, evaluation, tracking.team),
+        check=lambda report: check_report(report, evaluation, tracking.team, outlook),
     )
     return _run("kontrolle", submission, tracking, evaluation, log_dir, on_round)
 
@@ -82,15 +83,22 @@ def check_summary(summary: StatusSummary, evaluation: Evaluation) -> list[str]:
 
 
 def check_report(
-    report: ControlReport, evaluation: Evaluation, team: list[Member] | None = None
+    report: ControlReport,
+    evaluation: Evaluation,
+    team: list[Member] | None = None,
+    outlook: Forecast | None = None,
 ) -> list[str]:
-    """`team` is needed to check reassignments; without it they are not checked."""
+    """`team` is needed to check reassignments, `outlook` to check the assessment against the
+    forecast; without them these are not checked."""
     # The agent gets the work of earlier plans too ("frueher" in facts) and may name it.
     # Unless its task goes on in the current plan, that work is closed: nothing to give away.
     going_on = {t.id for t in evaluation.tasks if t.status != "fertig"}
     earlier = {e.id for e in evaluation.history}
     known = going_on | earlier | {t.id for t in evaluation.tasks}
-    finished = known - going_on
+    finished = {t.id for t in evaluation.tasks if t.status == "fertig"}
+    finished |= {e.id for e in evaluation.history if e.finished}
+    closed = known - going_on - finished  # a begun task that the next plan dropped
+    owner = {t.id: t.member for t in evaluation.tasks}
     names = {m.name for m in team} if team is not None else None
     errors = []
     for kind, items in (("Feststellung", report.findings), ("Gegenmaßnahme", report.measures)):
@@ -108,11 +116,18 @@ def check_report(
                 f"Gegenmaßnahme will Aufgaben an '{measure.reassign_to}' geben, diese Person "
                 "ist nicht im Team"
             )
-        errors += [
-            f"Gegenmaßnahme will die fertige Aufgabe '{task_id}' neu vergeben"
-            for task_id in measure.task_ids
-            if task_id in finished
-        ]
+        for task_id in measure.task_ids:
+            if task_id in finished:
+                errors.append(f"Gegenmaßnahme will die fertige Aufgabe '{task_id}' neu vergeben")
+            elif task_id in closed:
+                errors.append(
+                    f"Gegenmaßnahme will die abgeschlossene Aufgabe '{task_id}' neu vergeben"
+                )
+            elif owner.get(task_id) == measure.reassign_to:
+                errors.append(
+                    f"Gegenmaßnahme gibt '{task_id}' an {measure.reassign_to}, die die Aufgabe "
+                    "schon hat"
+                )
     covered = {task_id for measure in report.measures for task_id in measure.task_ids}
     errors += [
         f"Aufgabe '{t.id}' ist im Verzug, aber keine Gegenmaßnahme nennt sie"
@@ -121,6 +136,10 @@ def check_report(
     ]
     if evaluation.overdue and report.assessment == "im Plan":
         errors.append("Es gibt Aufgaben im Verzug, die Bewertung kann nicht 'im Plan' sein")
+    if outlook is not None and outlook.deadline_gap > 0 and report.assessment == "im Plan":
+        errors.append(
+            "Die Prognose endet nach der Deadline, die Bewertung kann nicht 'im Plan' sein"
+        )
     return errors
 
 

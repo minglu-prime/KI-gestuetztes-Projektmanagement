@@ -194,7 +194,10 @@ def test_a_reassignment_in_a_measure_must_name_a_team_member_and_open_tasks(trac
             measures=[measure, late],
         )
 
-    assert check_report(report(["B"], "Anna"), evaluation, TEAM) == []
+    # B is Anna's already: giving it to her changes nothing and is no countermeasure.
+    assert check_report(report(["B"], "Anna"), evaluation, TEAM) == [
+        "Gegenmaßnahme gibt 'B' an Anna, die die Aufgabe schon hat"
+    ]
     assert check_report(report(["B"], "Zoe"), evaluation, TEAM) == [
         "Gegenmaßnahme will Aufgaben an 'Zoe' geben, diese Person ist nicht im Team"
     ]
@@ -206,15 +209,15 @@ def test_a_reassignment_in_a_measure_must_name_a_team_member_and_open_tasks(trac
 def test_a_reassignment_to_someone_outside_the_team_goes_back_to_claude(api, tracking, tmp_path):
     replies, requests = api
     to_zoe = {"task_ids": ["B"], "action": "Zoe übernimmt B.", "effect": "x", "reassign_to": "Zoe"}
-    to_anna = {**to_zoe, "action": "Anna behält B.", "reassign_to": "Anna"}
+    keep = {"task_ids": ["B"], "action": "Anna behält B und priorisiert sie.", "effect": "x"}
     replies += [
         reply([tool_call("submit_control", {**REPORT, "measures": [to_zoe]}, "call_1")]),
-        reply([tool_call("submit_control", {**REPORT, "measures": [to_anna]}, "call_2")]),
+        reply([tool_call("submit_control", {**REPORT, "measures": [keep]}, "call_2")]),
     ]
 
     report = run_control_report(tracking, TODAY, log_dir=tmp_path)
 
-    assert report.measures[0].reassign_to == "Anna"
+    assert report.measures[0].reassign_to is None
     (rejection,) = requests[1]["messages"][-1]["content"]
     assert rejection["is_error"] is True
     assert "an 'Zoe' geben, diese Person ist nicht im Team" in json.dumps(
