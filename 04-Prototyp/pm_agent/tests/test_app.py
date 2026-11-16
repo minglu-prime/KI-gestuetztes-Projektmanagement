@@ -841,8 +841,8 @@ def test_nonzero_progress_survives_reopen_and_reaches_control_and_documents(flow
         "Planwert bis heute": "24 h",
         "Fertigstellungswert": "8 h",
         "Ist-Stunden": "14 h",
-        "SPI": "0,33",
-        "CPI": "0,57",
+        "Termin-Kennzahl (SPI)": "0,33",
+        "Aufwands-Kennzahl (CPI)": "0,57",
     }
     assert {label: metrics.get(label) for label in fixed} == fixed
     (tasks,) = [d.value for d in at.dataframe if "Geplantes Ende" in d.value.columns]
@@ -1093,7 +1093,12 @@ def test_kontrolle_shows_the_earned_value(tracked):
     at = tracked.switch_page("views/kontrolle.py").run()
     assert not at.exception
     labels = [m.label for m in at.metric]
-    for label in ["Planwert bis heute", "Fertigstellungswert", "SPI", "CPI"]:
+    for label in [
+        "Planwert bis heute",
+        "Fertigstellungswert",
+        "Termin-Kennzahl (SPI)",
+        "Aufwands-Kennzahl (CPI)",
+    ]:
         assert label in labels
 
 

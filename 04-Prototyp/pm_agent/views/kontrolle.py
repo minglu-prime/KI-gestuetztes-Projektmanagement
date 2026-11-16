@@ -187,8 +187,9 @@ if tracking is not None:
         ev.metric("Fertigstellungswert", f"{hours_text(value.earned)} h")
         ac.metric("Ist-Stunden", f"{hours_text(value.actual)} h")
         spi, cpi = st.columns(2)
-        spi.metric("SPI", index_text(value.schedule_index, "–"))
-        cpi.metric("CPI", index_text(value.cost_index, "–"))
+        # The names of the Kontrollbericht: the short form alone means nothing to most.
+        spi.metric("Termin-Kennzahl (SPI)", index_text(value.schedule_index, "–"))
+        cpi.metric("Aufwands-Kennzahl (CPI)", index_text(value.cost_index, "–"))
         if value.schedule_index is None:
             st.caption(f"SPI: {NO_SCHEDULE_INDEX}.")
         if value.cost_index is None:
