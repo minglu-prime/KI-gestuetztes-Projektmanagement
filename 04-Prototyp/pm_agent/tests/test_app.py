@@ -505,7 +505,8 @@ def test_an_agent_error_is_shown_to_the_project_lead(app, monkeypatch):
 
     assert not at.exception
     assert [e.value for e in at.error] == [
-        "Kein Zugang zur Claude API: ANTHROPIC_API_KEY ist nicht gesetzt."
+        # Shown as written: the underscores would set "API" in italics.
+        ui.as_text("Kein Zugang zur Claude API: ANTHROPIC_API_KEY ist nicht gesetzt.")
     ]
     assert any("Noch kein Plan" in i.value for i in at.info)
 
@@ -1330,6 +1331,35 @@ def test_the_control_agent_shows_assessment_findings_and_measures(tracked, monke
     assert second["Nachgerechnet (Python)"].startswith("Das voraussichtliche Ende bleibt der ")
 
 
+def test_text_from_claude_shows_no_image_or_link_on_the_pages(tracked, monkeypatch):
+    # Rendered as Markdown, an image would be fetched from a foreign server and a link
+    # could hide where it leads.
+    active = "![x](https://track.example/p.png) [hier](https://evil.example)"
+    summary = StatusSummary(summary=active, next_steps=[{"task_id": "A", "action": active}])
+    report = ControlReport(
+        assessment="gefährdet", findings=[{"task_ids": ["B"], "observation": active}]
+    )
+    monkeypatch.setattr(
+        followup, "run_status_summary", lambda adopted, today, on_round=None: summary
+    )
+    monkeypatch.setattr(followup, "run_control_report", lambda *args, **kwargs: report)
+    shown = []
+    for page, consent, start in [
+        ("durchfuehrung", "consent_durchfuehrung", "Zusammenfassung mit Claude vorschlagen"),
+        ("kontrolle", "consent_kontrolle", "Stand mit Claude bewerten"),
+    ]:
+        at = tracked.switch_page(f"views/{page}.py").run()
+        at.checkbox(key=consent).check()
+        at.run()
+        button(at, start).click()
+        at.run()
+        assert not at.exception
+        shown += [m.value for m in at.markdown] + [c.value for c in at.caption]
+
+    assert any("track.example" in text for text in shown)
+    assert not [text for text in shown if re.search(r"(?<!\\)\[", text)]
+
+
 def test_a_failing_agent_shows_the_reason_and_no_result(tracked, monkeypatch):
     def failing(adopted, today, on_round=None):
         raise AgentError("Kein Zugang zur Claude API: ANTHROPIC_API_KEY ist nicht gesetzt.")
@@ -1343,7 +1373,7 @@ def test_a_failing_agent_shows_the_reason_and_no_result(tracked, monkeypatch):
 
     assert not at.exception
     assert [e.value for e in at.error] == [
-        "Kein Zugang zur Claude API: ANTHROPIC_API_KEY ist nicht gesetzt."
+        ui.as_text("Kein Zugang zur Claude API: ANTHROPIC_API_KEY ist nicht gesetzt.")
     ]
     assert "Bewertung" not in {m.label for m in at.metric}
 
@@ -1724,6 +1754,16 @@ def test_starting_over_clears_the_fields_too(site):
     at = at.run()  # the fields of the old project must not save it again
     assert lifecycle.load() == lifecycle.Lifecycle()
     assert at.text_area(key="auftrag_idea").value == ""
+
+
+def test_the_overdue_list_on_the_kontrolle_shows_no_link(site):
+    # The plan of 9.11. is long past: both tasks are overdue whenever the test runs.
+    tasks = [t.model_copy(update={"title": "[hier](https://evil.example)"}) for t in PLAN.tasks]
+    tracking.adopt(PROJECT, TEAM, PLAN.model_copy(update={"tasks": tasks}))
+    at = site.switch_page("views/kontrolle.py").run()
+    assert not at.exception
+    (overdue,) = [w.value for w in at.warning if w.value.startswith("Im Verzug")]
+    assert "evil.example" in overdue and not re.search(r"(?<!\\)\[", overdue)
 
 
 def design_tables(at):

@@ -296,9 +296,9 @@ def round_printer(start: Plan | None = None) -> Callable[[dict[str, Any]], None]
         nonlocal number, previous
         number += 1
         view = describe_round(number, record, previous)
-        st.markdown(f"**{view['headline']}**")
+        st.markdown(f"**{as_text(view['headline'])}**")
         if view["said"] and view["said"] not in view["headline"]:
-            st.caption(f"Claude: {view['said']}")
+            st.caption(f"Claude: {as_text(view['said'])}")
         if view["size"]:
             st.caption(f"Entwurf: {view['size']}")
         if view["changes"]:
@@ -306,11 +306,11 @@ def round_printer(start: Plan | None = None) -> Callable[[dict[str, Any]], None]
             more = f"\n- … und {len(rest)} weitere Änderungen" if rest else ""
             st.markdown(
                 "Geändert seit dem Stand davor:\n\n"
-                + "\n".join(f"- {change}" for change in shown)
+                + "\n".join(f"- {as_text(change)}" for change in shown)
                 + more
             )
         for message in view["messages"]:
-            st.caption(message)
+            st.caption(as_text(message))
         previous = view["draft"] or previous
 
     return show
@@ -328,9 +328,9 @@ def run_with_progress(label: str, run: Callable[[Callable[[dict[str, Any]], None
             nonlocal rounds
             rounds += 1
             headline, messages = round_summary(rounds, record)
-            st.write(headline)
+            st.write(as_text(headline))
             for message in messages:
-                st.caption(message)
+                st.caption(as_text(message))
 
         try:
             result = run(on_round)
@@ -345,7 +345,7 @@ def run_with_progress(label: str, run: Callable[[Callable[[dict[str, Any]], None
         )
     # The message goes below the box: a collapsed status would hide it.
     if failure:
-        st.error(failure)
+        st.error(as_text(failure))
     return result
 
 

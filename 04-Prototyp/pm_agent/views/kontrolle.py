@@ -30,6 +30,7 @@ from pm_agent.ui import (
     LEGEND,
     TASK_AXIS,
     adopted_project,
+    as_text,
     consent,
     heading,
     history_table,
@@ -68,7 +69,8 @@ if tracking is not None:
         st.warning(
             "Im Verzug:\n\n"
             + "\n".join(
-                f"- {t.id} · {t.title} ({t.member}), geplant bis {t.planned_end:%d.%m.%Y}, "
+                f"- {as_text(t.id)} · {as_text(t.title)} ({as_text(t.member)}), geplant bis "
+                f"{t.planned_end:%d.%m.%Y}, "
                 f"Status: {t.status}"
                 for t in result.overdue
             )
@@ -112,7 +114,9 @@ if tracking is not None:
             titles = {task.id: task.title for task in tracking.plan.tasks}
             for late, waiting in outlook.blocked.items():
                 held = ", ".join(waiting) if waiting else "keine weitere Aufgabe"
-                st.markdown(f"- **{late} · {titles[late]}** hält auf: {held}")
+                st.markdown(
+                    f"- **{as_text(late)} · {as_text(titles[late])}** hält auf: {as_text(held)}"
+                )
 
             # From here the project lead can act: plan the rest again, with Claude.
             if st.button(
@@ -380,8 +384,9 @@ if tracking is not None:
                 st.metric("Bewertung", report.assessment)
                 st.markdown("**Feststellungen**")
                 for finding in report.findings:
-                    where = f"**{', '.join(finding.task_ids)}:** " if finding.task_ids else ""
-                    st.markdown(f"- {where}{finding.observation}")
+                    ids = as_text(", ".join(finding.task_ids))
+                    where = f"**{ids}:** " if finding.task_ids else ""
+                    st.markdown(f"- {where}{as_text(finding.observation)}")
                 st.markdown("**Gegenmaßnahmen**")
                 if report.measures:
                     st.dataframe(

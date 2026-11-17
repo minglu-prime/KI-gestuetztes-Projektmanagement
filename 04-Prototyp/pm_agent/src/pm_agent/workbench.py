@@ -830,6 +830,15 @@ def _date(day: Any) -> str:
     return day.strftime("%d.%m.%Y")
 
 
+def _inert(text: str) -> str:
+    """Text from Claude or the project lead inside a Markdown document: no link, image or
+    HTML tag. The preview would fetch an image from a foreign server and a link could hide
+    where it leads; GitHub renders the downloaded file the same way."""
+    for char in "[]<>":
+        text = text.replace(char, "\\" + char)
+    return text
+
+
 def _md(text: str) -> str:
-    """Text for one table cell or one list item: no column separator, on one line."""
-    return " ".join(text.replace("|", "\\|").split())
+    """Text for one table cell or one list item: no column separator, on one line, inert."""
+    return " ".join(_inert(text).replace("|", "\\|").split())

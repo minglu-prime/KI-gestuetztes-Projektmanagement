@@ -37,6 +37,7 @@ from pm_agent.workbench import (
     InputError,
     _cell,
     _date,
+    _inert,
     _md,
     _reason,
     bar_end,
@@ -879,7 +880,8 @@ def status_report(
             f"- **{_md(step.task_id)}:** {_md(step.action)}" for step in summary.next_steps
         )
         note = "*Vorschlag des Durchführungs-Agenten (Claude), von der Projektleitung zu prüfen.*"
-        text = "\n\n".join(filter(None, [summary.summary, steps, note]))
+        # The summary keeps its paragraphs; only links, images and tags are made inert.
+        text = "\n\n".join(filter(None, [_inert(summary.summary), steps, note]))
     count = {status: sum(t.status == status for t in tasks) for status in STATUSES}
     outlook = forecast(tracking, evaluation.today)
     ahead = week_ahead(tracking, evaluation.today)

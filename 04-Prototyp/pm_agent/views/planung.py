@@ -33,6 +33,7 @@ from pm_agent.ui import (
     BUSY_HINT,
     LEGEND,
     TASK_AXIS,
+    as_text,
     chip,
     heading,
     on_panel,
@@ -486,7 +487,7 @@ with tabs[2]:
                 label = f"Kein Plan nach {len(rounds)} Runden" if failure else "Plan angenommen"
                 status.update(label=label, state="error" if failure else "complete", expanded=True)
             if failure:
-                st.error(failure)
+                st.error(as_text(failure))
             else:
                 st.success(
                     f"Plan angenommen nach {len(rounds)} Runden. Er steht in Schritt 4 und 5."
@@ -539,9 +540,9 @@ with tabs[3]:
         b.metric("Fehler", len(result.errors))
         c.metric("Warnungen", len(result.warnings))
         for error in result.errors:
-            st.error(error)
+            st.error(as_text(error))
         for warning in result.warnings:
-            st.warning(warning)
+            st.warning(as_text(warning))
         if not result.errors and not result.warnings:
             st.success("Die Prüfung meldet keine Fehler und keine Warnungen.")
 
@@ -621,7 +622,7 @@ with tabs[3]:
         with st.container(border=True, key="panel-risks"):
             heading("warning", "Risiken")
             if state.plan.risks:
-                st.markdown("\n".join(f"- {r}" for r in state.plan.risks))
+                st.markdown("\n".join(f"- {as_text(r)}" for r in state.plan.risks))
             else:
                 st.caption("Der Plan nennt keine Risiken.")
 
@@ -669,25 +670,31 @@ with tabs[3]:
                     )
                 )
                 if view["description"]:
-                    st.markdown(view["description"])
+                    st.markdown(as_text(view["description"]))
                 why, around = st.columns(2, gap="medium")
                 with why:
-                    st.markdown(f"**Warum {view['member']}?**")
-                    st.markdown(view["reason"])
+                    st.markdown(f"**Warum {as_text(view['member'])}?**")
+                    st.markdown(as_text(view["reason"]))
                     for skill, level in view["skills"]:
                         have = (
                             f"Stufe {level}" if level else f"bei {view['member']} nicht angegeben"
                         )
-                        st.markdown(f"- {skill}: {have}")
+                        st.markdown(f"- {as_text(skill)}: {have}")
                 with around:
                     st.markdown("**Braucht vorher**")
                     st.markdown(
-                        "\n".join(f"- {tid} · {title}" for tid, title in view["depends_on"])
+                        "\n".join(
+                            f"- {as_text(tid)} · {as_text(title)}"
+                            for tid, title in view["depends_on"]
+                        )
                         or "Nichts: Die Aufgabe kann sofort beginnen."
                     )
                     st.markdown("**Darauf warten**")
                     st.markdown(
-                        "\n".join(f"- {tid} · {title}" for tid, title in view["needed_by"])
+                        "\n".join(
+                            f"- {as_text(tid)} · {as_text(title)}"
+                            for tid, title in view["needed_by"]
+                        )
                         or "Keine andere Aufgabe."
                     )
                 st.markdown("**Wer könnte es sonst?**")
@@ -786,7 +793,9 @@ with tabs[4]:
                     st.text(turn["wish"])
                 with st.chat_message("assistant"):
                     st.markdown("**Übernommen**" if turn["accepted"] else "**Verworfen**")
-                    st.markdown("\n".join(f"- {c}" for c in turn["changes"]) or "Keine Änderung.")
+                    st.markdown(
+                        "\n".join(f"- {as_text(c)}" for c in turn["changes"]) or "Keine Änderung."
+                    )
 
             proposal = state.proposal
             # In the form of the table: "Erneut prüfen" writes an untouched plan anew in
@@ -852,7 +861,7 @@ with tabs[4]:
                     )
                 # The message goes below the box: a collapsed status would hide it.
                 if failure:
-                    st.error(failure)
+                    st.error(as_text(failure))
                 else:
                     # Again from the top: the input is locked while the proposal is open.
                     st.rerun()
@@ -868,7 +877,7 @@ with tabs[4]:
                             result, proposed, pair_tasks(state.plan, proposal["plan"]), project
                         )
                     if proposal["changes"]:
-                        st.markdown("\n".join(f"- {c}" for c in proposal["changes"]))
+                        st.markdown("\n".join(f"- {as_text(c)}" for c in proposal["changes"]))
                     else:
                         st.info("Claude schlägt keine Änderung am Plan vor.")
                     with st.container(horizontal=True):

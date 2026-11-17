@@ -1,4 +1,5 @@
 import json
+import re
 from datetime import date
 
 import pytest
@@ -154,6 +155,19 @@ def test_the_agents_summary_goes_into_the_status_report_marked_as_a_proposal(tra
     assert "A ist fertig, B ist im Verzug.\n\n- **B:** Anna schließt die API" in report
     assert "*Vorschlag des Durchführungs-Agenten (Claude)" in report
     assert "Noch nicht erstellt" not in report
+
+
+ACTIVE = "![x](https://track.example/p.png) [hier](https://evil.example) <img src=e.png>"
+
+
+def test_text_from_claude_or_the_lead_loads_no_image_and_hides_no_link(tracking):
+    # The preview renders the report: an image would be fetched from a foreign server, a
+    # link would hide where it goes. GitHub renders the downloaded file the same way.
+    summary = StatusSummary(summary=ACTIVE, next_steps=[{"task_id": "B", "action": ACTIVE}])
+    report = status_report(tracking, evaluate(tracking, today=date(2026, 11, 12)), summary)
+
+    assert not re.search(r"(?<!\\)\[|(?<!\\)<img", report)
+    assert "!\\[x\\](https://track.example/p.png) \\[hier\\](https://evil.example)" in report
 
 
 def test_work_packages_describe_every_task(tracking):

@@ -5,7 +5,7 @@ from datetime import date
 import streamlit as st
 
 from pm_agent.tracking import evaluate, forecast, forecast_text, load, next_step, percent
-from pm_agent.ui import heading
+from pm_agent.ui import as_text, heading
 from pm_agent.workbench import InputError
 
 # How every agent works, as the diagram next to the headline (styled in assets/style.css).
@@ -110,7 +110,7 @@ with st.container(key="project"):
             )
         else:
             result = evaluate(tracking, date.today())
-            st.markdown(f"**{tracking.project.idea}**")
+            st.markdown(f"**{as_text(tracking.project.idea)}**")
             st.progress(result.progress, text=f"{percent(result.progress)} der Planstunden fertig")
             a, b, c = st.columns(3)
             a.metric("Aufgaben", len(result.tasks))
@@ -125,7 +125,7 @@ with st.container(key="project"):
             else:
                 st.caption(f"Prognose: {heading}.")
             advice, where = next_step(tracking, date.today())
-            st.markdown(f"**Als Nächstes:** {advice}")
+            st.markdown(f"**Als Nächstes:** {as_text(advice)}")
             # The button for the page the advice points to is the primary one.
             with st.container(horizontal=True):
                 if st.button(
