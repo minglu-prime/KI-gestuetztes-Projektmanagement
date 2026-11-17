@@ -389,6 +389,21 @@ def demo_status(tracking: Tracking, today: date) -> list[dict[str, Any]]:
     return rows
 
 
+def demo_this_week(tracking: Tracking, today: date) -> str | None:
+    """One line on the demo of the week `today` lies in, or None (no demo, a weekend)."""
+    for week, (first, last) in _weeks(tracking).items():
+        if first <= today <= last:
+            demo = next((d for d in tracking.plan.demos if d.week == week), None)
+            if demo is None:
+                return None
+            done = sum(tracking.progress[tid].status == "fertig" for tid in demo.task_ids)
+            return (
+                f"Demo dieser Woche (bis {_date(last)}): {demo.title}, {done} von "
+                f"{len(demo.task_ids)} Aufgaben fertig"
+            )
+    return None
+
+
 def load(path: Path | None = None) -> Tracking | None:
     """None if no plan was adopted yet. A damaged file is an error, not an empty project."""
     path = path or PROJECT_FILE
@@ -1011,7 +1026,9 @@ def status_report(
         deadline=_date(project.deadline),
         planende=_date(max(t.planned_end for t in tasks)),
         prognose=forecast_text(outlook, project.deadline),
-        naechste=coming,
+        naechste="\n\n".join(
+            filter(None, [_md(demo_this_week(tracking, evaluation.today) or ""), coming])
+        ),
         fortschritt=percent(evaluation.progress),
         fertig=count["fertig"],
         in_arbeit=count["in Arbeit"],

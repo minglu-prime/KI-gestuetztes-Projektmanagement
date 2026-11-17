@@ -1133,3 +1133,23 @@ def test_the_control_document_has_the_demos_and_their_retros(tmp_path):
     assert "Der Plan hat keine Wochen-Demos." in control_document(
         plain, evaluate(plain, date(2026, 11, 23))
     )
+
+
+def test_the_demo_of_this_week_is_named_with_what_is_done(tmp_path):
+    from pm_agent.tracking import demo_this_week
+
+    tracking = demo_tracking(tmp_path)
+    assert (
+        demo_this_week(tracking, date(2026, 11, 18))
+        == "Demo dieser Woche (bis 20.11.2026): API zeigen, 0 von 2 Aufgaben fertig"
+    )
+    assert demo_this_week(tracking, date(2026, 11, 14)) is None  # Saturday: no week runs
+    assert demo_this_week(tracking, date(2026, 11, 25)) is None  # week 3 has no demo
+    plain = adopt(PROJECT, TEAM, PLAN, path=tmp_path / "plain.json")
+    assert demo_this_week(plain, date(2026, 11, 18)) is None
+
+
+def test_the_status_report_names_the_demo_of_this_week(tmp_path):
+    tracking = demo_tracking(tmp_path)
+    report = status_report(tracking, evaluate(tracking, today=date(2026, 11, 18)))
+    assert "Demo dieser Woche (bis 20.11.2026): API zeigen, 0 von 2 Aufgaben fertig" in report
