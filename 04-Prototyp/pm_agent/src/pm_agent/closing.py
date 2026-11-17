@@ -222,22 +222,38 @@ def actual_end(tracking: Tracking, evaluation: Evaluation) -> str:
 
 
 def late_tasks(tracking: Tracking, evaluation: Evaluation) -> str:
-    """Tasks of the plan finished after their planned end, as a Markdown table."""
+    """Tasks finished after their planned end, in this plan and in earlier ones, as a
+    Markdown table. Finished tasks without a day may have been late too: then it says so."""
+    finished = [
+        (e.id, e.title, e.planned_end, e.finished_on) for e in tracking.history if e.finished
+    ] + [
+        (t.id, t.title, t.planned_end, t.finished_on)
+        for t in evaluation.tasks
+        if t.status == "fertig"
+    ]
     rows = []
-    for t in evaluation.tasks:
-        if t.finished_on is None:
+    for task_id, title, planned, day in finished:
+        if planned is None or day is None:
             continue
-        shift = working_shift(tracking.project, t.planned_end, t.finished_on)
+        shift = working_shift(tracking.project, planned, day)
         if shift > 0:
-            cells = [t.id, t.title, _date(t.planned_end), _date(t.finished_on), str(shift)]
+            cells = [task_id, title, _date(planned), _date(day), str(shift)]
             rows.append("| " + " | ".join(_md(cell) for cell in cells) + " |")
+    unknown = sum(planned is None or day is None for _, _, planned, day in finished)
+    note = (
+        f"Von {unknown} fertigen Aufgabe{'' if unknown == 1 else 'n'} ohne Fertigdatum ist "
+        "unbekannt, ob sie rechtzeitig fertig "
+        f"{'wurde' if unknown == 1 else 'wurden'}."
+        if unknown
+        else ""
+    )
     if not rows:
-        return "Keine Aufgabe wurde später fertig als geplant."
+        return note or "Keine Aufgabe wurde später fertig als geplant."
     head = [
         "| ID | Aufgabe | Geplantes Ende | Fertig am | Verzug (Arbeitstage) |",
         "|---|---|---|---|---|",
     ]
-    return "\n".join(head + rows)
+    return "\n".join(head + rows) + (f"\n\n{note}" if note else "")
 
 
 def closing_document(

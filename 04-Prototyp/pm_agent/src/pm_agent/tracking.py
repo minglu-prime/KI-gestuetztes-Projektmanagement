@@ -111,6 +111,7 @@ class Earlier(BaseModel):
     until: date  # the day the next plan was adopted
     requirement_ids: list[str] = Field(default_factory=list)  # what the task served
     finished_on: date | None = None  # a finished task: the day, if it was recorded
+    planned_end: date | None = None  # where its plan had it; None in files saved before
 
 
 class Retro(BaseModel):
@@ -389,6 +390,7 @@ def _closed(tracking: Tracking, day: date) -> list[Earlier]:
                 until=day,
                 requirement_ids=estimates[state.id].requirement_ids,
                 finished_on=state.finished_on if finished else None,
+                planned_end=state.planned_end,
             )
         )
     return closed

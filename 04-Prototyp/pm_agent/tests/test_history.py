@@ -67,6 +67,7 @@ def test_the_work_before_the_new_plan_is_kept_as_history(replanned, path):
             note="Schema zweimal geändert",
             until=day,
             finished_on=THURSDAY,
+            planned_end=date(2026, 11, 9),
         ),
         # The part of B's estimate the 4 booked hours stood for; 12 h are in the new plan.
         Earlier(
@@ -78,6 +79,7 @@ def test_the_work_before_the_new_plan_is_kept_as_history(replanned, path):
             finished=False,
             note="Auth fehlt",
             until=day,
+            planned_end=date(2026, 11, 11),
         ),
     ]
     assert load(path) == replanned

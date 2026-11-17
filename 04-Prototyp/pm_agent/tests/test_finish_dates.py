@@ -148,3 +148,23 @@ def test_finished_tasks_without_a_date_make_the_end_a_lower_bound(tracking):
         update={"progress": {k: Progress(status="fertig") for k in old.progress}}
     )
     assert "**Tatsächliches Ende:** unbekannt (keine Fertigdaten erfasst)" in report(nothing)
+
+
+def test_a_task_finished_late_under_an_earlier_plan_is_in_the_late_table(tracking, tmp_path):
+    # A planned for Mon 09.11., finished Wed 11.11.; the rest (B) adopted again on Thu.
+    late = apply_rows(tracking, [{"ID": "A", "Status": "fertig", "Fertig am": WED}], WED)
+    project, rest = rest_project(late, date(2026, 11, 12))
+    again = adopt(project, TEAM, rest, path=tmp_path / "neu.json", keep=late)
+    assert again.history[0].planned_end == MON
+    done = apply_rows(again, [{"ID": "B", "Status": "fertig"}], today=FRI)
+    text = report(done)
+    assert "| A | " in text and "| 09.11.2026 | 11.11.2026 | 2 |" in text
+
+
+def test_tasks_without_a_date_keep_the_late_table_from_claiming_none_was_late(tracking):
+    old = tracking.model_copy(
+        update={"progress": {k: Progress(status="fertig") for k in tracking.progress}}
+    )
+    text = report(old)
+    assert "Keine Aufgabe wurde später fertig als geplant." not in text
+    assert "Von 2 fertigen Aufgaben ohne Fertigdatum ist unbekannt" in text
