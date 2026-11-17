@@ -459,7 +459,10 @@ def record_result(tracking: Tracking, result: CaseResult) -> Tracking:
 def record_defect(tracking: Tracking, defect: Defect) -> Tracking:
     """A defect, new (numbered F1, F2 …) or changed (same ID). Raises InputError for an
     unknown task, and for a severe defect without a task to fix it."""
-    if defect.task_id and defect.task_id not in tracking.progress:
+    before = next((d for d in tracking.defects if defect.id and d.id == defect.id), None)
+    # A task that left the plan ("Rest umplanen") does not block closing its defect.
+    changed = before is None or before.task_id != defect.task_id
+    if changed and defect.task_id and defect.task_id not in tracking.progress:
         raise InputError(f"Der Fehler nennt die unbekannte Aufgabe '{defect.task_id}'")
     if defect.severity == "schwer" and not defect.task_id:
         raise InputError("Ein schwerer Fehler braucht eine Aufgabe, die ihn behebt")
@@ -475,6 +478,11 @@ def reopen(tracking: Tracking, defect_id: str) -> Tracking:
     defect = next((d for d in tracking.defects if d.id == defect_id), None)
     if defect is None or not defect.task_id:
         raise InputError(f"Der Fehler {defect_id} hat keine Aufgabe, die sich öffnen ließe")
+    if defect.task_id not in tracking.progress:
+        raise InputError(
+            f"Die Aufgabe '{defect.task_id}' von {defect_id} ist nicht mehr im Plan. Plane sie "
+            "neu ein oder gib den Fehler einer anderen Aufgabe."
+        )
     done = tracking.progress[defect.task_id]
     progress = {
         **tracking.progress,
@@ -487,7 +495,7 @@ def check_results(tracking: Tracking, cases: Cases) -> RetroCheck:
     """Errors: a failed case without a defect. Warnings: cases without a result, open
     defects whose task is finished."""
     latest = {r.case_id: r for r in tracking.results}
-    found = {d.case_id for d in tracking.defects}
+    found = {d.case_id for d in tracking.defects if d.status == "offen"}
     errors = [
         f"Testfall '{c.id}' ist fehlgeschlagen, aber es gibt keinen Fehlereintrag"
         for c in cases.cases
@@ -950,9 +958,9 @@ def reassignment_effect(tracking: Tracking, today: date, task_ids: list[str], me
 
 
 def next_step(tracking: Tracking, today: date) -> tuple[str, str]:
-    """What the project lead should look at next, and on which page ("durchfuehrung" or
-    "kontrolle"). The most urgent reason wins. The text names no page: it may be shown on
-    the page it points to."""
+    """What the project lead should look at next, and on which page ("durchfuehrung",
+    "kontrolle" or "testlauf"). The most urgent reason wins. The text names no page: it may
+    be shown on the page it points to."""
     outlook = forecast(tracking, today)
     late = len(evaluate(tracking, today).overdue)
     if outlook.problem:
@@ -960,6 +968,14 @@ def next_step(tracking: Tracking, today: date) -> tuple[str, str]:
             f"Die Prognose lässt sich nicht berechnen: {outlook.problem}. Prüfe Status und "
             "Rest-Stunden der Aufgaben.",
             "durchfuehrung",
+        )
+    open_defects = [d for d in tracking.defects if d.status == "offen"]
+    if outlook.end is None and open_defects:
+        count = "1 Fehler ist" if len(open_defects) == 1 else f"{len(open_defects)} Fehler sind"
+        return (
+            f"Alle Aufgaben sind fertig, aber {count} offen. Öffne die Aufgabe wieder oder "
+            "schließe den Fehler.",
+            "testlauf",
         )
     if outlook.end is None:
         return (

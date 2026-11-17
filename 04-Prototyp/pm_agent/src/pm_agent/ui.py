@@ -180,7 +180,7 @@ def journey(page: str) -> None:
     except InputError as err:
         life, unreadable = None, True
         if page not in ("auftrag", "anforderungen", "entwurf", "testplan"):  # they say it
-            st.caption(f"Die Phasen vor dem Plan sind nicht lesbar: {err}")
+            st.caption(f"Die Phasen vor dem Plan sind nicht lesbar: {as_text(str(err))}")
     phases = {
         "auftrag": lifecycle.charter_state(life),
         "anforderungen": lifecycle.requirements_state(life),

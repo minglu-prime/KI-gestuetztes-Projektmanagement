@@ -2015,6 +2015,8 @@ def test_a_failed_case_needs_a_defect_which_can_reopen_its_task(tracked):
     at = at.run()
     (defect,) = tracking.load().defects
     assert (defect.id, defect.task_id, defect.status) == ("F1", "B", "offen")
+    # The fields are empty again: a second click does not record the same defect twice.
+    assert at.text_input(key="defect_cause").value == ""
     assert not any("keinen Fehlereintrag" in e.value for e in at.error)
 
     button(at, "F1: Aufgabe B wieder öffnen").click()

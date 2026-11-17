@@ -307,3 +307,42 @@ def test_a_criterion_id_names_its_requirement():
     assert check_requirements(requirements(odd, need("R2", sources=["K2"])), charter()).errors == [
         "Anforderung 'R1': das Akzeptanzkriterium 'AK1' muss 'R1.<Nummer>' heißen"
     ]
+
+
+def test_a_defect_whose_task_left_the_plan_can_still_be_closed(adopted):
+    from pm_agent.tracking import Defect, record_defect, reopen
+
+    tracking = record_defect(
+        adopted, Defect(case_id="T2", severity="schwer", cause="x", task_id="B")
+    )
+    gone = tracking.model_copy(update={"progress": {"A": tracking.progress["A"]}})
+    closed = record_defect(gone, gone.defects[0].model_copy(update={"status": "behoben"}))
+    assert closed.defects[0].status == "behoben"
+    with pytest.raises(InputError, match="nicht mehr im Plan"):
+        reopen(gone, "F1")
+
+
+def test_a_case_that_fails_again_after_its_fix_needs_a_new_defect(adopted):
+    from datetime import date
+
+    from pm_agent.tracking import CaseResult, Defect, check_results, record_defect, record_result
+
+    failed = CaseResult(case_id="T1", result="fehlgeschlagen", on=date(2026, 11, 20))
+    tracking = record_result(adopted, failed)
+    tracking = record_defect(
+        tracking, Defect(case_id="T1", severity="leicht", cause="x", status="behoben")
+    )
+    assert "Testfall 'T1' ist fehlgeschlagen, aber es gibt keinen Fehlereintrag" in (
+        check_results(tracking, cases()).errors
+    )
+
+
+def test_open_defects_come_next_when_all_tasks_are_done(adopted):
+    from datetime import date
+
+    from pm_agent.tracking import Defect, apply_rows, next_step, record_defect
+
+    done = apply_rows(adopted, [{"ID": "A", "Status": "fertig"}, {"ID": "B", "Status": "fertig"}])
+    tracking = record_defect(done, Defect(case_id="T2", severity="schwer", cause="x", task_id="B"))
+    advice, page = next_step(tracking, date(2026, 11, 20))
+    assert page == "testlauf" and "1 Fehler ist offen" in advice

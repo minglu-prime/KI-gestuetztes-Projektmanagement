@@ -352,7 +352,7 @@ if tracking is not None:
             plan_of_tests = (lifecycle.load() or lifecycle.Lifecycle()).cases
         except InputError as err:
             plan_of_tests = None
-            st.caption(f"Der Testplan ist nicht lesbar: {err}")
+            st.caption(f"Der Testplan ist nicht lesbar: {as_text(str(err))}")
         if plan_of_tests is None:
             st.caption("Noch kein Testplan. Lege ihn auf der Seite Testplan an.")
         else:
