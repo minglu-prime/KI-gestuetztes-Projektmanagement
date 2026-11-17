@@ -2,6 +2,7 @@
 Each test names the PRs that fixed the same bug by hand."""
 
 import ast
+import re
 from pathlib import Path
 
 ROOT = Path(__file__).parents[1]
@@ -49,3 +50,13 @@ def test_error_messages_are_shown_as_written():
                 if name in caught or name.endswith("_error"):
                     found.append(f"{source.name}:{call.lineno}")
     assert found == []
+
+
+def test_the_readme_names_every_page_of_the_menu():
+    # PR 19, 35, 49 and 54 brought the Startseite or the docs up to pages added before.
+    titles = re.findall(r'st\.Page\("[^"]+", title="([^"]+)"', (ROOT / "app.py").read_text("utf-8"))
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    first_cells = {line.split("|")[1] for line in readme.splitlines() if line.startswith("| ")}
+    named = " ".join(first_cells)
+    assert len(titles) > 10
+    assert [title for title in titles if title not in named] == []
