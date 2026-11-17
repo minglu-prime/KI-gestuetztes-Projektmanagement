@@ -1,6 +1,6 @@
 # Design-Vorschlag: Test und Fehlersuche (Batch 4 des Lebenszyklus)
 
-Stand 17.11.2026. **Vorschlag, nicht freigegeben.** Baut auf Batch 1 (Anforderungen mit
+Stand 17.11.2026. **Umgesetzt auf dem Branch `feat/test-phase`, mit den vorgeschlagenen Antworten auf die drei Fragen unten (feste IDs, eigene Seite „Test“, Wiederöffnen nur auf Knopfdruck). Die Klassen heißen `Case`, `Cases`, `CaseResult`: Namen mit „Test“ sammelt pytest als Tests ein.** Baut auf Batch 1 (Anforderungen mit
 Akzeptanzkriterien), Batch 2 (Entwurf mit typisierten Schnittstellen, PR #43) und Batch 3
 (Wochen-Demos, `feat/weekly-demos`) auf. Gesamtbild: `docs/lebenszyklus.md`, Phase 7.
 

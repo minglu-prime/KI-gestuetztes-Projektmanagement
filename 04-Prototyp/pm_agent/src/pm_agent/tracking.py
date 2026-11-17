@@ -508,6 +508,22 @@ def check_results(tracking: Tracking, cases: Cases) -> RetroCheck:
     return RetroCheck(errors, warnings)
 
 
+def quality_summary(tracking: Tracking, cases: Cases) -> dict[str, str]:
+    """How far testing is: cases with a result, passed ones, open defects by severity.
+    Not "test_…": pytest would take a function of that name for a test."""
+    latest = {r.case_id: r for r in tracking.results}
+    known = [c.id for c in cases.cases]
+    done = [cid for cid in known if cid in latest]
+    passed = [cid for cid in done if latest[cid].result == "bestanden"]
+    open_ = [d for d in tracking.defects if d.status == "offen"]
+    severe = sum(d.severity == "schwer" for d in open_)
+    return {
+        "Mit Ergebnis": f"{len(done)} von {len(known)}",
+        "Bestanden": str(len(passed)),
+        "Offene Fehler": f"{len(open_)} (schwer: {severe})" if open_ else "0",
+    }
+
+
 def case_status(tracking: Tracking, cases: Cases) -> list[dict[str, Any]]:
     """One row per test case: its latest result and the defects it found."""
     latest = {r.case_id: r for r in tracking.results}

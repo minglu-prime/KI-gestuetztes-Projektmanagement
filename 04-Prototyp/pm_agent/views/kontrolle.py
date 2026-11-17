@@ -6,7 +6,7 @@ import altair as alt
 import pandas as pd
 import streamlit as st
 
-from pm_agent import followup, workbench
+from pm_agent import followup, lifecycle, workbench
 from pm_agent.tracking import (
     NO_COST_INDEX,
     NO_SCHEDULE_INDEX,
@@ -28,6 +28,7 @@ from pm_agent.tracking import (
     open_measures,
     percent,
     planned_curve,
+    quality_summary,
     record_retro,
     requirement_progress,
     save,
@@ -344,6 +345,21 @@ if tracking is not None:
                 "Stand je Anforderung. Gib sie auf der Seite Anforderungen frei und übernimm "
                 "den Plan erneut."
             )
+
+    with st.container(border=True, key="panel-quality"):
+        heading("bug_report", "Test und Fehler", python="zählt")
+        try:
+            plan_of_tests = (lifecycle.load() or lifecycle.Lifecycle()).cases
+        except InputError as err:
+            plan_of_tests = None
+            st.caption(f"Der Testplan ist nicht lesbar: {err}")
+        if plan_of_tests is None:
+            st.caption("Noch kein Testplan. Lege ihn auf der Seite Testplan an.")
+        else:
+            figures = quality_summary(tracking, plan_of_tests)
+            for column, (label, value) in zip(st.columns(3), figures.items(), strict=True):
+                column.metric(label, value)
+            st.page_link("views/testlauf.py", label="Zum Test", icon=":material/arrow_forward:")
 
     with st.container(border=True, key="panel-retro"):
         heading(

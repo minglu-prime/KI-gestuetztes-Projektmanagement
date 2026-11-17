@@ -227,3 +227,24 @@ def test_results_and_defects_survive_adopting_the_rest_again(adopted, tmp_path):
         tracking.project, tracking.team, tracking.plan, path=tmp_path / "q.json", keep=tracking
     )
     assert again.results == tracking.results
+
+
+def test_the_test_summary_counts_results_and_open_defects(adopted):
+    from datetime import date
+
+    from pm_agent.tracking import CaseResult, Defect, quality_summary, record_defect, record_result
+
+    day = date(2026, 11, 20)
+    tracking = record_result(adopted, CaseResult(case_id="T1", result="bestanden", on=day))
+    tracking = record_result(tracking, CaseResult(case_id="T2", result="fehlgeschlagen", on=day))
+    tracking = record_defect(
+        tracking, Defect(case_id="T2", severity="schwer", cause="x", task_id="B")
+    )
+    tracking = record_defect(
+        tracking, Defect(case_id="T2", severity="leicht", cause="y", status="behoben")
+    )
+    assert quality_summary(tracking, cases()) == {
+        "Mit Ergebnis": "2 von 3",
+        "Bestanden": "1",
+        "Offene Fehler": "1 (schwer: 1)",
+    }

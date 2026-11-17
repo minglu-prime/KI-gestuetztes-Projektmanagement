@@ -1,7 +1,7 @@
 # Lebenszyklus eines Softwareprojekts im PM-Agent
 
 Dieses Dokument beschreibt, wie der PM-Agent ein Softwareprojekt von der Idee bis zur nächsten
-Iteration begleiten soll. Umgesetzt sind bisher die Phasen 1 bis 6 (Stand
+Iteration begleiten soll. Umgesetzt sind bisher die Phasen 1 bis 7 (Stand
 16.11.2026). Die übrigen Phasen sind entworfen, aber noch nicht gebaut.
 
 ## Ein Prinzip für jede Phase
@@ -31,7 +31,7 @@ arbeitet ohne sie (zum Beispiel plant die Planung ohne Anforderungen wie bisher)
 | 4 | Planung | Aufgaben mit Aufwand, Zuweisung, Abhängigkeiten und den Anforderungen, denen sie dienen; je Projektwoche ein vorführbares Ergebnis | unbekannte Anforderung = Fehler; Anforderung ohne Aufgabe = Warnung; dazu Termine, Auslastung, Puffer; jede Projektwoche mit Arbeit hat eine Demo, deren Aufgaben bis Freitag fertig sind (Warnungen) | umgesetzt |
 | 5 | Durchführung | Status, Ist-Stunden, Rest je Aufgabe; Statusbericht | jede Aufgabe im Verzug hat einen nächsten Schritt | umgesetzt |
 | 6 | Kontrolle und Wochenrückblick | Plan/Ist, Prognose, Earned Value, Stand je Anforderung; Wochenrückblick: Demo gezeigt?, Ursache von Fehlern, Maßnahme | jede Aufgabe im Verzug hat eine Gegenmaßnahme; jede ausgefallene Demo eine Maßnahme | umgesetzt ([woche-design.md](woche-design.md)) |
-| 7 | Test (Integrationstest und Fehlersuche) | Testfälle aus Akzeptanzkriterien und Schnittstellen, Ergebnisse, Fehler mit vermuteter Ursache | jedes Akzeptanzkriterium hat einen Testfall; jede Schnittstelle einen Integrationstest; jeder fehlgeschlagene Test einen Fehlereintrag | entworfen |
+| 7 | Test (Integrationstest und Fehlersuche) | Testfälle aus Akzeptanzkriterien und Schnittstellen, Ergebnisse, Fehler mit vermuteter Ursache | jedes Akzeptanzkriterium hat einen Testfall; jede Schnittstelle einen Integrationstest; jeder fehlgeschlagene Test einen Fehlereintrag | umgesetzt ([test-design.md](test-design.md)) |
 | 8 | Abschluss | Abnahme je Anforderung (abgenommen oder zurückgestellt mit Grund), Abschlussbericht, Lessons Learned | kein offener schwerer Fehler; jede Muss-Anforderung abgenommen oder begründet | entworfen |
 | 9 | Betrieb | Betriebshandbuch (Bereitstellung, Überwachung, Rücknahme), Störungen | jede Komponente hat Verantwortliche und Überwachung | entworfen |
 | 10 | Iteration | nächster Backlog: zurückgestellte Anforderungen, offene Fehler, offene Maßnahmen der Rückblicke, Folgen von Störungen | jeder Eintrag nennt seine Herkunft | entworfen |
@@ -94,4 +94,6 @@ sequenceDiagram
 | Rückverfolgung im Plan | `planning.check_plan(..., requirements=, covered=)` |
 | Stand je Anforderung | `tracking.requirement_progress` |
 | Sequenzdiagramme (SVG und Mermaid) | `src/pm_agent/diagram.py` |
+| Testfälle, Prüfung der Abdeckung | `lifecycle.check_cases`, `views/testplan.py` |
+| Ergebnisse und Fehler | `tracking.record_result`, `record_defect`, `reopen`, `views/testlauf.py` |
 | Seiten | `views/auftrag.py`, `views/anforderungen.py`, `views/entwurf.py`; Projektpfad in `ui.journey` |
