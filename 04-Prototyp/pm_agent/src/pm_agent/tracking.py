@@ -159,6 +159,33 @@ class Signoff(BaseModel):
     reason: str = ""
 
 
+class Operation(BaseModel):
+    """How one component of the design is run: who is responsible (a role, not a name),
+    how it is deployed, watched and taken back."""
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    component_id: str
+    owner: str = ""
+    deployment: str = ""
+    monitoring: str = ""
+    rollback: str = ""
+
+
+class Incident(BaseModel):
+    """A disruption in operation."""
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    id: str = ""  # S1 …, given by closing.record_incident
+    on: date
+    component_id: str
+    impact: str
+    cause: str = ""
+    measure: str = ""
+    status: Literal["offen", "behoben"] = "offen"
+
+
 class Tracking(BaseModel):
     """The plan the project lead adopted, and what happened to each task since."""
 
@@ -181,6 +208,8 @@ class Tracking(BaseModel):
     # The decisions at the end, one per requirement (closing.record_signoff).
     signoffs: list[Signoff] = Field(default_factory=list)
     lessons: list[Lesson] = Field(default_factory=list)  # changed by the lead
+    operations: list[Operation] = Field(default_factory=list)
+    incidents: list[Incident] = Field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -269,6 +298,8 @@ def adopt(
         defects=keep.defects if keep is not None else [],
         signoffs=keep.signoffs if keep is not None else [],
         lessons=keep.lessons if keep is not None else [],
+        operations=keep.operations if keep is not None else [],
+        incidents=keep.incidents if keep is not None else [],
     )
     save(tracking, path)
     return tracking

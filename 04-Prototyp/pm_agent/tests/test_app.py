@@ -2065,3 +2065,32 @@ def test_the_closing_page_takes_decisions_and_lessons(site, monkeypatch):
     at = at.run()
     assert tracking.load().lessons == drafted.items
     assert not at.exception
+
+
+def test_the_operations_page_checks_the_handbook_and_records_incidents(tracked):
+    from test_lifecycle import design
+
+    lifecycle.save(lifecycle.Lifecycle(project=PROJECT, design=design()))
+    at = tracked.switch_page("views/betrieb.py").run()
+    assert not at.exception
+    assert any("keine Verantwortlichen" in e.value for e in at.error)
+
+    at = edit_table(
+        at,
+        "operations_editor",
+        {
+            0: {"Verantwortlich": "Frontend-Team", "Überwachung": "Fehler zählen"},
+            1: {"Verantwortlich": "Backend-Team", "Überwachung": "Health-Check"},
+        },
+    )
+    button(at, "Betriebshandbuch speichern").click()
+    at = at.run()
+    assert [o.owner for o in tracking.load().operations] == ["Frontend-Team", "Backend-Team"]
+    assert not at.error
+
+    at.text_input(key="incident_impact").input("Buchen geht nicht").run()
+    button(at, "Störung erfassen").click()
+    at = at.run()
+    (incident,) = tracking.load().incidents
+    assert (incident.id, incident.component_id) == ("S1", "B1")
+    assert at.text_input(key="incident_impact").value == ""

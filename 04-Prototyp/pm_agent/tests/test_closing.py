@@ -195,3 +195,39 @@ def test_signoff_rows_show_suggestion_and_decision(project):
             "Grund": "keine Zeit",
         },
     ]
+
+
+def test_every_component_has_an_owner_and_monitoring(project):
+    from test_lifecycle import design
+
+    from pm_agent.tracking import Operation
+
+    rows = closing.operation_rows(design(), [])
+    # Roles and systems outside the project need no handbook; components do.
+    assert [r["Baustein"] for r in rows] == ["B2", "B3"]
+    rows[0].update({"Verantwortlich": "Frontend-Team", "Überwachung": "Fehlerseite zählen"})
+    operations = closing.rows_to_operations(rows)
+    assert operations[0] == Operation(
+        component_id="B2", owner="Frontend-Team", monitoring="Fehlerseite zählen"
+    )
+    assert closing.check_operations(design(), operations).errors == [
+        "Baustein 'B3' (Server) hat keine Verantwortlichen",
+        "Baustein 'B3' (Server) hat keine Überwachung",
+    ]
+    assert closing.check_operations(None, []).warnings == [
+        "Ohne Entwurf gibt es keine Bausteine für das Betriebshandbuch"
+    ]
+
+
+def test_an_incident_names_a_known_component_and_gets_a_number(project):
+    from test_lifecycle import design
+
+    from pm_agent.tracking import Incident
+
+    incident = Incident(on=DAY, component_id="B3", impact="Buchen geht nicht")
+    tracking = closing.record_incident(project, incident, design())
+    assert tracking.incidents[0].id == "S1"
+    with pytest.raises(InputError, match="unbekannten Baustein 'B9'"):
+        closing.record_incident(
+            project, incident.model_copy(update={"component_id": "B9"}), design()
+        )

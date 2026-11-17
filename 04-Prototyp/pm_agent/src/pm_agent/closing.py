@@ -14,10 +14,12 @@ from pydantic import ValidationError
 
 from pm_agent.agent import LOG_DIR, run_submission
 from pm_agent.lifecycle import Check
-from pm_agent.models import Cases, Lesson, Lessons
+from pm_agent.models import Cases, Design, Lesson, Lessons
 from pm_agent.tools import Submission
 from pm_agent.tracking import (
     Evaluation,
+    Incident,
+    Operation,
     Signoff,
     Tracking,
     _demos_text,
@@ -263,3 +265,81 @@ def signoff_rows(tracking: Tracking, cases: Cases | None) -> list[dict[str, Any]
         }
         for need in tracking.requirements
     ]
+
+
+OPERATION_COLUMNS = [
+    "Baustein",
+    "Name",
+    "Verantwortlich",
+    "Bereitstellung",
+    "Überwachung",
+    "Rücknahme",
+]
+
+
+def operation_rows(design: Design | None, operations: list[Operation]) -> list[dict[str, Any]]:
+    """One row per component the team builds; roles and systems outside the project are
+    not run by the team."""
+    if design is None:
+        return []
+    known = {o.component_id: o for o in operations}
+    rows = []
+    for c in design.components:
+        if c.kind != "Komponente":
+            continue
+        o = known.get(c.id, Operation(component_id=c.id))
+        rows.append(
+            {
+                "Baustein": c.id,
+                "Name": c.name,
+                "Verantwortlich": o.owner,
+                "Bereitstellung": o.deployment,
+                "Überwachung": o.monitoring,
+                "Rücknahme": o.rollback,
+            }
+        )
+    return rows
+
+
+def rows_to_operations(rows: list[dict[str, Any]]) -> list[Operation]:
+    return [
+        Operation(
+            component_id=_cell(row.get("Baustein")),
+            owner=_cell(row.get("Verantwortlich")),
+            deployment=_cell(row.get("Bereitstellung")),
+            monitoring=_cell(row.get("Überwachung")),
+            rollback=_cell(row.get("Rücknahme")),
+        )
+        for row in rows
+        if _cell(row.get("Baustein"))
+    ]
+
+
+def check_operations(design: Design | None, operations: list[Operation]) -> Check:
+    """Errors: a component without an owner or without monitoring."""
+    if design is None:
+        return Check([], ["Ohne Entwurf gibt es keine Bausteine für das Betriebshandbuch"])
+    known = {o.component_id: o for o in operations}
+    errors = []
+    for c in design.components:
+        if c.kind != "Komponente":
+            continue
+        o = known.get(c.id, Operation(component_id=c.id))
+        if not o.owner:
+            errors.append(f"Baustein '{c.id}' ({c.name}) hat keine Verantwortlichen")
+        if not o.monitoring:
+            errors.append(f"Baustein '{c.id}' ({c.name}) hat keine Überwachung")
+    return Check(errors, [])
+
+
+def record_incident(tracking: Tracking, incident: Incident, design: Design | None) -> Tracking:
+    """An incident, new (numbered S1, S2 …) or changed (same ID). Raises InputError for a
+    component the design does not know."""
+    known = {c.id for c in design.components} if design else set()
+    if incident.component_id not in known:
+        raise InputError(f"Die Störung nennt den unbekannten Baustein '{incident.component_id}'")
+    if not incident.id:
+        numbers = [int(i.id[1:]) for i in tracking.incidents if i.id[1:].isdigit()]
+        incident = incident.model_copy(update={"id": f"S{max(numbers, default=0) + 1}"})
+    others = [i for i in tracking.incidents if i.id != incident.id]
+    return tracking.model_copy(update={"incidents": [*others, incident]})

@@ -30,6 +30,7 @@ MENU = {
         st.Page("views/testlauf.py", title="Test", icon=":material/bug_report:"),
         st.Page("views/kontrolle.py", title="Kontrolle", icon=":material/monitoring:"),
         st.Page("views/abschluss.py", title="Abschluss", icon=":material/flag_circle:"),
+        st.Page("views/betrieb.py", title="Betrieb", icon=":material/settings:"),
     ],
     "Experiment": [st.Page("views/ki_lab.py", title="KI-Lab", icon=":material/science:")],
     "Info": [
