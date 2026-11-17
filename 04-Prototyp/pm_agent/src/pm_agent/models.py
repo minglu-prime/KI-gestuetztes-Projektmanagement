@@ -127,6 +127,72 @@ class Requirements(_Model):
     items: list[Requirement] = Field(min_length=1)
 
 
+# A field of an interface: written "name: Typ" in the table, several separated by commas.
+FieldName = Annotated[str, Field(pattern=r"^[A-Za-z_][A-Za-z0-9_]*$")]
+TypeName = Annotated[str, Field(min_length=1, pattern=r"^[^,;:]+$")]
+
+
+class DataField(_Model):
+    name: FieldName
+    type: TypeName
+    required: bool = True
+
+
+class ErrorCase(_Model):
+    """An error an interface answers with: "409 Raum belegt" in the table."""
+
+    code: Ref
+    meaning: Annotated[NonEmpty, AfterValidator(_no_semicolon)]
+
+
+class Component(_Model):
+    """A part of the system, a role that uses it, or a system outside the project."""
+
+    id: Ref
+    name: NonEmpty
+    kind: Literal["Rolle", "Komponente", "Fremdsystem"]
+    purpose: str = ""
+
+
+class Interface(_Model):
+    """The contract between a provider and its consumers."""
+
+    id: Ref
+    name: NonEmpty
+    provider: Ref
+    consumers: list[Ref] = Field(min_length=1)
+    input: list[DataField] = Field(default_factory=list)
+    output: list[DataField] = Field(default_factory=list)
+    errors: list[ErrorCase] = Field(default_factory=list)
+
+
+class Step(_Model):
+    """One arrow of a sequence diagram. A call goes to the provider of `interface`, an
+    answer comes back from it; a step without interface is, say, a role using the UI."""
+
+    sender: Ref
+    receiver: Ref
+    kind: Literal["Aufruf", "Antwort"] = "Aufruf"
+    interface: Ref | None = None
+    text: str = ""
+
+
+class Flow(_Model):
+    id: Ref
+    title: NonEmpty
+    requirement_ids: list[Ref] = Field(default_factory=list)
+    steps: list[Step] = Field(min_length=1)
+
+
+class Design(_Model):
+    """Entwurf: the parts of the system, their contracts and the flows between them.
+    Python draws the sequence diagrams from it; Claude never writes diagram code."""
+
+    components: list[Component] = Field(min_length=1)
+    interfaces: list[Interface] = Field(default_factory=list)
+    flows: list[Flow] = Field(min_length=1)
+
+
 class ScheduledTask(_Model):
     task_id: str
     member: str

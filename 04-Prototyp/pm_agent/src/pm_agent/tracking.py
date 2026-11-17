@@ -52,6 +52,7 @@ STATUSES = list(get_args(Status))
 AGENTS = {
     "auftrag": "Projektauftrag",
     "anforderungen": "Anforderungen",
+    "entwurf": "Entwurf",
     "run": "Planung",
     "durchfuehrung": "Durchführung",
     "kontrolle": "Kontrolle",

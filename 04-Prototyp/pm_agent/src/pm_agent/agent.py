@@ -13,7 +13,7 @@ from typing import Any, NamedTuple, TypeVar
 
 from anthropic import Anthropic
 
-from pm_agent.models import Member, Plan, Project, Requirement
+from pm_agent.models import Design, Member, Plan, Project, Requirement
 from pm_agent.tools import PlanningTools, Submission
 
 DEFAULT_MODEL = "claude-opus-5-5"
@@ -56,14 +56,16 @@ def run_planning(
     *,
     requirements: list[Requirement] | None = None,
     covered: frozenset[str] = frozenset(),
+    design: Design | None = None,
 ) -> Plan:
     """Let Claude plan the project. Returns the first plan that submit_plan accepts: no
     errors, warnings possible. Raises PlanningError; errors of the API itself propagate.
     Each run, successful or not, is written to `log_dir` as one JSON file (None: no log).
     `on_round` gets each round as soon as its tools have run, for live progress.
     `requirements`: the approved ones; Claude links each task to them and the check traces
-    the plan (`covered`: served by finished work outside the plan)."""
-    trace = Trace(requirements, covered)
+    the plan (`covered`: served by finished work outside the plan). `design`: the approved
+    one; Claude cuts tasks along its parts and interfaces."""
+    trace = Trace(requirements, covered, design)
     request = (
         f"{_inputs(project, team, trace)}\n\n"
         "Erstelle den Plan, prüfe ihn mit check_plan und reiche ihn mit submit_plan ein."
@@ -81,13 +83,14 @@ def run_replanning(
     *,
     requirements: list[Requirement] | None = None,
     covered: frozenset[str] = frozenset(),
+    design: Design | None = None,
 ) -> Plan:
     """Let Claude change `plan` the way the project lead asks in `wish`. Same tools, same
     check and same kind of log as run_planning; the log also keeps the wish."""
     wish = wish.strip()
     if not wish:
         raise AgentError("Beschreibe, was sich ändern soll.")
-    trace = Trace(requirements, covered)
+    trace = Trace(requirements, covered, design)
     request = (
         f"{_inputs(project, team, trace)}\n\nAktueller Plan:\n"
         f"{plan.model_dump_json(indent=2)}\n\n"
@@ -314,6 +317,7 @@ class Trace(NamedTuple):
 
     requirements: list[Requirement] | None
     covered: frozenset[str]
+    design: Design | None = None
 
 
 def _inputs(project: Project, team: list[Member], trace: Trace) -> str:
@@ -326,4 +330,8 @@ def _inputs(project: Project, team: list[Member], trace: Trace) -> str:
         text += f"\n\nFreigegebene Anforderungen:\n{needs}"
         if trace.covered:
             text += f"\n\nSchon durch fertige Arbeit erfüllt: {', '.join(sorted(trace.covered))}"
+    if trace.design is not None:
+        # Parts and contracts only: the flows name requirements the planner may not trace.
+        parts = trace.design.model_dump(mode="json", include={"components", "interfaces"})
+        text += f"\n\nFreigegebener Entwurf:\n{json.dumps(parts, ensure_ascii=False, indent=2)}"
     return text

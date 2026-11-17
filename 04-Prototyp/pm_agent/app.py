@@ -21,6 +21,7 @@ MENU = {
     "Vorbereiten": [
         st.Page("views/auftrag.py", title="Projektauftrag", icon=":material/flag:"),
         st.Page("views/anforderungen.py", title="Anforderungen", icon=":material/checklist:"),
+        st.Page("views/entwurf.py", title="Entwurf", icon=":material/account_tree:"),
     ],
     "Agenten": [
         st.Page("views/planung.py", title="Planung", icon=":material/view_timeline:"),

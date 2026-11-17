@@ -18,7 +18,21 @@ from typing import Any, Literal, NamedTuple
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 from pm_agent.agent import LOG_DIR, run_submission
-from pm_agent.models import Charter, Criterion, Project, Requirement, Requirements
+from pm_agent.diagram import sequence_mermaid
+from pm_agent.models import (
+    Charter,
+    Component,
+    Criterion,
+    DataField,
+    Design,
+    ErrorCase,
+    Flow,
+    Interface,
+    Project,
+    Requirement,
+    Requirements,
+    Step,
+)
 from pm_agent.tools import Submission
 from pm_agent.tracking import _fill
 from pm_agent.workbench import DATA_DIR, InputError, _cell, _date, _md, _reason
@@ -54,6 +68,8 @@ class Lifecycle(BaseModel):
     charter_ok: Approval | None = None
     requirements: Requirements | None = None
     requirements_ok: Approval | None = None
+    design: Design | None = None
+    design_ok: Approval | None = None
 
 
 class Check(NamedTuple):
@@ -97,6 +113,10 @@ def _requirements_digest(life: Lifecycle) -> str:
     return _digest(life.project, life.charter, life.requirements)
 
 
+def _design_digest(life: Lifecycle) -> str:
+    return _digest(life.project, life.charter, life.requirements, life.design)
+
+
 def _state(artefact: Any, approval: Approval | None, digest: str) -> State:
     if artefact is None:
         return "offen"
@@ -115,6 +135,20 @@ def requirements_state(life: Lifecycle | None) -> State:
     if life is None:
         return "offen"
     return _state(life.requirements, life.requirements_ok, _requirements_digest(life))
+
+
+def design_state(life: Lifecycle | None) -> State:
+    if life is None:
+        return "offen"
+    return _state(life.design, life.design_ok, _design_digest(life))
+
+
+def approved_design(life: Lifecycle | None) -> Design | None:
+    """The design as approved, or None. It does not need approved requirements: the gates
+    are soft."""
+    if life is None or design_state(life) != "freigegeben":
+        return None
+    return life.design
 
 
 def approved_requirements(life: Lifecycle | None) -> list[Requirement] | None:
@@ -193,6 +227,128 @@ def check_requirements(requirements: Requirements, charter: Charter | None) -> C
     return Check(errors, warnings)
 
 
+def _twice(ids: list[str], text: str) -> list[str]:
+    """One message per ID that occurs more than once; `text` has a {} for the ID."""
+    return [text.format(i) for i in dict.fromkeys(ids) if ids.count(i) > 1]
+
+
+def check_design(design: Design, requirements: Requirements | None) -> Check:
+    """Errors: duplicates, parts and interfaces that do not exist, steps against the
+    contract, unused interfaces, and, with requirements, flows for unknown ones and Muss
+    requirements without a flow. Checked against the requirements as they stand."""
+    parts = {c.id: c for c in design.components}
+    contracts = {i.id: i for i in design.interfaces}
+    errors = _twice([c.id for c in design.components], "Die Baustein-ID '{}' ist mehrfach vergeben")
+    errors += _twice(
+        [i.id for i in design.interfaces], "Die Schnittstellen-ID '{}' ist mehrfach vergeben"
+    )
+    errors += _twice([f.id for f in design.flows], "Die Ablauf-ID '{}' ist mehrfach vergeben")
+    for i in design.interfaces:
+        where = f"Schnittstelle '{i.id}': "
+        errors += _twice(
+            [f.name for f in i.input], where + "das Eingabefeld '{}' ist mehrfach vergeben"
+        )
+        errors += _twice(
+            [f.name for f in i.output], where + "das Ausgabefeld '{}' ist mehrfach vergeben"
+        )
+        errors += _twice(
+            [e.code for e in i.errors], where + "der Fehlercode '{}' ist mehrfach vergeben"
+        )
+        if i.provider not in parts:
+            errors.append(f"{where}der Anbieter '{i.provider}' ist kein bekannter Baustein")
+        elif parts[i.provider].kind == "Rolle":
+            errors.append(
+                f"{where}der Anbieter '{i.provider}' ist eine Rolle; eine Rolle bietet keine "
+                "Schnittstelle an"
+            )
+        errors += [
+            f"{where}der Nutzer '{c}' ist kein bekannter Baustein"
+            for c in i.consumers
+            if c not in parts
+        ]
+    loose = []
+    for flow in design.flows:
+        for number, step in enumerate(flow.steps, start=1):
+            where = f"Ablauf '{flow.id}', Schritt {number}: "
+            unknown = [
+                f"{where}der {role} '{part}' ist kein bekannter Baustein"
+                for role, part in [("Absender", step.sender), ("Empfänger", step.receiver)]
+                if part not in parts
+            ]
+            errors += unknown
+            if step.interface is None:
+                if (
+                    not unknown
+                    and step.sender != step.receiver
+                    and "Rolle" not in (parts[step.sender].kind, parts[step.receiver].kind)
+                ):
+                    loose.append(
+                        f"{where}{step.sender} und {step.receiver} reden ohne Schnittstelle "
+                        "miteinander"
+                    )
+                continue
+            contract = contracts.get(step.interface)
+            if contract is None:
+                errors.append(f"{where}die Schnittstelle '{step.interface}' ist unbekannt")
+                continue
+            if unknown:
+                continue
+            users = ", ".join(contract.consumers)
+            if step.kind == "Aufruf":
+                ok = step.receiver == contract.provider and step.sender in contract.consumers
+                rule = f"ein Aufruf von '{contract.id}' geht von {users} an {contract.provider}"
+            else:
+                ok = step.sender == contract.provider and step.receiver in contract.consumers
+                rule = f"eine Antwort von '{contract.id}' geht von {contract.provider} an {users}"
+            if not ok:
+                errors.append(f"{where}{rule}, nicht von {step.sender} an {step.receiver}")
+    used = {step.interface for flow in design.flows for step in flow.steps}
+    errors += [
+        f"Die Schnittstelle '{i.id}' ({i.name}) kommt in keinem Ablauf vor"
+        for i in design.interfaces
+        if i.id not in used
+    ]
+    warnings = []
+    if requirements is None:
+        warnings.append("Ohne Anforderungen lässt sich der Entwurf nicht gegen sie prüfen")
+    else:
+        known = {r.id for r in requirements.items}
+        errors += [
+            f"Ablauf '{flow.id}' dient der unbekannten Anforderung '{rid}'"
+            for flow in design.flows
+            for rid in flow.requirement_ids
+            if rid not in known
+        ]
+        served = {rid for flow in design.flows for rid in flow.requirement_ids}
+        for r in requirements.items:
+            if r.id not in served:
+                text = f"{r.priority}-Anforderung '{r.id}' ({r.title}) hat keinen Ablauf"
+                (errors if r.priority == "Muss" else warnings).append(text)
+    warnings += [
+        f"Ablauf '{f.id}' dient keiner Anforderung" for f in design.flows if not f.requirement_ids
+    ]
+    warnings += loose
+    present = {part for flow in design.flows for s in flow.steps for part in (s.sender, s.receiver)}
+    warnings += [
+        f"Der Baustein '{c.id}' ({c.name}) kommt in keinem Ablauf vor"
+        for c in design.components
+        if c.id not in present
+    ]
+    # Two interfaces with the same ID give the same messages twice.
+    return Check(list(dict.fromkeys(errors)), list(dict.fromkeys(warnings)))
+
+
+def approve_design(life: Lifecycle, now: datetime) -> Lifecycle:
+    """The project lead approves the design. Raises InputError while it has errors. The
+    requirements need not be approved: the gates are soft."""
+    if life.design is None:
+        raise InputError("Noch kein Entwurf zum Freigeben.")
+    errors = check_design(life.design, life.requirements).errors
+    if errors:
+        raise InputError("\n".join(errors))
+    return life.model_copy(update={"design_ok": Approval(at=now, digest=_design_digest(life))})
+
+
 def requirement_rows(requirements: Requirements) -> list[dict[str, Any]]:
     """The requirements as rows of the table editor. Acceptance criteria are separated by
     semicolons, success criteria by commas."""
@@ -234,6 +390,186 @@ def rows_to_requirements(rows: list[dict[str, Any]]) -> Requirements:
     if not items:
         raise InputError("Noch keine Anforderung: Trag mindestens eine Zeile ein.")
     return Requirements(items=items)
+
+
+COMPONENT_COLUMNS = ["ID", "Name", "Art", "Aufgabe"]
+INTERFACE_COLUMNS = ["ID", "Name", "Anbieter", "Nutzer", "Eingabe", "Ausgabe", "Fehler"]
+FLOW_COLUMNS = ["ID", "Titel", "Anforderungen"]
+STEP_COLUMNS = ["Ablauf", "Von", "An", "Art", "Schnittstelle", "Text"]
+# The four tables of the design, by key, with the name a message gives each.
+DESIGN_TABLES = {
+    "components": "Bausteine",
+    "interfaces": "Schnittstellen",
+    "flows": "Abläufe",
+    "steps": "Schritte",
+}
+
+
+def fields_text(fields: list[DataField]) -> str:
+    """Fields as "raum: Text, notiz?: Text"; the question mark marks an optional field."""
+    return ", ".join(f"{f.name}{'' if f.required else '?'}: {f.type}" for f in fields)
+
+
+def text_to_fields(text: str) -> list[DataField]:
+    fields, errors = [], []
+    for part in _split(text, ","):
+        name, colon, kind = part.partition(":")
+        name = name.strip()
+        try:
+            if not colon:
+                raise ValueError
+            fields.append(
+                DataField(
+                    name=name.removesuffix("?"), type=kind.strip(), required=not name.endswith("?")
+                )
+            )
+        except (ValueError, ValidationError):
+            errors.append(f"'{part}' braucht die Form 'name: Typ'")
+    if errors:
+        raise InputError("; ".join(errors))
+    return fields
+
+
+def errors_text(errors: list[ErrorCase]) -> str:
+    return "; ".join(f"{e.code} {e.meaning}" for e in errors)
+
+
+def text_to_errors(text: str) -> list[ErrorCase]:
+    cases, errors = [], []
+    for part in _split(text, ";"):
+        code, _, meaning = part.partition(" ")
+        try:
+            cases.append(ErrorCase(code=code, meaning=meaning.strip()))
+        except ValidationError:
+            errors.append(f"'{part}' braucht die Form 'Code Bedeutung'")
+    if errors:
+        raise InputError("; ".join(errors))
+    return cases
+
+
+def design_rows(design: Design) -> dict[str, list[dict[str, Any]]]:
+    """The design as the rows of its four tables. Steps carry the ID of their flow; their
+    order in the table is their order in the flow."""
+    return {
+        "components": [
+            {"ID": c.id, "Name": c.name, "Art": c.kind, "Aufgabe": c.purpose}
+            for c in design.components
+        ],
+        "interfaces": [
+            {
+                "ID": i.id,
+                "Name": i.name,
+                "Anbieter": i.provider,
+                "Nutzer": ", ".join(i.consumers),
+                "Eingabe": fields_text(i.input),
+                "Ausgabe": fields_text(i.output),
+                "Fehler": errors_text(i.errors),
+            }
+            for i in design.interfaces
+        ],
+        "flows": [
+            {"ID": f.id, "Titel": f.title, "Anforderungen": ", ".join(f.requirement_ids)}
+            for f in design.flows
+        ],
+        "steps": [
+            {
+                "Ablauf": f.id,
+                "Von": s.sender,
+                "An": s.receiver,
+                "Art": s.kind,
+                "Schnittstelle": s.interface or "",
+                "Text": s.text,
+            }
+            for f in design.flows
+            for s in f.steps
+        ],
+    }
+
+
+def rows_to_design(rows: dict[str, list[dict[str, Any]]]) -> Design:
+    """The four edited tables as a design. Raises InputError naming table and row of each
+    problem. Empty rows the editor adds are skipped."""
+    errors: list[str] = []
+
+    def read(table: str, key: str, make: Callable[[dict[str, Any]], Any]) -> list[Any]:
+        made = []
+        for number, row in enumerate(rows.get(table, []), start=1):
+            rid = _cell(row.get(key))
+            if not any(_cell(value) for value in row.values()):
+                continue
+            where = f"{DESIGN_TABLES[table]}, Zeile {number}" + (
+                f" ({rid})" if rid and key == "ID" else ""
+            )
+            try:
+                made.append(make(row))
+            except InputError as err:
+                errors.append(f"{where}: {err}")
+            except ValidationError as err:
+                errors.append(f"{where}: {_reason(err)}")
+        return made
+
+    components = read(
+        "components",
+        "ID",
+        lambda r: Component(
+            id=_cell(r.get("ID")),
+            name=_cell(r.get("Name")),
+            kind=_cell(r.get("Art")),
+            purpose=_cell(r.get("Aufgabe")),
+        ),
+    )
+    interfaces = read(
+        "interfaces",
+        "ID",
+        lambda r: Interface(
+            id=_cell(r.get("ID")),
+            name=_cell(r.get("Name")),
+            provider=_cell(r.get("Anbieter")),
+            consumers=_split(r.get("Nutzer"), ","),
+            input=text_to_fields(_cell(r.get("Eingabe"))),
+            output=text_to_fields(_cell(r.get("Ausgabe"))),
+            errors=text_to_errors(_cell(r.get("Fehler"))),
+        ),
+    )
+    flow_ids = {_cell(r.get("ID")) for r in rows.get("flows", [])} - {""}
+    steps: dict[str, list[Step]] = {}
+
+    def step(row: dict[str, Any]) -> None:
+        flow = _cell(row.get("Ablauf"))
+        if flow not in flow_ids:
+            raise InputError(f"unbekannter Ablauf '{flow}'")
+        steps.setdefault(flow, []).append(
+            Step(
+                sender=_cell(row.get("Von")),
+                receiver=_cell(row.get("An")),
+                kind=_cell(row.get("Art")) or "Aufruf",
+                interface=_cell(row.get("Schnittstelle")) or None,
+                text=_cell(row.get("Text")),
+            )
+        )
+
+    read("steps", "Ablauf", step)
+
+    def flow(row: dict[str, Any]) -> Flow:
+        fid = _cell(row.get("ID"))
+        if fid and fid not in steps:  # say it in words, not as the model's "at least 1 item"
+            raise InputError(f"Ablauf '{fid}' hat keine Schritte")
+        return Flow(
+            id=fid,
+            title=_cell(row.get("Titel")),
+            requirement_ids=_split(row.get("Anforderungen"), ","),
+            steps=steps.get(fid, []),
+        )
+
+    flows = read("flows", "ID", flow)
+    if errors:
+        raise InputError("\n".join(errors))
+    if not components and not flows:
+        raise InputError("Noch kein Entwurf: Trag mindestens einen Baustein und einen Ablauf ein.")
+    try:
+        return Design(components=components, interfaces=interfaces, flows=flows)
+    except ValidationError as err:
+        raise InputError(f"Entwurf: {_reason(err)}") from err
 
 
 def criteria_lines(criteria: list[Criterion]) -> str:
@@ -320,6 +656,83 @@ def run_requirements(
         indent=2,
     )
     return run_submission("anforderungen", submission, data, log_dir, on_round)
+
+
+def run_design(
+    project: Project,
+    charter: Charter | None,
+    requirements: Requirements | None,
+    log_dir: Path | None = LOG_DIR,
+    on_round: Callable[[dict[str, Any]], None] | None = None,
+) -> Design:
+    """Claude drafts the design from charter and requirements; Python rejects it until it
+    passes `check_design`. No team data goes to the API. Raises AgentError."""
+    submission = Submission(
+        name="submit_entwurf",
+        noun="Entwurf",
+        description=(
+            "Reicht den Entwurf ein. Lehnt ihn ab, wenn ein Ablauf unbekannte Bausteine oder "
+            "Schnittstellen nennt, einem Vertrag widerspricht, eine Schnittstelle in keinem "
+            "Ablauf vorkommt, eine Muss-Anforderung keinen Ablauf hat oder eine ID doppelt "
+            "vorkommt, und nennt die Gründe."
+        ),
+        schema=Design,
+        check=lambda design: check_design(design, requirements).errors,
+    )
+    data = json.dumps(
+        {
+            "projekt": project.model_dump(mode="json"),
+            "projektauftrag": charter.model_dump(mode="json") if charter else None,
+            "anforderungen": requirements.model_dump(mode="json") if requirements else None,
+        },
+        ensure_ascii=False,
+        indent=2,
+    )
+    return run_submission("entwurf", submission, data, log_dir, on_round)
+
+
+def design_document(life: Lifecycle) -> str:
+    """The design as Markdown: parts, contracts, and each flow with its Mermaid diagram."""
+    design, project = life.design, life.project
+    if design is None or project is None:
+        raise InputError("Ohne Projektdaten und Entwurf gibt es kein Dokument.")
+    parts = "\n".join(
+        f"| {_md(c.id)} | {_md(c.name)} | {c.kind} | {_md(c.purpose) or '–'} |"
+        for c in design.components
+    )
+    contracts = "\n".join(
+        "| "
+        + " | ".join(
+            _md(cell) or "–"
+            for cell in [
+                i.id,
+                i.name,
+                i.provider,
+                ", ".join(i.consumers),
+                fields_text(i.input),
+                fields_text(i.output),
+                errors_text(i.errors),
+            ]
+        )
+        + " |"
+        for i in design.interfaces
+    )
+    flows = "\n\n".join(
+        f"### {_md(f.id)} · {_md(f.title)}\n\n"
+        f"Dient: {_md(', '.join(f.requirement_ids)) or 'keiner Anforderung'}\n\n"
+        f"```mermaid\n{sequence_mermaid(f, design)}\n```"
+        for f in design.flows
+    )
+    return _fill(
+        "entwurf.md",
+        projekt=_md(project.idea),
+        start=_date(project.start_date),
+        deadline=_date(project.deadline),
+        stand=_stand(design_state(life), life.design_ok),
+        bausteine=parts,
+        schnittstellen=contracts or "| – | | | | | | |",
+        ablaeufe=flows,
+    )
 
 
 def charter_document(life: Lifecycle) -> str:

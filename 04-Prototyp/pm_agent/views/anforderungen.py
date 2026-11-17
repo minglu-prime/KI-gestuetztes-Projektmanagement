@@ -18,7 +18,15 @@ from pm_agent.lifecycle import (
     requirements_state,
     rows_to_requirements,
 )
-from pm_agent.ui import heading, phase_chip, run_with_progress, saved_lifecycle, store, strip
+from pm_agent.ui import (
+    as_text,
+    heading,
+    phase_chip,
+    run_with_progress,
+    saved_lifecycle,
+    store,
+    strip,
+)
 from pm_agent.workbench import InputError
 
 state = st.session_state
@@ -124,7 +132,7 @@ with st.container(border=True, key="panel-requirements"):
             problem = str(err)
     unsaved = typed and edited != life.requirements
     if problem:
-        st.error(f"Bitte korrigieren:\n\n{problem}")
+        st.error(f"Bitte korrigieren:\n\n{as_text(problem)}")
     if unsaved:
         st.caption("Änderungen sind noch nicht gespeichert.")
     if st.button(
@@ -138,9 +146,9 @@ with st.container(border=True, key="panel-requirements"):
     if life.requirements is not None:
         errors, warnings = check_requirements(life.requirements, life.charter)
         for error in errors:
-            st.error(error)
+            st.error(as_text(error))
         for warning in warnings:
-            st.warning(warning)
+            st.warning(as_text(warning))
 
 # 4 · Freigabe ---------------------------------------------------------------------------
 with st.container(border=True, key="panel-approve"):
