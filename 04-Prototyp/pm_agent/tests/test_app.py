@@ -581,6 +581,16 @@ def test_the_buttons_on_the_startseite_open_the_pages_they_name(site):
     assert at.header[0].value == "Planung"
 
 
+def test_the_startseite_shows_the_whole_lifecycle_in_order(site):
+    from pm_agent.ui import JOURNEY
+
+    links = [link.proto.page for link in site.page_link]  # the URL path, the file's name
+    phases = [key for key, _, _ in JOURNEY]
+    assert any(links[i : i + len(phases)] == phases for i in range(len(links)))
+    lead = " ".join(h.value for h in site.html if 'class="lead"' in h.value)
+    assert "Projektauftrag" in lead and "Iteration" in lead
+
+
 def test_startseite_and_ueber_uns_describe_all_three_agents(site):
     # Durchführung and Kontrolle have an agent too: no page may still call them "ohne LLM".
     start = " ".join(m.value for m in site.markdown)
