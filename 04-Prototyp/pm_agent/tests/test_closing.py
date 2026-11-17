@@ -89,3 +89,109 @@ def test_without_requirements_there_is_nothing_to_accept(tmp_path):
     assert closing.check_closing(plain, None).warnings == [
         "Der Plan wurde ohne Anforderungen übernommen: Es gibt nichts abzunehmen"
     ]
+
+
+def lessons(*items):
+    from pm_agent.models import Lessons
+
+    return Lessons.model_validate({"items": list(items)})
+
+
+def test_lessons_cover_every_severe_defect_and_missed_demo(project):
+    from pm_agent.tracking import Retro, record_retro
+
+    tracking = record_defect(
+        project, Defect(case_id="T1", severity="schwer", cause="x", task_id="A")
+    )
+    tracking = record_retro(
+        tracking, Retro(monday=date(2026, 11, 16), shown="nein", measure="früher testen")
+    )
+    loose = lessons({"observation": "Zu spät getestet", "advice": "Früher testen", "refs": ["F9"]})
+    assert closing.check_lessons(loose, tracking) == [
+        "Lehre 1 nennt den unbekannten Bezug 'F9'",
+        "Der schwere Fehler F1 kommt in keiner Lehre vor",
+        "Die ausgefallene Demo der Woche ab 16.11.2026 kommt in keiner Lehre vor",
+    ]
+    full = lessons(
+        {"observation": "Schema zu spät", "advice": "Schema zuerst", "refs": ["F1", "2026-11-16"]}
+    )
+    assert closing.check_lessons(full, tracking) == []
+
+
+def test_a_lesson_draft_that_misses_a_defect_goes_back_to_claude(api, project, tmp_path):
+    import json
+
+    from test_agent_loop import read_log, reply
+    from test_lifecycle import call
+
+    tracking = record_defect(
+        project, Defect(case_id="T1", severity="schwer", cause="Schema", task_id="A")
+    )
+    replies, requests = api
+    loose = lessons({"observation": "a", "advice": "b", "refs": []})
+    full = lessons({"observation": "a", "advice": "b", "refs": ["F1"]})
+    replies += [
+        reply([call("submit_lessons", loose.model_dump(mode="json"), "c1")]),
+        reply([call("submit_lessons", full.model_dump(mode="json"), "c2")]),
+    ]
+    assert closing.run_lessons(tracking, DAY, log_dir=tmp_path) == full
+    sent = json.dumps(requests[0], ensure_ascii=False)
+    assert "Schema" in sent and "hours_per_week" not in sent and "Anna" not in sent
+    assert "F1" in json.dumps(requests[1]["messages"][-1], ensure_ascii=False)
+    assert read_log(tmp_path, "lessons")["outcome"] == "lessons learned"
+
+
+def test_the_closing_report_has_signoffs_defects_and_lessons(project):
+    from pm_agent.tracking import evaluate
+
+    tracking = closing.record_signoff(
+        passed(project, "T1"), Signoff(requirement_id="R1", decision="abgenommen")
+    )
+    tracking = record_defect(
+        tracking, Defect(case_id="T1", severity="leicht", cause="Tippfehler", status="behoben")
+    )
+    tracking = tracking.model_copy(
+        update={"lessons": lessons({"observation": "a | b", "advice": "c", "refs": ["F1"]}).items}
+    )
+    text = closing.closing_document(tracking, cases(ACCEPT), evaluate(tracking, DAY))
+    assert text.startswith("# Abschlussbericht")
+    assert "| R1 | Anforderung R1 | Muss | abnehmbar | abgenommen | – |" in text
+    assert "| R2 | Anforderung R2 | Soll | kein Testfall | offen | – |" in text
+    assert "- F1 (leicht, behoben): Tippfehler" in text
+    assert r"- a \| b: c (Bezug: F1)" in text
+    assert "Soll-Anforderung 'R2' (Anforderung R2) ist noch nicht entschieden" in text
+
+
+def test_lesson_rows_round_trip(project):
+    full = lessons({"observation": "a", "advice": "b", "refs": ["F1", "2026-11-16"]})
+    rows = closing.lesson_rows(full.items)
+    assert rows == [{"Beobachtung": "a", "Empfehlung": "b", "Bezug": "F1, 2026-11-16"}]
+    assert closing.rows_to_lessons(rows) == full.items
+    rows.append({"Beobachtung": None, "Empfehlung": None, "Bezug": None})  # an empty editor row
+    assert closing.rows_to_lessons(rows) == full.items
+    with pytest.raises(InputError, match="Zeile 1"):
+        closing.rows_to_lessons([{"Beobachtung": "a", "Empfehlung": "", "Bezug": ""}])
+
+
+def test_signoff_rows_show_suggestion_and_decision(project):
+    signed = closing.record_signoff(
+        project, Signoff(requirement_id="R2", decision="zurückgestellt", reason="keine Zeit")
+    )
+    assert closing.signoff_rows(signed, cases(ACCEPT)) == [
+        {
+            "ID": "R1",
+            "Anforderung": "Anforderung R1",
+            "Priorität": "Muss",
+            "Vorschlag": "Testfall T1 ohne Ergebnis",
+            "Entscheidung": "offen",
+            "Grund": "",
+        },
+        {
+            "ID": "R2",
+            "Anforderung": "Anforderung R2",
+            "Priorität": "Soll",
+            "Vorschlag": "kein Testfall",
+            "Entscheidung": "zurückgestellt",
+            "Grund": "keine Zeit",
+        },
+    ]

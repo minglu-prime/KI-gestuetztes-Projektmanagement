@@ -2031,3 +2031,37 @@ def test_without_a_test_plan_the_test_page_leads_to_it(tracked):
     at = tracked.switch_page("views/testlauf.py").run()
     assert not at.exception
     assert any("Noch kein Testplan" in i.value for i in at.info)
+
+
+def test_the_closing_page_takes_decisions_and_lessons(site, monkeypatch):
+    from pm_agent import closing
+    from pm_agent.models import Lessons
+
+    tracking.adopt(PROJECT, TEAM, PLAN, requirements=NEEDS.items)
+    drafted = Lessons.model_validate({"items": [{"observation": "a", "advice": "b"}]})
+    monkeypatch.setattr(closing, "run_lessons", lambda tracking, today, on_round=None: drafted)
+    at = site.switch_page("views/abschluss.py").run()
+    assert not at.exception
+    assert any("Muss-Anforderung 'R1'" in e.value for e in at.error)
+
+    at.radio(key="signoff_decision").set_value("zurückgestellt").run()
+    button(at, "Entscheidung speichern").click()
+    at = at.run()
+    assert any("braucht einen Grund" in e.value for e in at.error)
+    at.text_input(key="signoff_reason").input("keine Zeit").run()
+    button(at, "Entscheidung speichern").click()
+    at = at.run()
+    (signoff,) = tracking.load().signoffs
+    assert (signoff.requirement_id, signoff.decision, signoff.reason) == (
+        "R1",
+        "zurückgestellt",
+        "keine Zeit",
+    )
+    assert at.text_input(key="signoff_reason").value == ""
+    assert any("lässt sich abschließen" in s.value for s in at.success)
+
+    at.checkbox(key="consent_abschluss").check().run()
+    button(at, "Lessons Learned mit Claude entwerfen").click()
+    at = at.run()
+    assert tracking.load().lessons == drafted.items
+    assert not at.exception

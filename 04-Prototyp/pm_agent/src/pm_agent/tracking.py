@@ -20,6 +20,7 @@ from pm_agent.agent import LOG_DIR
 from pm_agent.models import (
     Cases,
     ControlReport,
+    Lesson,
     Member,
     Plan,
     Project,
@@ -57,6 +58,7 @@ AGENTS = {
     "anforderungen": "Anforderungen",
     "entwurf": "Entwurf",
     "testplan": "Testplan",
+    "lessons": "Lessons Learned",
     "run": "Planung",
     "durchfuehrung": "Durchführung",
     "kontrolle": "Kontrolle",
@@ -178,6 +180,7 @@ class Tracking(BaseModel):
     defects: list[Defect] = Field(default_factory=list)
     # The decisions at the end, one per requirement (closing.record_signoff).
     signoffs: list[Signoff] = Field(default_factory=list)
+    lessons: list[Lesson] = Field(default_factory=list)  # changed by the lead
 
 
 @dataclass(frozen=True)
@@ -265,6 +268,7 @@ def adopt(
         results=keep.results if keep is not None else [],
         defects=keep.defects if keep is not None else [],
         signoffs=keep.signoffs if keep is not None else [],
+        lessons=keep.lessons if keep is not None else [],
     )
     save(tracking, path)
     return tracking
