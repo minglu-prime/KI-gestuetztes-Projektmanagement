@@ -56,7 +56,8 @@ def test_the_readme_names_every_page_of_the_menu():
     # PR 19, 35, 49 and 54 brought the Startseite or the docs up to pages added before.
     titles = re.findall(r'st\.Page\("[^"]+", title="([^"]+)"', (ROOT / "app.py").read_text("utf-8"))
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    first_cells = {line.split("|")[1] for line in readme.splitlines() if line.startswith("| ")}
-    named = " ".join(first_cells)
+    # A first cell names one or more pages: "Agenten · Test", "Über uns, Impressum".
+    first_cells = [line.split("|")[1] for line in readme.splitlines() if line.startswith("| ")]
+    named = {name.strip() for cell in first_cells for name in re.split("[·,]", cell)}
     assert len(titles) > 10
     assert [title for title in titles if title not in named] == []
