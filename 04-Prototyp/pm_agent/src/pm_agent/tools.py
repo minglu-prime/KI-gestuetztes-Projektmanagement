@@ -101,6 +101,10 @@ GERMAN = {
     "string_pattern_mismatch": "darf nur Buchstaben, Ziffern, Punkt, Binde- und Unterstrich "
     "enthalten",
     "literal_error": "muss {expected} sein",
+    "date_type": "muss ein Datum sein, z. B. 2026-12-01",
+    "date_parsing": "muss ein Datum sein, z. B. 2026-12-01",
+    "date_from_datetime_parsing": "muss ein Datum sein, z. B. 2026-12-01",
+    "date_from_datetime_inexact": "muss ein Datum ohne Uhrzeit sein",
 }
 
 

@@ -905,6 +905,8 @@ def _cell(value: Any) -> str:
 
 
 def _reason(err: Exception) -> str:
+    if isinstance(err, json.JSONDecodeError):
+        return f"kein gültiges JSON (Zeile {err.lineno}, Spalte {err.colno})"
     if isinstance(err, ValidationError):
         return "; ".join(
             f"{'.'.join(map(str, e['loc'])) or 'Eingabe'}: {german(e)}" for e in err.errors()

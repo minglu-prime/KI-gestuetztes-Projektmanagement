@@ -811,3 +811,27 @@ def test_demo_rows_of_a_plan_with_errors_are_not_checked():
     result = check_plan(plan, TEAM, PROJECT)
     assert result.errors
     assert demo_rows(plan, result, PROJECT)[0]["Rechtzeitig fertig"] == "nicht geprüft"
+
+
+@pytest.mark.parametrize(
+    ("content", "reason"),
+    [
+        ("{kaputt", "kein gültiges JSON (Zeile 1, Spalte 2)"),
+        (
+            '[{"name": "A", "hours_per_week": 10, "absences": [{"first": "x", "last": "x"}]}]',
+            "absences.0.first: muss ein Datum sein, z. B. 2026-12-01; "
+            "absences.0.last: muss ein Datum sein, z. B. 2026-12-01",
+        ),
+        (
+            '[{"name": "A", "hours_per_week": 10, '
+            '"absences": [{"first": "2026-12-01T10:00", "last": "2026-12-01"}]}]',
+            "absences.0.first: muss ein Datum ohne Uhrzeit sein",
+        ),
+    ],
+)
+def test_a_damaged_file_names_json_and_date_errors_in_german(tmp_path, content, reason):
+    path = tmp_path / "team.json"
+    path.write_text(content, encoding="utf-8")
+    with pytest.raises(InputError) as raised:
+        load_team(path)
+    assert str(raised.value) == f"team.json ist beschädigt: {reason}"
