@@ -4,6 +4,7 @@
 **Stand:** $stand  
 **Zeitraum:** $start bis $deadline  
 **Geplantes Ende laut Plan:** $planende  
+**Geplantes Ende laut erstem Plan:** $erstende  
 **Tatsächliches Ende:** $istende
 
 ## Ziel und Erfolgskriterien
