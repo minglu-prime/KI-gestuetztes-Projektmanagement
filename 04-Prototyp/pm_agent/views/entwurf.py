@@ -25,6 +25,7 @@ from pm_agent.lifecycle import (
 from pm_agent.ui import (
     as_text,
     heading,
+    kept_editor,
     phase_chip,
     run_with_progress,
     saved_lifecycle,
@@ -133,13 +134,14 @@ with st.container(border=True, key="panel-design"):
         design_rows(life.design) if life.design is not None else {key: [] for key, _, _ in TABLES}
     )
     edited_rows = {}
-    version = state.get("design_version", 0)
     for (key, _title, columns), tab in zip(TABLES, st.tabs([t for _, t, _ in TABLES]), strict=True):
         with tab:
             st.caption(HELP[key])
-            edited_rows[key] = st.data_editor(
+            edited_rows[key] = kept_editor(
+                f"design_{key}_",
+                "design_version",
+                life.design,
                 pd.DataFrame(rows[key], columns=columns),
-                key=f"design_{key}_{version}",
                 num_rows="dynamic",
                 width="stretch",
                 column_config=CONFIG.get(key),

@@ -9,7 +9,7 @@ import streamlit as st
 from pm_agent import closing, lifecycle
 from pm_agent.closing import OPERATION_COLUMNS, check_operations, operation_rows, rows_to_operations
 from pm_agent.tracking import Incident, load, save
-from pm_agent.ui import adopted_project, as_text, heading
+from pm_agent.ui import adopted_project, as_text, heading, kept_editor
 from pm_agent.workbench import InputError
 
 state = st.session_state
@@ -79,9 +79,11 @@ with st.container(border=True, key="panel-handbook"):
         st.info("Noch kein Entwurf: Ohne Bausteine gibt es kein Betriebshandbuch.")
         st.page_link("views/entwurf.py", label="Zum Entwurf", icon=":material/arrow_forward:")
     else:
-        edited = st.data_editor(
+        edited = kept_editor(
+            "operations_editor_",
+            "operations_version",
+            (design, tracking.operations),
             pd.DataFrame(operation_rows(design, tracking.operations), columns=OPERATION_COLUMNS),
-            key="operations_editor",
             disabled=["Baustein", "Name"],
             width="stretch",
         )

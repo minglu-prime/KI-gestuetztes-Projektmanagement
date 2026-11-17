@@ -2107,6 +2107,42 @@ def test_the_closing_page_takes_decisions_and_lessons(site, monkeypatch):
     assert not at.exception
 
 
+def frame(at, prefix):
+    (editor,) = [f for f in at.dataframe if f.key and f.key.startswith(prefix)]
+    return editor.value
+
+
+def test_unsaved_design_lessons_and_handbook_survive_a_visit_to_another_page(tracked):
+    from test_lifecycle import design
+
+    from pm_agent.models import Lesson
+
+    approve_needs()
+    lifecycle.save(lifecycle.load().model_copy(update={"design": design()}))
+    lesson = Lesson(observation="a", advice="b")
+    tracking.save(tracking.load().model_copy(update={"lessons": [lesson]}))
+    saved = (lifecycle.load(), tracking.load())
+    edits = [
+        ("views/entwurf.py", "design_steps_", {1: {"Von": "B3"}}, "Von", "B3"),
+        ("views/abschluss.py", "lessons_editor_", {0: {"Empfehlung": "neu"}}, "Empfehlung", "neu"),
+        (
+            "views/betrieb.py",
+            "operations_editor",
+            {0: {"Verantwortlich": "Team"}},
+            "Verantwortlich",
+            "Team",
+        ),
+    ]
+    at = tracked
+    for page, prefix, edit, column, value in edits:
+        at = edit_table(at.switch_page(page).run(), prefix, edit)
+        at = at.switch_page("views/startseite.py").run()
+        at = at.switch_page(page).run()
+        assert not at.exception, page
+        assert frame(at, prefix).iloc[next(iter(edit))][column] == value, page
+    assert (lifecycle.load(), tracking.load()) == saved  # nothing saved
+
+
 def test_the_operations_page_checks_the_handbook_and_records_incidents(tracked):
     from test_lifecycle import design
 

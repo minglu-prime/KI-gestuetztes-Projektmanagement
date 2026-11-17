@@ -21,6 +21,7 @@ from pm_agent.lifecycle import (
 from pm_agent.ui import (
     as_text,
     heading,
+    kept_editor,
     phase_chip,
     run_with_progress,
     saved_lifecycle,
@@ -115,23 +116,11 @@ with st.container(border=True, key="panel-requirements"):
         "Erfolgskriterien des Projektauftrags (K1 …) durch Komma."
     )
     rows = requirement_rows(life.requirements) if life.requirements is not None else []
-    table = pd.DataFrame(rows, columns=REQUIREMENT_COLUMNS)
-    # Streamlit drops the editor's edits when another page is shown. Unsaved edits come back
-    # after such a visit, unless the saved requirements changed meanwhile.
-    kept = state.get("requirements_current")
-    if state.get("page_changed") and kept is not None and kept[0] == life.requirements:
-        state.requirements_version = state.get("requirements_version", 0) + 1
-        state.requirements_restored = (state.requirements_version, kept[0], kept[1])
-    restored = state.get("requirements_restored")
-    if (
-        restored is not None
-        and restored[0] == state.get("requirements_version", 0)
-        and restored[1] == life.requirements
-    ):
-        table = restored[2]
-    edited_rows = st.data_editor(
-        table,
-        key=f"requirements_editor_{state.get('requirements_version', 0)}",
+    edited_rows = kept_editor(
+        "requirements_editor_",
+        "requirements_version",
+        life.requirements,
+        pd.DataFrame(rows, columns=REQUIREMENT_COLUMNS),
         num_rows="dynamic",
         width="stretch",
         column_config={
@@ -142,7 +131,6 @@ with st.container(border=True, key="panel-requirements"):
             "Priorität": st.column_config.SelectboxColumn(options=["Muss", "Soll", "Kann"]),
         },
     )
-    state.requirements_current = (life.requirements, edited_rows)
     # A table emptied of saved requirements is an edit too.
     typed = life.requirements is not None or any(
         str(value).strip()
