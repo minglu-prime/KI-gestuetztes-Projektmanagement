@@ -353,7 +353,7 @@ with tabs[0]:
         team = rows_to_team(edited_team.to_dict("records"))
     except InputError as err:
         team = None
-        st.error(f"Bitte korrigieren:\n\n{err}")
+        st.error(f"Bitte korrigieren:\n\n{as_text(str(err))}")
     if team == []:
         st.info(
             "Noch kein Teammitglied. Trage pro Zeile eine Person mit Skills und Wochenstunden ein."
@@ -369,8 +369,8 @@ with tabs[0]:
             save_team(team)
         except OSError as err:
             st.error(
-                f"{place} konnte nicht gespeichert werden: {err}. Die gespeicherte Datei "
-                "bleibt, wie sie ist."
+                f"{place} konnte nicht gespeichert werden: {as_text(str(err))}. "
+                "Die gespeicherte Datei bleibt, wie sie ist."
             )
         else:
             st.success(f"Gespeichert in {place} (lokal, nicht im Repository).")
@@ -426,7 +426,7 @@ with tabs[1]:
                 idea=idea, start_date=start, deadline=deadline, free_days=free_days(days_off)
             )
         except InputError as err:
-            st.error(f"Freie Tage: {err}")
+            st.error(f"Freie Tage: {as_text(str(err))}")
             project_gap = "lesbare freie Tage (Schritt 2)"
         except ValidationError as err:
             st.error("; ".join(e["msg"].removeprefix("Value error, ") for e in err.errors()))
@@ -501,7 +501,7 @@ with tabs[2]:
             runs = saved_runs()
         except (OSError, ValueError) as err:  # a damaged log file, or one that cannot be read
             runs = []
-            st.error(f"Protokolle in logs/ konnten nicht gelesen werden: {err}")
+            st.error(f"Protokolle in logs/ konnten nicht gelesen werden: {as_text(str(err))}")
         if not runs:
             st.caption("Noch keine protokollierten Läufe mit Plan.")
         else:
@@ -785,7 +785,7 @@ with tabs[4]:
                     edited_plan.to_dict("records"), state.original, risks.splitlines()
                 )
             except InputError as err:
-                st.error(f"Bitte korrigieren:\n\n{err}")
+                st.error(f"Bitte korrigieren:\n\n{as_text(str(err))}")
             else:
                 changed = new != table_plan(state.original)
                 state.update(
@@ -1026,7 +1026,9 @@ with tabs[5]:
                 adopted = load_tracking()
             except InputError as err:
                 adopted = None
-                st.error(f"Das übernommene Projekt konnte nicht gelesen werden: {err}")
+                st.error(
+                    f"Das übernommene Projekt konnte nicht gelesen werden: {as_text(str(err))}"
+                )
                 # Its progress may still be rescued by hand: replaced only on purpose.
                 overwrite = st.checkbox(
                     "Die beschädigte Datei durch diesen Plan ersetzen. Ihr Inhalt geht verloren.",
@@ -1073,11 +1075,11 @@ with tabs[5]:
                 try:
                     adopt(project, team, state.plan, keep=keep, requirements=needs)
                 except InputError as err:  # the checks above already keep the button off
-                    st.error(f"Nicht übernommen: {err}.")
+                    st.error(f"Nicht übernommen: {as_text(str(err))}.")
                 except OSError as err:
                     st.error(
-                        f"data/projekt.json konnte nicht gespeichert werden: {err}. Das "
-                        "bisher übernommene Projekt bleibt, wie es ist."
+                        f"data/projekt.json konnte nicht gespeichert werden: {as_text(str(err))}. "
+                        "Das bisher übernommene Projekt bleibt, wie es ist."
                     )
                 else:
                     st.success("Übernommen. Weiter auf den Seiten Durchführung und Kontrolle.")

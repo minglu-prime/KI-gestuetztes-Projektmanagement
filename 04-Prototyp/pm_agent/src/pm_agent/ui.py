@@ -37,7 +37,7 @@ def adopted_project() -> Tracking | None:
     try:
         tracking = load()
     except InputError as err:
-        st.error(f"Das übernommene Projekt konnte nicht gelesen werden: {err}")
+        st.error(f"Das übernommene Projekt konnte nicht gelesen werden: {as_text(str(err))}")
         return None
     if tracking is None:
         st.info(
@@ -60,7 +60,7 @@ def saved_lifecycle() -> Lifecycle | None:
     try:
         return lifecycle.load() or Lifecycle()
     except InputError as err:
-        st.error(f"Das Vorhaben konnte nicht gelesen werden: {err}")
+        st.error(f"Das Vorhaben konnte nicht gelesen werden: {as_text(str(err))}")
         replace = st.checkbox(
             "Die beschädigte Datei durch ein leeres Vorhaben ersetzen. Ihr Inhalt geht verloren.",
             key="vorhaben_replace",
@@ -83,7 +83,7 @@ def store(old: Lifecycle | None, new: Lifecycle) -> Lifecycle | None:
     try:
         lifecycle.save(new)
     except OSError as err:
-        st.error(f"vorhaben.json konnte nicht gespeichert werden: {err}.")
+        st.error(f"vorhaben.json konnte nicht gespeichert werden: {as_text(str(err))}.")
         return old
     return new
 
@@ -180,7 +180,7 @@ def journey(page: str) -> None:
         # Durchführung and Kontrolle show this error themselves (`adopted_project`), the
         # Planung only in its last step.
         if page == "planung":
-            st.error(f"Das übernommene Projekt konnte nicht gelesen werden: {err}")
+            st.error(f"Das übernommene Projekt konnte nicht gelesen werden: {as_text(str(err))}")
     try:
         life = lifecycle.load()
     except InputError as err:

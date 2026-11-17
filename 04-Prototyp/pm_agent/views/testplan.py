@@ -22,6 +22,7 @@ from pm_agent.lifecycle import (
 from pm_agent.ui import (
     as_text,
     heading,
+    kept_editor,
     phase_chip,
     run_with_progress,
     saved_lifecycle,
@@ -108,9 +109,11 @@ with st.container(border=True, key="panel-cases"):
         "auslösen soll, dessen Code."
     )
     rows = case_rows(life.cases) if life.cases is not None else []
-    edited_rows = st.data_editor(
+    edited_rows = kept_editor(
+        "cases_editor_",
+        "cases_version",
+        life.cases,
         pd.DataFrame(rows, columns=CASE_COLUMNS),
-        key=f"cases_editor_{state.get('cases_version', 0)}",
         num_rows="dynamic",
         width="stretch",
         column_config={
