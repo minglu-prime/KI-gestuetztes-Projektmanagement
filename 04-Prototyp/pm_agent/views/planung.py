@@ -50,6 +50,7 @@ from pm_agent.workbench import (
     InputError,
     append_run,
     check_changes,
+    demo_rows,
     explain_task,
     free_days,
     free_days_text,
@@ -636,6 +637,26 @@ with tabs[3]:
             else:
                 st.dataframe(pd.DataFrame(trace_rows(needs, state.plan)), hide_index=True)
 
+        with st.container(border=True, key="panel-demos"):
+            heading(
+                "slideshow",
+                "Demos je Woche",
+                claude="schlägt vor",
+                python="prüft gegen den Zeitplan",
+            )
+            demos = demo_rows(state.plan, result, project) if project else []
+            if demos:
+                st.caption(
+                    "Jede Woche ein Ergebnis, das sich vorführen lässt: So zeigt sich früh, wo das "
+                    "Projekt hängt. Ob eine Demo stattfand, trägst du in der Kontrolle ein."
+                )
+                st.dataframe(pd.DataFrame(demos), hide_index=True)
+            else:
+                st.caption(
+                    "Der Plan nennt keine Wochen-Demos. Bitte Claude im Schritt Anpassen darum, "
+                    "zum Beispiel: „Plane für jede Woche eine Demo.“"
+                )
+
         with st.container(border=True, key="panel-reasons"):
             heading("assignment_ind", "Zuweisungen und Begründungen")
             reasons = pd.DataFrame(plan_rows(state.plan))[["ID", "Aufgabe", "Person", "Begründung"]]
@@ -1075,6 +1096,10 @@ else:
     count = len(result.warnings)
     notes = f", {count} Warnung{'' if count == 1 else 'en'}" if count else ""
     plan_chip = chip(f"Plan geprüft{notes}", "on")
+demo_chip = None
+if state.plan is not None:
+    weeks = len(state.plan.demos)
+    demo_chip = chip(f"Wochen-Demos: {weeks or 'keine'}", "on" if weeks else "")
 people = f"Team: {len(team)} Person{'' if len(team) == 1 else 'en'}" if team else "Team fehlt"
 # What is next, in the order of the steps: one line, and a button that opens that step.
 if not team:
@@ -1098,6 +1123,7 @@ with status:
             phase_chip("Anforderungen", lifecycle.requirements_state(life)),
             phase_chip("Entwurf", lifecycle.design_state(life)),
             plan_chip,
+            *([demo_chip] if demo_chip else []),
         )
     )
     with st.container(horizontal=True, vertical_alignment="center", key="next-step-planung"):

@@ -295,3 +295,19 @@ def test_a_changed_trace_is_a_change():
     assert plan_changes(PLAN, changed(requirement_ids=["R1"])) == [
         "B · API: dient R1 (vorher keiner Anforderung)"
     ]
+
+
+def test_changed_demos_are_listed():
+    def plan(*demos):
+        return Plan.model_validate({**plan_input(), "demos": list(demos)})
+
+    one = {"week": 1, "title": "API zeigen", "task_ids": ["B"]}
+    before = plan(one, {"week": 2, "title": "Liste zeigen", "task_ids": ["A"]})
+    after = plan(
+        {**one, "task_ids": ["A", "B"]}, {"week": 3, "title": "Login zeigen", "task_ids": ["A"]}
+    )
+    assert [line for line in plan_changes(before, after) if "Demo" in line] == [
+        "Neue Demo in Woche 3: Login zeigen (A)",
+        "Demo der Woche 2 entfällt: Liste zeigen",
+        "Demo der Woche 1 (API zeigen): braucht jetzt A, B (vorher B)",
+    ]

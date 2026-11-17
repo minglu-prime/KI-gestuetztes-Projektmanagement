@@ -6,7 +6,7 @@ sie durchspielen will („Was, wenn das Backend doppelt so lange dauert?“).
 
 - Ändere nur, was der Wunsch verlangt und was daraus folgt. Alles andere bleibt, wie es ist:
   IDs, Titel, Schätzungen, Abhängigkeiten, die Anforderungen der Tasks (`requirement_ids`),
-  Zuweisungen und deren Begründungen, und die
+  Zuweisungen und deren Begründungen, die Wochen-Demos (`demos`), und die
   Reihenfolge der Aufgaben: Können zwei Aufgaben einer Person gleichzeitig beginnen, plant
   `check_plan` zuerst ein, was weiter oben steht. Die Projektleitung sieht danach genau die
   Unterschiede zum bisherigen Plan.

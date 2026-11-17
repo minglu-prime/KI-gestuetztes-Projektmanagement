@@ -709,3 +709,91 @@ def test_the_exported_plan_lists_the_tasks_of_each_requirement():
     assert "- R3 · Export (Muss): keine" in markdown
     # Without approved requirements the export is as before.
     assert "## Anforderungen" not in to_markdown(PROJECT, plan, check_plan(plan, TEAM, PROJECT))
+
+
+def test_the_plan_table_keeps_the_demos_and_the_markdown_lists_them():
+    from test_tools import PROJECT, TEAM, plan_input
+
+    from pm_agent.models import Plan
+    from pm_agent.planning import check_plan
+    from pm_agent.workbench import plan_rows, rows_to_plan, table_plan, to_markdown
+
+    plan = Plan.model_validate(
+        {**plan_input(), "demos": [{"week": 1, "title": "API zeigen", "task_ids": ["A", "B"]}]}
+    )
+    assert rows_to_plan(plan_rows(plan), plan, plan.risks).demos == plan.demos
+    assert table_plan(plan) == plan
+    text = to_markdown(PROJECT, plan, check_plan(plan, TEAM, PROJECT))
+    assert "## Demos je Woche\n\n- Woche 1 (bis 13.11.2026): API zeigen (A, B)" in text
+
+
+def test_demo_rows_say_whether_each_demo_is_ready_in_its_week():
+    from test_tools import PROJECT, TEAM, plan_input
+
+    from pm_agent.models import Plan
+    from pm_agent.planning import check_plan
+    from pm_agent.workbench import demo_rows
+
+    data = plan_input()
+    data["tasks"][1]["estimate_hours"] = 40  # B ends Monday 16.11.
+    plan = Plan.model_validate(
+        {
+            **data,
+            "demos": [
+                {"week": 2, "title": "API zeigen", "task_ids": ["B"]},
+                {"week": 1, "title": "Modell zeigen", "task_ids": ["A", "B"]},
+            ],
+        }
+    )
+    assert demo_rows(plan, check_plan(plan, TEAM, PROJECT), PROJECT) == [
+        {
+            "Woche": 1,
+            "Bis": "13.11.2026",
+            "Demo": "Modell zeigen",
+            "Aufgaben": "A, B",
+            "Rechtzeitig fertig": "nein: B endet am 16.11.2026",
+        },
+        {
+            "Woche": 2,
+            "Bis": "20.11.2026",
+            "Demo": "API zeigen",
+            "Aufgaben": "B",
+            "Rechtzeitig fertig": "ja",
+        },
+    ]
+
+
+def test_a_task_removed_in_the_table_leaves_the_demos():
+    from test_tools import plan_input
+
+    from pm_agent.models import Plan
+    from pm_agent.workbench import plan_rows, rows_to_plan
+
+    plan = Plan.model_validate(
+        {
+            **plan_input(),
+            "demos": [
+                {"week": 1, "title": "beides", "task_ids": ["A", "B"]},
+                {"week": 2, "title": "nur B", "task_ids": ["B"]},
+            ],
+        }
+    )
+    rows = [row for row in plan_rows(plan) if row["ID"] != "B"]
+    rows[0]["Abhängig von"] = ""
+    demos = rows_to_plan(rows, plan, plan.risks).demos
+    assert [(d.week, d.task_ids) for d in demos] == [(1, ["A"])]
+
+
+def test_demo_rows_of_a_plan_with_errors_are_not_checked():
+    from test_tools import PROJECT, TEAM, plan_input
+
+    from pm_agent.models import Plan
+    from pm_agent.planning import check_plan
+    from pm_agent.workbench import demo_rows
+
+    plan = Plan.model_validate(
+        {**plan_input(), "demos": [{"week": 1, "title": "x", "task_ids": ["A", "Z"]}]}
+    )
+    result = check_plan(plan, TEAM, PROJECT)
+    assert result.errors
+    assert demo_rows(plan, result, PROJECT)[0]["Rechtzeitig fertig"] == "nicht geprüft"

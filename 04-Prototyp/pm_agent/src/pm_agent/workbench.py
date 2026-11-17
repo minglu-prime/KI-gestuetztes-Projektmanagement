@@ -13,6 +13,7 @@ import os
 import re
 import threading
 from datetime import date, datetime, timedelta
+from itertools import islice
 from pathlib import Path
 from typing import Any
 
@@ -29,7 +30,7 @@ from pm_agent.models import (
     Requirement,
     Task,
 )
-from pm_agent.planning import workday_shift, working_shift
+from pm_agent.planning import project_weeks, workday_shift, working_shift
 
 DATA_DIR = LOG_DIR.parent / "data"
 TEAM_FILE = DATA_DIR / "team.json"
@@ -157,7 +158,18 @@ def rows_to_plan(rows: list[dict[str, Any]], original: Plan, risks: list[str]) -
     if errors:
         raise InputError("\n".join(errors))
     try:
-        return Plan(tasks=tasks, assignments=assignments, risks=[r for r in risks if r.strip()])
+        return Plan(
+            tasks=tasks,
+            assignments=assignments,
+            risks=[r for r in risks if r.strip()],
+            # Not in the table, like the descriptions. A task removed there leaves its
+            # demos; a demo left with no task goes.
+            demos=[
+                demo.model_copy(update={"task_ids": kept})
+                for demo in original.demos
+                if (kept := [t for t in demo.task_ids if t in {task.id for task in tasks}])
+            ],
+        )
     except ValidationError as err:
         raise InputError(_reason(err)) from err
 
@@ -578,6 +590,31 @@ def plan_changes(before: Plan, after: Plan) -> list[str]:
         )
     lines += [f"Neues Risiko: {risk}" for risk in after.risks if risk not in before.risks]
     lines += [f"Risiko entfällt: {risk}" for risk in before.risks if risk not in after.risks]
+    return lines + _demo_changes(before, after)
+
+
+def _demo_changes(before: Plan, after: Plan) -> list[str]:
+    old = {d.week: d for d in before.demos}
+    new = {d.week: d for d in after.demos}
+    lines = [
+        f"Neue Demo in Woche {w}: {d.title} ({', '.join(d.task_ids)})"
+        for w, d in new.items()
+        if w not in old
+    ]
+    lines += [f"Demo der Woche {w} entfällt: {d.title}" for w, d in old.items() if w not in new]
+    for week, demo in new.items():
+        was = old.get(week)
+        if was is None:
+            continue
+        parts = []
+        if demo.title != was.title:
+            parts.append(f"heißt jetzt „{demo.title}“")
+        if demo.task_ids != was.task_ids:
+            parts.append(
+                f"braucht jetzt {', '.join(demo.task_ids)} (vorher {', '.join(was.task_ids)})"
+            )
+        if parts:
+            lines.append(f"Demo der Woche {week} ({was.title}): " + "; ".join(parts))
     return lines
 
 
@@ -741,6 +778,18 @@ def to_markdown(
             f"{_md(row['Aufgaben'])}"
             for row in trace_rows(requirements, plan)
         ]
+    if plan.demos:
+        weeks = max(d.week for d in plan.demos)
+        friday = {
+            n: last
+            for n, _, last in islice(project_weeks(project.start_date, project.deadline), weeks)
+        }
+        lines += ["", "## Demos je Woche", ""] + [
+            f"- Woche {d.week}"
+            + (f" (bis {_date(friday[d.week])})" if d.week in friday else "")
+            + f": {_md(d.title)} ({_md(', '.join(d.task_ids))})"
+            for d in sorted(plan.demos, key=lambda d: d.week)
+        ]
     for title, items in (
         ("Fehler", result.errors),
         ("Warnungen", result.warnings),
@@ -749,6 +798,42 @@ def to_markdown(
         if items:
             lines += ["", f"## {title}", ""] + [f"- {_md(item)}" for item in items]
     return "\n".join(lines) + "\n"
+
+
+def demo_rows(plan: Plan, result: CheckResult, project: Project) -> list[dict[str, Any]]:
+    """One row per demo, in week order: until when, what, which tasks, and whether the
+    schedule has them done by the end of that week."""
+    if not plan.demos:
+        return []
+    weeks = max(d.week for d in plan.demos)
+    last = {
+        n: day for n, _, day in islice(project_weeks(project.start_date, project.deadline), weeks)
+    }
+    ends = {s.task_id: s.end for s in result.schedule}
+    rows = []
+    for demo in sorted(plan.demos, key=lambda d: d.week):
+        friday = last.get(demo.week)
+        late = [
+            f"{tid} endet am {_date(ends[tid])}"
+            for tid in demo.task_ids
+            if friday is not None and tid in ends and ends[tid] > friday
+        ]
+        rows.append(
+            {
+                "Woche": demo.week,
+                "Bis": _date(friday) if friday else "nach der Deadline",
+                "Demo": demo.title,
+                "Aufgaben": ", ".join(demo.task_ids),
+                "Rechtzeitig fertig": (
+                    "nicht geprüft"
+                    if result.errors or any(tid not in ends for tid in demo.task_ids)
+                    else f"nein: {', '.join(late)}"
+                    if late
+                    else "ja"
+                ),
+            }
+        )
+    return rows
 
 
 def to_csv(plan: Plan, result: CheckResult) -> str:

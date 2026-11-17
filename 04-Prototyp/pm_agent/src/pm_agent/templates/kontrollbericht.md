@@ -32,6 +32,10 @@ $personen
 
 $frueher
 
+## Wochen-Demos
+
+$demos
+
 ## Bewertung und Gegenmaßnahmen
 
 $bewertung

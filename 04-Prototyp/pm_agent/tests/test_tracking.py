@@ -1031,3 +1031,163 @@ def test_a_project_file_in_another_encoding_is_damaged_not_a_crash(tmp_path):
     path.write_bytes('{"project": "Lernräume"}'.encode("cp1252"))
     with pytest.raises(InputError, match="projekt.json"):
         load(path)
+
+
+def demo_tracking(tmp_path):
+    from pm_agent.tracking import adopt
+
+    plan = Plan.model_validate(
+        {
+            **PLAN.model_dump(),
+            "demos": [
+                {"week": 1, "title": "Modell zeigen", "task_ids": ["A"]},
+                {"week": 2, "title": "API zeigen", "task_ids": ["A", "B"]},
+            ],
+        }
+    )
+    return adopt(PROJECT, TEAM, plan, path=tmp_path / "projekt.json")
+
+
+def test_demo_status_reads_the_progress_and_the_retros(tmp_path):
+    from pm_agent.tracking import Retro, demo_status, record_retro
+
+    tracking = demo_tracking(tmp_path)
+    tracking = tracking.model_copy(
+        update={
+            "progress": {
+                **tracking.progress,
+                "A": tracking.progress["A"].model_copy(update={"status": "fertig"}),
+            }
+        }
+    )
+    tracking = record_retro(tracking, Retro(monday=date(2026, 11, 9), shown="ja"))
+    assert demo_status(tracking, date(2026, 11, 16)) == [
+        {
+            "Woche": 1,
+            "Bis": "13.11.2026",
+            "Demo": "Modell zeigen",
+            "Fertig": "1 von 1",
+            "Gezeigt": "ja",
+        },
+        {
+            "Woche": 2,
+            "Bis": "20.11.2026",
+            "Demo": "API zeigen",
+            "Fertig": "1 von 2",
+            "Gezeigt": "Woche läuft",
+        },
+    ]
+
+
+def test_a_missed_demo_needs_a_measure_and_a_past_week_a_retro(tmp_path):
+    from pm_agent.tracking import Retro, check_retros, open_measures, record_retro
+
+    tracking = demo_tracking(tmp_path)
+    assert check_retros(tracking, date(2026, 11, 23)).warnings == [
+        "Woche 1 (Modell zeigen) hat noch keinen Rückblick",
+        "Woche 2 (API zeigen) hat noch keinen Rückblick",
+    ]
+    with pytest.raises(
+        InputError,
+        match="Woche ab 16.11.2026: Die Demo fand nur teilweise statt, es fehlt eine Maßnahme",
+    ):
+        record_retro(
+            tracking, Retro(monday=date(2026, 11, 16), shown="teilweise", went_wrong="B fehlte")
+        )
+    tracking = record_retro(
+        tracking,
+        Retro(
+            monday=date(2026, 11, 16),
+            shown="nein",
+            went_wrong="B fehlte",
+            cause="Schema unklar",
+            measure="Schema zuerst",
+        ),
+    )
+    assert [r.measure for r in open_measures(tracking)] == ["Schema zuerst"]
+    done = record_retro(tracking, tracking.retros[0].model_copy(update={"measure_done": True}))
+    assert open_measures(done) == [] and len(done.retros) == 1
+
+
+def test_retros_survive_adopting_the_rest_again(tmp_path):
+    from pm_agent.tracking import Retro, adopt, record_retro
+
+    tracking = record_retro(demo_tracking(tmp_path), Retro(monday=date(2026, 11, 9), shown="ja"))
+    again = adopt(PROJECT, TEAM, PLAN, path=tmp_path / "projekt.json", keep=tracking)
+    assert again.retros == tracking.retros
+
+
+def test_the_control_document_has_the_demos_and_their_retros(tmp_path):
+    from pm_agent.tracking import Retro, control_document, record_retro
+
+    tracking = record_retro(
+        demo_tracking(tmp_path),
+        Retro(
+            monday=date(2026, 11, 9),
+            shown="nein",
+            went_wrong="A | fehlte",
+            cause="krank",
+            measure="Vertretung",
+        ),
+    )
+    text = control_document(tracking, evaluate(tracking, date(2026, 11, 23)))
+    assert "## Wochen-Demos" in text
+    assert (
+        r"| 1 | 13.11.2026 | Modell zeigen | 0 von 1 | nein | A \| fehlte | krank | Vertretung |"
+        in text
+    )
+    assert "| 2 | 20.11.2026 | API zeigen | 0 von 2 | offen | – | – | – |" in text
+    # Without demos the section says so.
+    plain = adopt(PROJECT, TEAM, PLAN, path=tmp_path / "plain.json")
+    assert "Der Plan hat keine Wochen-Demos." in control_document(
+        plain, evaluate(plain, date(2026, 11, 23))
+    )
+
+
+def test_the_demo_of_this_week_is_named_with_what_is_done(tmp_path):
+    from pm_agent.tracking import demo_this_week
+
+    tracking = demo_tracking(tmp_path)
+    assert (
+        demo_this_week(tracking, date(2026, 11, 18))
+        == "Demo dieser Woche (bis 20.11.2026): API zeigen, 0 von 2 Aufgaben fertig"
+    )
+    assert demo_this_week(tracking, date(2026, 11, 14)) is None  # Saturday: no week runs
+    assert demo_this_week(tracking, date(2026, 11, 25)) is None  # week 3 has no demo
+    plain = adopt(PROJECT, TEAM, PLAN, path=tmp_path / "plain.json")
+    assert demo_this_week(plain, date(2026, 11, 18)) is None
+
+
+def test_the_status_report_names_the_demo_of_this_week(tmp_path):
+    tracking = demo_tracking(tmp_path)
+    report = status_report(tracking, evaluate(tracking, today=date(2026, 11, 18)))
+    assert "Demo dieser Woche (bis 20.11.2026): API zeigen, 0 von 2 Aufgaben fertig" in report
+
+
+def test_retros_stay_with_their_calendar_week_when_the_rest_is_planned_again(tmp_path):
+    from pm_agent.tracking import Retro, demo_status, record_retro, rest_project
+
+    tracking = record_retro(
+        demo_tracking(tmp_path),
+        Retro(monday=date(2026, 11, 16), shown="nein", measure="Schema zuerst"),
+    )
+    project, rest = rest_project(tracking, date(2026, 11, 18))
+    # The rest starts on Wednesday 18.11: its week 1 is the week of 16.11.
+    rest = Plan.model_validate(
+        {
+            **rest.model_dump(),
+            "demos": [
+                {"week": 1, "title": "Rest A", "task_ids": [rest.tasks[0].id]},
+                {"week": 2, "title": "Rest B", "task_ids": [rest.tasks[-1].id]},
+            ],
+        }
+    )
+    again = adopt(
+        project,
+        TEAM,
+        Plan.model_validate(rest.model_dump()),
+        path=tmp_path / "r.json",
+        keep=tracking,
+    )
+    rows = demo_status(again, date(2026, 11, 18))
+    assert [(r["Demo"], r["Gezeigt"]) for r in rows] == [("Rest A", "nein"), ("Rest B", "kommt")]

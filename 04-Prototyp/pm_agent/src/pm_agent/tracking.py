@@ -8,10 +8,11 @@ progress. The file lives in data/ like the team file: it holds personal data and
 import json
 import math
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
+from itertools import islice
 from pathlib import Path
 from string import Template
-from typing import Any, Literal, get_args
+from typing import Any, Literal, NamedTuple, get_args
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
@@ -30,6 +31,7 @@ from pm_agent.planning import (
     add_working_days,
     check_plan,
     planned_work,
+    project_weeks,
     working_shift,
 )
 from pm_agent.workbench import (
@@ -102,6 +104,22 @@ class Earlier(BaseModel):
     requirement_ids: list[str] = Field(default_factory=list)  # what the task served
 
 
+class Retro(BaseModel):
+    """The look back at one week: was its demo shown, and what follows from it.
+    Entered by the project lead; nothing here is Claude's."""
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    # The Monday of the calendar week. Not the week number: that counts from the start
+    # of the plan, and the rest of a project, planned again, starts later.
+    monday: date
+    shown: Literal["ja", "teilweise", "nein"]
+    went_wrong: str = ""
+    cause: str = ""
+    measure: str = ""
+    measure_done: bool = False
+
+
 class Tracking(BaseModel):
     """The plan the project lead adopted, and what happened to each task since."""
 
@@ -116,6 +134,8 @@ class Tracking(BaseModel):
     # The requirements approved when the plan was adopted. A snapshot like project and plan:
     # progress per requirement is measured against what the plan was traced to.
     requirements: list[Requirement] = Field(default_factory=list)
+    # One per calendar week, kept when the rest is adopted again.
+    retros: list[Retro] = Field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -199,6 +219,7 @@ def adopt(
             if keep is not None
             else []
         ),
+        retros=keep.retros if keep is not None else [],
     )
     save(tracking, path)
     return tracking
@@ -284,6 +305,118 @@ def _closed(tracking: Tracking, day: date) -> list[Earlier]:
             )
         )
     return closed
+
+
+class RetroCheck(NamedTuple):
+    errors: list[str]
+    warnings: list[str]
+
+
+def _weeks(tracking: Tracking) -> dict[int, tuple[date, date]]:
+    """First and last day of each week that has a demo in the plan."""
+    if not tracking.plan.demos:
+        return {}
+    count = max(d.week for d in tracking.plan.demos)
+    project = tracking.project
+    return {
+        n: (first, last)
+        for n, first, last in islice(project_weeks(project.start_date, project.deadline), count)
+    }
+
+
+def monday(day: date) -> date:
+    """The Monday of the calendar week `day` lies in."""
+    return day - timedelta(days=day.weekday())
+
+
+def _retro_errors(retro: Retro) -> list[str]:
+    if retro.shown != "ja" and not retro.measure:
+        missed = "nur teilweise" if retro.shown == "teilweise" else "nicht"
+        return [
+            f"Woche ab {_date(retro.monday)}: Die Demo fand {missed} statt, es fehlt eine Maßnahme"
+        ]
+    return []
+
+
+def check_retros(tracking: Tracking, today: date) -> RetroCheck:
+    """Errors: a missed demo without a measure. Warnings: a week that is over and has a demo
+    but no retro."""
+    errors = [e for r in tracking.retros for e in _retro_errors(r)]
+    done = {r.monday for r in tracking.retros}
+    weeks = _weeks(tracking)
+    warnings = [
+        f"Woche {d.week} ({d.title}) hat noch keinen Rückblick"
+        for d in sorted(tracking.plan.demos, key=lambda d: d.week)
+        if d.week in weeks and weeks[d.week][1] < today and monday(weeks[d.week][0]) not in done
+    ]
+    return RetroCheck(errors, warnings)
+
+
+def record_retro(tracking: Tracking, retro: Retro) -> Tracking:
+    """The retro of its week, replacing an earlier one. Raises InputError while a missed
+    demo has no measure. Not saved: the caller saves."""
+    errors = _retro_errors(retro)
+    if errors:
+        raise InputError("\n".join(errors))
+    others = [r for r in tracking.retros if r.monday != retro.monday]
+    return tracking.model_copy(update={"retros": sorted([*others, retro], key=lambda r: r.monday)})
+
+
+def open_measures(tracking: Tracking) -> list[Retro]:
+    """Retros whose measure is not done yet."""
+    return [r for r in tracking.retros if r.measure and not r.measure_done]
+
+
+def demo_mondays(tracking: Tracking) -> dict[int, date]:
+    """Week number of each demo -> the Monday of its calendar week (the key of its retro).
+    A demo after the deadline has none."""
+    return {n: monday(first) for n, (first, _) in _weeks(tracking).items()}
+
+
+def demo_status(tracking: Tracking, today: date) -> list[dict[str, Any]]:
+    """One row per demo of the plan: until when, how many of its tasks are done, and whether
+    it was shown (from the retro), or that its week is still running or to come."""
+    weeks = _weeks(tracking)
+    shown = {r.monday: r.shown for r in tracking.retros}
+    rows = []
+    for demo in sorted(tracking.plan.demos, key=lambda d: d.week):
+        first, last = weeks.get(demo.week, (None, None))
+        done = sum(tracking.progress[tid].status == "fertig" for tid in demo.task_ids)
+        if first is not None and monday(first) in shown:
+            state = shown[monday(first)]
+        elif last is None:
+            state = "nach der Deadline"
+        elif last < today:
+            state = "offen"
+        elif first <= today:
+            state = "Woche läuft"
+        else:
+            state = "kommt"
+        rows.append(
+            {
+                "Woche": demo.week,
+                "Bis": _date(last) if last else "–",
+                "Demo": demo.title,
+                "Fertig": f"{done} von {len(demo.task_ids)}",
+                "Gezeigt": state,
+            }
+        )
+    return rows
+
+
+def demo_this_week(tracking: Tracking, today: date) -> str | None:
+    """One line on the demo of the week `today` lies in, or None (no demo, a weekend)."""
+    for week, (first, last) in _weeks(tracking).items():
+        if first <= today <= last:
+            demo = next((d for d in tracking.plan.demos if d.week == week), None)
+            if demo is None:
+                return None
+            done = sum(tracking.progress[tid].status == "fertig" for tid in demo.task_ids)
+            return (
+                f"Demo dieser Woche (bis {_date(last)}): {demo.title}, {done} von "
+                f"{len(demo.task_ids)} Aufgaben fertig"
+            )
+    return None
 
 
 def load(path: Path | None = None) -> Tracking | None:
@@ -908,7 +1041,9 @@ def status_report(
         deadline=_date(project.deadline),
         planende=_date(max(t.planned_end for t in tasks)),
         prognose=forecast_text(outlook, project.deadline),
-        naechste=coming,
+        naechste="\n\n".join(
+            filter(None, [_md(demo_this_week(tracking, evaluation.today) or ""), coming])
+        ),
         fortschritt=percent(evaluation.progress),
         fertig=count["fertig"],
         in_arbeit=count["in Arbeit"],
@@ -1012,7 +1147,29 @@ def control_document(
         ),
         frueher=_history_text(tracking),
         bewertung=judgement,
+        demos=_demos_text(tracking, today),
     )
+
+
+def _demos_text(tracking: Tracking, today: date) -> str:
+    """The demos of the plan with their retros, as a table for the control report."""
+    if not tracking.plan.demos:
+        return "Der Plan hat keine Wochen-Demos."
+    retros = {r.monday: r for r in tracking.retros}
+    weeks = _weeks(tracking)
+    head = [
+        "| Woche | Bis | Demo | Fertig | Gezeigt | Was ging schief | Ursache | Maßnahme |",
+        "|---|---|---|---|---|---|---|---|",
+    ]
+    rows = []
+    for row in demo_status(tracking, today):
+        first = weeks.get(row["Woche"], (None, None))[0]
+        retro = retros.get(monday(first)) if first else None
+        notes = [retro.went_wrong, retro.cause, retro.measure] if retro else ["", "", ""]
+        cells = [str(row["Woche"]), row["Bis"], row["Demo"], row["Fertig"], row["Gezeigt"]]
+        cells += [note or "–" for note in notes]
+        rows.append("| " + " | ".join(_md(cell) for cell in cells) + " |")
+    return "\n".join(head + rows)
 
 
 def work_packages(tracking: Tracking) -> str:

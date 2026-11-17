@@ -79,10 +79,20 @@ class Assignment(_Model):
     reason: NonEmpty
 
 
+class Demo(_Model):
+    """What the team shows at the end of a project week, and the tasks it needs."""
+
+    week: int = Field(ge=1)  # week 1 is the week of the first workday of the project
+    title: NonEmpty
+    task_ids: list[NonEmpty] = Field(min_length=1)
+
+
 class Plan(_Model):
     tasks: list[Task] = Field(min_length=1)
     assignments: list[Assignment]
     risks: list[NonEmpty] = Field(default_factory=list)
+    # One demo per project week. Empty in plans made before demos existed.
+    demos: list[Demo] = Field(default_factory=list)
 
 
 class Criterion(_Model):

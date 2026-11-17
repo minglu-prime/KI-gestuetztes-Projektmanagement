@@ -14,6 +14,7 @@ from pm_agent.tracking import (
     PROGRESS_READ_ONLY,
     STATUSES,
     apply_rows,
+    demo_this_week,
     evaluate,
     forecast,
     percent,
@@ -73,6 +74,9 @@ with st.container(border=True, key="panel-ahead"):
     )
     outlook = forecast(tracking, date.today())
     ahead = week_ahead(tracking, date.today())
+    demo = demo_this_week(tracking, date.today())
+    if demo:
+        st.info(as_text(demo), icon=":material/slideshow:")
     if outlook.problem:
         st.error(
             f"{NO_WEEK_AHEAD} {outlook.problem}. Prüfe Status und Rest-Stunden in der Tabelle "

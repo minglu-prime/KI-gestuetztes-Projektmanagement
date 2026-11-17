@@ -1868,3 +1868,81 @@ def test_check_messages_on_the_lifecycle_pages_show_no_link(site):
         shown += [e.value for e in at.error] + [w.value for w in at.warning]
     assert any("evil.example" in text for text in shown)
     assert not [text for text in shown if re.search(r"(?<!\\)\[", text)]
+
+
+def test_the_planung_shows_the_demos_of_the_plan(app, monkeypatch):
+    with_demo = Plan.model_validate(
+        {**PLAN.model_dump(), "demos": [{"week": 1, "title": "API zeigen", "task_ids": ["A"]}]}
+    )
+    monkeypatch.setattr(agent, "run_planning", lambda *args, **kwargs: with_demo)
+    at = fill_project(app.run())
+    button(at, "Plan mit Claude erstellen").click()
+    at = at.run()
+    assert not at.exception
+    (demos,) = [d.value for d in at.dataframe if "Demo" in d.value.columns]
+    assert list(demos["Demo"]) == ["API zeigen"]
+    assert "✓ Wochen-Demos: 1<" in chips(at)
+
+
+DEMO_PLAN = Plan.model_validate(
+    {
+        **PLAN.model_dump(),
+        "demos": [
+            {"week": 1, "title": "Modell zeigen", "task_ids": ["A"]},
+            {"week": 2, "title": "API zeigen", "task_ids": ["B"]},
+        ],
+    }
+)
+
+
+def test_the_weekly_retro_needs_a_measure_for_a_missed_demo(site):
+    tracking.adopt(PROJECT, TEAM, DEMO_PLAN)
+    at = site.switch_page("views/kontrolle.py").run()
+    assert not at.exception
+    (status,) = [d.value for d in at.dataframe if "Gezeigt" in d.value.columns]
+    assert list(status["Demo"]) == ["Modell zeigen", "API zeigen"]
+
+    at.selectbox(key="retro_week").set_value(2).run()
+    at.radio(key="retro_shown_2").set_value("nein").run()
+    at.text_input(key="retro_wrong_2").input("B nicht fertig").run()
+    button(at, "Rückblick speichern").click()
+    at = at.run()
+    assert any("es fehlt eine Maßnahme" in e.value for e in at.error)
+    assert tracking.load().retros == []
+
+    at.text_input(key="retro_measure_2").input("Schema zuerst klären").run()
+    button(at, "Rückblick speichern").click()
+    at = at.run()
+    (retro,) = tracking.load().retros
+    assert (retro.monday, retro.shown, retro.measure) == (
+        datetime.date(2026, 11, 16),
+        "nein",
+        "Schema zuerst klären",
+    )
+    assert any("Schema zuerst klären" in c.label for c in at.checkbox)
+
+    at.checkbox(key="measure_done_20261116").check().run()
+    assert tracking.load().retros[0].measure_done is True
+
+
+def test_without_demos_the_retro_says_how_to_get_them(tracked):
+    at = tracked.switch_page("views/kontrolle.py").run()
+    assert not at.exception
+    assert any("keine Wochen-Demos" in c.value for c in at.caption)
+
+
+def test_a_new_measure_for_the_same_week_starts_open(site):
+    tracking.adopt(PROJECT, TEAM, DEMO_PLAN)
+    at = site.switch_page("views/kontrolle.py").run()
+    at.selectbox(key="retro_week").set_value(2).run()
+    at.radio(key="retro_shown_2").set_value("nein").run()
+    at.text_input(key="retro_measure_2").input("Erste Maßnahme").run()
+    button(at, "Rückblick speichern").click()
+    at = at.run()
+    at.checkbox(key="measure_done_20261116").check().run()
+    at.text_input(key="retro_measure_2").input("Zweite Maßnahme").run()
+    button(at, "Rückblick speichern").click()
+    at = at.run()
+    assert not at.exception
+    (retro,) = tracking.load().retros
+    assert (retro.measure, retro.measure_done) == ("Zweite Maßnahme", False)
