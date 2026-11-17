@@ -28,6 +28,10 @@ $verzug
 |---|---|---|---|
 $personen
 
+## Stand je Anforderung
+
+$anforderungen
+
 ## Aus früheren Plänen
 
 $frueher
