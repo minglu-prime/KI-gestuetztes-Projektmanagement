@@ -61,3 +61,28 @@ def test_the_readme_names_every_page_of_the_menu():
     named = {name.strip() for cell in first_cells for name in re.split("[·,]", cell)}
     assert len(titles) > 10
     assert [title for title in titles if title not in named] == []
+
+
+def test_working_days_are_counted_in_planning_only():
+    # Nine fixes (slack against critical path, free days as buffer, an end moved in calendar
+    # days …) came from days counted again elsewhere. planning.py counts them; tracking.monday
+    # only finds the start of a week.
+    found = []
+    for source in SOURCES:
+        if source.name == "planning.py":
+            continue
+        tree = ast.parse(source.read_text(encoding="utf-8"))
+        allowed = {
+            line
+            for node in ast.walk(tree)
+            if isinstance(node, ast.FunctionDef) and node.name == "monday"
+            for line in range(node.lineno, node.end_lineno + 1)
+        }
+        found += [
+            f"{source.name}:{node.lineno}"
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Attribute)
+            and node.attr in {"days", "weekday", "isoweekday"}
+            and node.lineno not in allowed
+        ]
+    assert found == []
