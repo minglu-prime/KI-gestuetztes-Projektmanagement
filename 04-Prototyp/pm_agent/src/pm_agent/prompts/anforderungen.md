@@ -14,7 +14,8 @@ für jede Anforderung Aufgaben.
   Projektauftrag, keine Namen.
 - `priority`: `Muss` (ohne sie ist das Projekt gescheitert), `Soll` (wichtig, aber
   verschiebbar) oder `Kann` (wenn Zeit bleibt). Mindestens eine `Muss`-Anforderung.
-- `criteria`: Akzeptanzkriterien, die sich testen lassen („Eine stornierte Buchung
+- `criteria`: Akzeptanzkriterien mit `id` (die ID der Anforderung, ein Punkt und eine
+  laufende Nummer: `R1.1`, `R1.2` …) und `text`, die sich testen lassen („Eine stornierte Buchung
   verschwindet sofort aus der Liste“). Eins bis vier pro Anforderung.
 - `sources`: die IDs der Erfolgskriterien des Projektauftrags (`K1` …), denen die Anforderung
   dient. Ohne Projektauftrag bleibt die Liste leer.

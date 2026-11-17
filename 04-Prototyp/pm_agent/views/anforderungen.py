@@ -127,7 +127,20 @@ with st.container(border=True, key="panel-requirements"):
     edited, problem = None, None
     if typed:
         try:
-            edited = rows_to_requirements(edited_rows.to_dict("records"))
+            # Numbers of saved criteria and of those test cases point at stay taken.
+            taken = {
+                *(
+                    c.id
+                    for r in (life.requirements.items if life.requirements else [])
+                    for c in r.criteria
+                ),
+                *(
+                    cid
+                    for case in (life.cases.cases if life.cases else [])
+                    for cid in case.criteria
+                ),
+            }
+            edited = rows_to_requirements(edited_rows.to_dict("records"), taken)
         except InputError as err:
             problem = str(err)
     unsaved = typed and edited != life.requirements

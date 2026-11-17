@@ -75,7 +75,7 @@ def saved_lifecycle() -> Lifecycle | None:
 
 
 # Keys of the fields on the pages Projektauftrag, Anforderungen and Entwurf.
-FIELD_PREFIXES = ("auftrag_", "charter_", "requirements_", "design_")
+FIELD_PREFIXES = ("auftrag_", "charter_", "requirements_", "design_", "cases_")
 
 
 def store(old: Lifecycle | None, new: Lifecycle) -> Lifecycle | None:
@@ -141,16 +141,20 @@ JOURNEY = [
     ("auftrag", "Auftrag", "Claude entwirft, du gibst frei"),
     ("anforderungen", "Anforderungen", "Python prüft die Abdeckung"),
     ("entwurf", "Entwurf", "Python zeichnet die Abläufe"),
+    ("testplan", "Testplan", "Python prüft die Abdeckung"),
     ("planung", "Planen", "Claude entwirft, du übernimmst"),
     ("durchfuehrung", "Ausführen", "du trägst den Fortschritt ein"),
+    ("testlauf", "Testen", "du trägst Ergebnisse und Fehler ein"),
     ("kontrolle", "Prüfen", "Python rechnet, Claude bewertet"),
 ]
 PAGES = {
     "auftrag": ("views/auftrag.py", "Zum Projektauftrag"),
     "anforderungen": ("views/anforderungen.py", "Zu den Anforderungen"),
     "entwurf": ("views/entwurf.py", "Zum Entwurf"),
+    "testplan": ("views/testplan.py", "Zum Testplan"),
     "planung": ("views/planung.py", "Zur Planung"),
     "durchfuehrung": ("views/durchfuehrung.py", "Zur Durchführung"),
+    "testlauf": ("views/testlauf.py", "Zum Test"),
     "kontrolle": ("views/kontrolle.py", "Zur Kontrolle"),
 }
 
@@ -175,19 +179,20 @@ def journey(page: str) -> None:
         life = lifecycle.load()
     except InputError as err:
         life, unreadable = None, True
-        if page not in ("auftrag", "anforderungen", "entwurf"):  # those show it themselves
-            st.caption(f"Projektauftrag, Anforderungen und Entwurf sind nicht lesbar: {err}")
+        if page not in ("auftrag", "anforderungen", "entwurf", "testplan"):  # they say it
+            st.caption(f"Die Phasen vor dem Plan sind nicht lesbar: {as_text(str(err))}")
     phases = {
         "auftrag": lifecycle.charter_state(life),
         "anforderungen": lifecycle.requirements_state(life),
         "entwurf": lifecycle.design_state(life),
+        "testplan": lifecycle.cases_state(life),
     }
     advice = None
     if unreadable:
         where = None
     elif tracking is None:
         where = next((slug for slug, phase in phases.items() if phase != "freigegeben"), "planung")
-    elif page in ("auftrag", "anforderungen", "entwurf", "planung"):
+    elif page in ("auftrag", "anforderungen", "entwurf", "testplan", "planung"):
         where = None  # these lead through their own steps and need no forecast
     else:
         # Looked up when called, like the pages do: the day is the one they evaluate on.
@@ -196,6 +201,7 @@ def journey(page: str) -> None:
         **{slug: phase == "freigegeben" for slug, phase in phases.items()},
         "planung": tracking is not None,
         "durchfuehrung": tracking is not None and has_progress(tracking),
+        "testlauf": tracking is not None and bool(tracking.results),
         "kontrolle": False,  # checking never ends while the project runs
     }
     # Not approved: a draft or a changed one, or skipped although the project goes on.

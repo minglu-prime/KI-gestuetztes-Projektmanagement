@@ -6,8 +6,9 @@ member not in team, cycles) live in `planning.check_plan`, so a broken plan is r
 not rejected on parse.
 """
 
+import re
 from datetime import date
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field, model_validator
 
@@ -121,15 +122,54 @@ def _no_semicolon(text: str) -> str:
     return text
 
 
+class Acceptance(_Model):
+    """An acceptance criterion: its ID ("R1.1") stays when others are deleted, so a test
+    case keeps pointing at the same criterion."""
+
+    id: Ref
+    text: Annotated[NonEmpty, AfterValidator(_no_semicolon)]
+
+
+def _number_criteria(data: Any) -> Any:
+    """Plain texts become criteria with the next free number of their requirement: R1.1,
+    R1.2 … A deleted number is not given again."""
+    if not isinstance(data, dict) or not isinstance(data.get("criteria"), list):
+        return data
+    rid = str(data.get("id", "")).strip()
+    # An invalid requirement ID is reported on its own; the criteria then get a neutral
+    # prefix instead of a second message about the same mistake.
+    prefix = f"{rid}." if re.fullmatch(r"[A-Za-z0-9._-]+", rid) else "R."
+    used = [
+        c.get("id") if isinstance(c, dict) else getattr(c, "id", None)
+        for c in data["criteria"]
+        if not isinstance(c, str)
+    ]
+    numbers = [
+        int(i[len(prefix) :])
+        for i in used
+        if isinstance(i, str) and i.startswith(prefix) and i[len(prefix) :].isdigit()
+    ]
+    following = max(numbers, default=0)
+    criteria = []
+    for item in data["criteria"]:
+        if isinstance(item, str):
+            following += 1
+            item = {"id": f"{prefix}{following}", "text": item}
+        criteria.append(item)
+    return {**data, "criteria": criteria}
+
+
 class Requirement(_Model):
     """One requirement of the PRD, with the criteria for accepting it."""
+
+    _numbered = model_validator(mode="before")(_number_criteria)
 
     id: Ref
     title: NonEmpty
     story: NonEmpty  # who wants what, and why
     priority: Literal["Muss", "Soll", "Kann"]
-    # Acceptance criteria. No semicolon: it separates them in the table.
-    criteria: list[Annotated[NonEmpty, AfterValidator(_no_semicolon)]] = Field(min_length=1)
+    # Acceptance criteria. Plain texts get IDs (_number_criteria).
+    criteria: list[Acceptance] = Field(min_length=1)
     sources: list[Ref] = Field(default_factory=list)  # success criteria of the charter
 
 
@@ -201,6 +241,27 @@ class Design(_Model):
     components: list[Component] = Field(min_length=1)
     interfaces: list[Interface] = Field(default_factory=list)
     flows: list[Flow] = Field(min_length=1)
+
+
+class Case(_Model):
+    """A test case: an acceptance test for criteria of the requirements, or an integration
+    test of an interface of the design (with `error_code`: the case that provokes it)."""
+
+    id: Ref
+    title: NonEmpty
+    kind: Literal["Akzeptanz", "Integration"]
+    criteria: list[Ref] = Field(default_factory=list)  # R1.1 …
+    interface: Ref | None = None  # S1
+    error_code: Ref | None = None  # 409
+    # No semicolon: it separates the steps in the table.
+    steps: list[Annotated[NonEmpty, AfterValidator(_no_semicolon)]] = Field(min_length=1)
+    expected: NonEmpty
+
+
+class Cases(_Model):
+    """The test plan. Not "TestPlan": pytest would take a class named Test… for tests."""
+
+    cases: list[Case] = Field(min_length=1)
 
 
 class ScheduledTask(_Model):

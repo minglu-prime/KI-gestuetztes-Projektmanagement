@@ -10,7 +10,8 @@ No Streamlit in here. The file lives in data/ like the adopted project and is gi
 
 import hashlib
 import json
-from collections.abc import Callable
+import re
+from collections.abc import Callable, Iterable
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal, NamedTuple
@@ -20,6 +21,8 @@ from pydantic import BaseModel, ConfigDict, ValidationError
 from pm_agent.agent import LOG_DIR, run_submission
 from pm_agent.diagram import sequence_mermaid
 from pm_agent.models import (
+    Case,
+    Cases,
     Charter,
     Component,
     Criterion,
@@ -70,6 +73,8 @@ class Lifecycle(BaseModel):
     requirements_ok: Approval | None = None
     design: Design | None = None
     design_ok: Approval | None = None
+    cases: Cases | None = None
+    cases_ok: Approval | None = None
 
 
 class Check(NamedTuple):
@@ -100,9 +105,24 @@ def save(life: Lifecycle, path: Path | None = None) -> None:
     path.write_text(life.model_dump_json(indent=2), encoding="utf-8")
 
 
-def _digest(*parts: BaseModel | None) -> str:
-    data = [part.model_dump(mode="json") if part is not None else None for part in parts]
+def _digest(*parts: BaseModel | None, legacy: bool = False) -> str:
+    data = [_dump(part, legacy) if part is not None else None for part in parts]
     return hashlib.sha256(json.dumps(data, sort_keys=True).encode()).hexdigest()
+
+
+def _dump(part: BaseModel, legacy: bool) -> Any:
+    """`legacy`: as before acceptance criteria had IDs, when they were plain texts."""
+    data = part.model_dump(mode="json")
+    if legacy and isinstance(part, Requirements):
+        for item in data["items"]:
+            item["criteria"] = [c["text"] for c in item["criteria"]]
+    return data
+
+
+def _digests(*parts: BaseModel | None) -> set[str]:
+    """The digests an approval of these parts may carry: the current one, and the one
+    stamped before acceptance criteria had IDs, so an upgrade keeps the approvals."""
+    return {_digest(*parts), _digest(*parts, legacy=True)}
 
 
 def _charter_digest(life: Lifecycle) -> str:
@@ -117,30 +137,42 @@ def _design_digest(life: Lifecycle) -> str:
     return _digest(life.project, life.charter, life.requirements, life.design)
 
 
-def _state(artefact: Any, approval: Approval | None, digest: str) -> State:
+def _cases_digest(life: Lifecycle) -> str:
+    return _digest(life.project, life.charter, life.requirements, life.design, life.cases)
+
+
+def _state(artefact: Any, approval: Approval | None, digests: set[str]) -> State:
     if artefact is None:
         return "offen"
     if approval is None:
         return "entwurf"
-    return "freigegeben" if approval.digest == digest else "geändert"
+    return "freigegeben" if approval.digest in digests else "geändert"
 
 
 def charter_state(life: Lifecycle | None) -> State:
     if life is None:
         return "offen"
-    return _state(life.charter, life.charter_ok, _charter_digest(life))
+    return _state(life.charter, life.charter_ok, _digests(life.project, life.charter))
 
 
 def requirements_state(life: Lifecycle | None) -> State:
     if life is None:
         return "offen"
-    return _state(life.requirements, life.requirements_ok, _requirements_digest(life))
+    return _state(
+        life.requirements,
+        life.requirements_ok,
+        _digests(life.project, life.charter, life.requirements),
+    )
 
 
 def design_state(life: Lifecycle | None) -> State:
     if life is None:
         return "offen"
-    return _state(life.design, life.design_ok, _design_digest(life))
+    return _state(
+        life.design,
+        life.design_ok,
+        _digests(life.project, life.charter, life.requirements, life.design),
+    )
 
 
 def approved_design(life: Lifecycle | None) -> Design | None:
@@ -149,6 +181,100 @@ def approved_design(life: Lifecycle | None) -> Design | None:
     if life is None or design_state(life) != "freigegeben":
         return None
     return life.design
+
+
+def cases_state(life: Lifecycle | None) -> State:
+    if life is None:
+        return "offen"
+    return _state(
+        life.cases,
+        life.cases_ok,
+        _digests(life.project, life.charter, life.requirements, life.design, life.cases),
+    )
+
+
+def approved_cases(life: Lifecycle | None) -> Cases | None:
+    if life is None or cases_state(life) != "freigegeben":
+        return None
+    return life.cases
+
+
+def approve_cases(life: Lifecycle, now: datetime) -> Lifecycle:
+    """The project lead approves the test plan. Raises InputError while it has errors."""
+    if life.cases is None:
+        raise InputError("Noch keine Testfälle zum Freigeben.")
+    errors = check_cases(life.cases, life.requirements, life.design).errors
+    if errors:
+        raise InputError("\n".join(errors))
+    return life.model_copy(update={"cases_ok": Approval(at=now, digest=_cases_digest(life))})
+
+
+def check_cases(cases: Cases, requirements: Requirements | None, design: Design | None) -> Check:
+    """Errors: duplicate IDs, unknown criteria, interfaces and error codes, a case without
+    what it tests, a Muss criterion without a case. Warnings: other criteria, interfaces and
+    error codes without a case."""
+    items = cases.cases
+    errors = _twice([c.id for c in items], "Die Testfall-ID '{}' ist mehrfach vergeben")
+    criteria = (
+        {c.id: (r, c) for r in requirements.items for c in r.criteria} if requirements else None
+    )
+    contracts = {i.id: i for i in design.interfaces} if design else None
+    for case in items:
+        if criteria is not None:
+            errors += [
+                f"Testfall '{case.id}' nennt das unbekannte Akzeptanzkriterium '{cid}'"
+                for cid in case.criteria
+                if cid not in criteria
+            ]
+        if case.interface and contracts is not None:
+            contract = contracts.get(case.interface)
+            if contract is None:
+                errors.append(
+                    f"Testfall '{case.id}' nennt die unbekannte Schnittstelle '{case.interface}'"
+                )
+            elif case.error_code and case.error_code not in {e.code for e in contract.errors}:
+                errors.append(
+                    f"Testfall '{case.id}': die Schnittstelle '{contract.id}' kennt den "
+                    f"Fehlercode '{case.error_code}' nicht"
+                )
+        if case.kind == "Akzeptanz" and not case.criteria:
+            errors.append(f"Akzeptanztest '{case.id}' nennt kein Akzeptanzkriterium")
+        if case.kind == "Integration" and not case.interface:
+            errors.append(f"Integrationstest '{case.id}' nennt keine Schnittstelle")
+    warnings = []
+    if criteria is None:
+        warnings.append(
+            "Ohne Anforderungen lässt sich nicht prüfen, ob jedes Akzeptanzkriterium einen "
+            "Testfall hat"
+        )
+    else:
+        tested = {cid for case in items for cid in case.criteria}
+        for cid, (need, criterion) in criteria.items():
+            if cid not in tested:
+                text = (
+                    f"{need.priority}-Anforderung '{need.id}': das Akzeptanzkriterium '{cid}' "
+                    f"({criterion.text}) hat keinen Testfall"
+                )
+                (errors if need.priority == "Muss" else warnings).append(text)
+    if contracts is None:
+        warnings.append(
+            "Ohne Entwurf lässt sich nicht prüfen, ob jede Schnittstelle einen Integrationstest hat"
+        )
+    else:
+        integrated = {c.interface for c in items if c.kind == "Integration"}
+        provoked = {(c.interface, c.error_code) for c in items if c.error_code}
+        warnings += [
+            f"Die Schnittstelle '{i.id}' ({i.name}) hat keinen Integrationstest"
+            for i in contracts.values()
+            if i.id not in integrated
+        ]
+        warnings += [
+            f"Der Fehlercode '{e.code}' der Schnittstelle '{i.id}' hat keinen Testfall"
+            for i in contracts.values()
+            for e in i.errors
+            if (i.id, e.code) not in provoked
+        ]
+    return Check(list(dict.fromkeys(errors)), list(dict.fromkeys(warnings)))
 
 
 def approved_requirements(life: Lifecycle | None) -> list[Requirement] | None:
@@ -202,6 +328,17 @@ def check_requirements(requirements: Requirements, charter: Charter | None) -> C
         for rid in dict.fromkeys(ids)
         if ids.count(rid) > 1
     ]
+    for r in items:
+        errors += [
+            f"Anforderung '{r.id}': das Akzeptanzkriterium '{c.id}' muss '{r.id}.<Nummer>' heißen"
+            for c in r.criteria
+            if not re.fullmatch(rf"{re.escape(r.id)}\.\d+", c.id)
+        ]
+        errors += [
+            f"Anforderung '{r.id}': das Akzeptanzkriterium '{cid}' ist mehrfach vergeben"
+            for cid in dict.fromkeys(c.id for c in r.criteria)
+            if [c.id for c in r.criteria].count(cid) > 1
+        ]
     if not any(r.priority == "Muss" for r in items):
         errors.append("Es gibt keine Muss-Anforderung: mindestens eine Muss-Anforderung ist nötig")
     if charter is None:
@@ -358,14 +495,14 @@ def requirement_rows(requirements: Requirements) -> list[dict[str, Any]]:
             "Titel": r.title,
             "User Story": r.story,
             "Priorität": r.priority,
-            "Akzeptanzkriterien": "; ".join(r.criteria),
+            "Akzeptanzkriterien": "; ".join(f"{c.id}: {c.text}" for c in r.criteria),
             "Erfolgskriterien": ", ".join(r.sources),
         }
         for r in requirements.items
     ]
 
 
-def rows_to_requirements(rows: list[dict[str, Any]]) -> Requirements:
+def rows_to_requirements(rows: list[dict[str, Any]], taken: Iterable[str] = ()) -> Requirements:
     """The edited table as requirements. Raises InputError naming each unreadable row."""
     items, errors = [], []
     for number, row in enumerate(rows, start=1):
@@ -379,7 +516,7 @@ def rows_to_requirements(rows: list[dict[str, Any]]) -> Requirements:
                     title=_cell(row.get("Titel")),
                     story=_cell(row.get("User Story")),
                     priority=_cell(row.get("Priorität")),
-                    criteria=_split(row.get("Akzeptanzkriterien"), ";"),
+                    criteria=_criteria(rid, row.get("Akzeptanzkriterien"), taken),
                     sources=_split(row.get("Erfolgskriterien"), ","),
                 )
             )
@@ -572,6 +709,91 @@ def rows_to_design(rows: dict[str, list[dict[str, Any]]]) -> Design:
         raise InputError(f"Entwurf: {_reason(err)}") from err
 
 
+def _criteria(rid: str, cell: Any, taken: Iterable[str] = ()) -> list[Any]:
+    """The acceptance criteria of a table cell. "R1.1: text" keeps its number, also when the
+    requirement was renamed (it becomes "R2.1"); a plain text gets the next number. Numbers
+    in `taken` (the saved criteria, those test cases point at) are not given again. Only
+    "<ID>.<n>:" reads as an ID; any other colon is part of the text."""
+    found = []
+    for part in _split(cell, ";"):
+        head, colon, text = part.partition(":")
+        match = re.fullmatch(r"([A-Za-z0-9._-]+)\.(\d+)", head.strip()) if colon else None
+        found.append((int(match.group(2)), text.strip()) if match else (None, part))
+    used = [n for n, _ in found if n is not None]
+    used += [
+        int(t[len(rid) + 1 :])
+        for t in taken
+        if t.startswith(f"{rid}.") and t[len(rid) + 1 :].isdigit()
+    ]
+    following = max(used, default=0)
+    criteria = []
+    for number, text in found:
+        if number is None:
+            following += 1
+            number = following
+        criteria.append({"id": f"{rid}.{number}", "text": text})
+    return criteria
+
+
+CASE_COLUMNS = [
+    "ID",
+    "Titel",
+    "Art",
+    "Kriterien",
+    "Schnittstelle",
+    "Fehlercode",
+    "Schritte",
+    "Erwartet",
+]
+
+
+def case_rows(cases: Cases) -> list[dict[str, Any]]:
+    """The test cases as rows of the table editor: criteria separated by commas, steps by
+    semicolons."""
+    return [
+        {
+            "ID": c.id,
+            "Titel": c.title,
+            "Art": c.kind,
+            "Kriterien": ", ".join(c.criteria),
+            "Schnittstelle": c.interface or "",
+            "Fehlercode": c.error_code or "",
+            "Schritte": "; ".join(c.steps),
+            "Erwartet": c.expected,
+        }
+        for c in cases.cases
+    ]
+
+
+def rows_to_cases(rows: list[dict[str, Any]]) -> Cases:
+    """The edited table as test cases. Raises InputError naming each unreadable row."""
+    items, errors = [], []
+    for number, row in enumerate(rows, start=1):
+        cid = _cell(row.get("ID"))
+        if not cid and not _cell(row.get("Titel")):
+            continue  # an empty row the editor adds
+        try:
+            items.append(
+                Case(
+                    id=cid,
+                    title=_cell(row.get("Titel")),
+                    kind=_cell(row.get("Art")),
+                    criteria=_split(row.get("Kriterien"), ","),
+                    interface=_cell(row.get("Schnittstelle")) or None,
+                    error_code=_cell(row.get("Fehlercode")) or None,
+                    steps=_split(row.get("Schritte"), ";"),
+                    expected=_cell(row.get("Erwartet")),
+                )
+            )
+        except ValidationError as err:
+            errors.append(f"Zeile {number} ({cid or 'ohne ID'}): {_reason(err)}")
+    if errors:
+        raise InputError("\n".join(errors))
+    if not items:
+        raise InputError("Noch kein Testfall: Trag mindestens eine Zeile ein.")
+    return Cases(cases=items)
+
+
 def criteria_lines(criteria: list[Criterion]) -> str:
     """Success criteria as text, one "K1: text" per line, for a text area."""
     return "\n".join(f"{c.id}: {c.text}" for c in criteria)
@@ -735,6 +957,100 @@ def design_document(life: Lifecycle) -> str:
     )
 
 
+def run_cases(
+    project: Project,
+    requirements: Requirements | None,
+    design: Design | None,
+    log_dir: Path | None = LOG_DIR,
+    on_round: Callable[[dict[str, Any]], None] | None = None,
+) -> Cases:
+    """Claude drafts the test cases from the acceptance criteria and the contracts; Python
+    rejects them until `check_cases` has no errors. No team data goes to the API. Raises
+    AgentError."""
+    submission = Submission(
+        name="submit_testplan",
+        noun="Testplan",
+        description=(
+            "Reicht den Testplan ein. Lehnt ihn ab, wenn ein Akzeptanzkriterium einer "
+            "Muss-Anforderung keinen Testfall hat, ein Fall Unbekanntes nennt, ein Fall nicht "
+            "sagt, was er prüft, oder eine ID doppelt vorkommt, und nennt die Gründe."
+        ),
+        schema=Cases,
+        check=lambda cases: check_cases(cases, requirements, design).errors,
+    )
+    data = json.dumps(
+        {
+            "projekt": project.model_dump(mode="json"),
+            "anforderungen": requirements.model_dump(mode="json") if requirements else None,
+            "schnittstellen": (
+                [i.model_dump(mode="json") for i in design.interfaces] if design else None
+            ),
+        },
+        ensure_ascii=False,
+        indent=2,
+    )
+    return run_submission("testplan", submission, data, log_dir, on_round)
+
+
+def cases_document(life: Lifecycle) -> str:
+    """The test plan as Markdown: the cases, and which cases cover each criterion and each
+    interface."""
+    cases, project = life.cases, life.project
+    if cases is None or project is None:
+        raise InputError("Ohne Projektdaten und Testfälle gibt es kein Dokument.")
+    items = cases.cases
+    overview = "\n".join(
+        "| "
+        + " | ".join(
+            _md(cell) or "–"
+            for cell in [
+                c.id,
+                c.title,
+                c.kind,
+                ", ".join(c.criteria),
+                c.interface or "",
+                c.error_code or "",
+            ]
+        )
+        + " |"
+        for c in items
+    )
+    single = "\n\n".join(
+        f"### {_md(c.id)} · {_md(c.title)}\n\n"
+        + "\n".join(f"{n}. {_md(step)}" for n, step in enumerate(c.steps, 1))
+        + f"\n\n**Erwartet:** {_md(c.expected)}"
+        for c in items
+    )
+    if life.requirements is None:
+        criteria = "Keine Anforderungen: Die Abdeckung lässt sich nicht zeigen."
+    else:
+        criteria = _items(
+            f"{a.id} ({a.text}): "
+            + (", ".join(c.id for c in items if a.id in c.criteria) or "kein Testfall")
+            for r in life.requirements.items
+            for a in r.criteria
+        )
+    if life.design is None:
+        contracts = "Kein Entwurf: Die Abdeckung lässt sich nicht zeigen."
+    else:
+        contracts = _items(
+            f"{i.id} ({i.name}): "
+            + (", ".join(c.id for c in items if c.interface == i.id) or "kein Testfall")
+            for i in life.design.interfaces
+        )
+    return _fill(
+        "testplan.md",
+        projekt=_md(project.idea),
+        start=_date(project.start_date),
+        deadline=_date(project.deadline),
+        stand=_stand(cases_state(life), life.cases_ok),
+        ueberblick=overview,
+        einzeln=single,
+        kriterien=criteria,
+        schnittstellen=contracts,
+    )
+
+
 def charter_document(life: Lifecycle) -> str:
     """The Projektauftrag as Markdown, with whether it is approved."""
     charter, project = life.charter, life.project
@@ -769,7 +1085,7 @@ def requirements_document(life: Lifecycle) -> str:
     )
     single = "\n\n".join(
         f"### {_md(r.id)} · {_md(r.title)}\n\n*{_md(r.story)}* ({r.priority})\n\n"
-        + "\n".join(f"- {_md(r.id)}.{n} {_md(text)}" for n, text in enumerate(r.criteria, 1))
+        + "\n".join(f"- {_md(c.id)} {_md(c.text)}" for c in r.criteria)
         for r in items
     )
     if life.charter is None:

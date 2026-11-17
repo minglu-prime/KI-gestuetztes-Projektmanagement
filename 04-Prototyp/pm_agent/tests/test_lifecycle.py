@@ -158,8 +158,12 @@ def test_without_a_charter_the_trace_is_a_warning():
 def test_requirement_rows_round_trip():
     items = requirements(need("R1"), {**need("R2", "Kann", ["K1", "K2"]), "criteria": ["a", "b"]})
     rows = requirement_rows(items)
-    assert rows[1]["Akzeptanzkriterien"] == "a; b" and rows[1]["Erfolgskriterien"] == "K1, K2"
+    assert rows[1]["Akzeptanzkriterien"] == "R2.1: a; R2.2: b"
+    assert rows[1]["Erfolgskriterien"] == "K1, K2"
     assert rows_to_requirements(rows) == items
+    # Deleting R2.1 and adding a criterion: R2.2 keeps its ID, the new one is R2.3.
+    rows[1]["Akzeptanzkriterien"] = "R2.2: b; c"
+    assert [c.id for c in rows_to_requirements(rows).items[1].criteria] == ["R2.2", "R2.3"]
 
 
 def test_unreadable_requirement_rows_say_which_row():
@@ -283,7 +287,7 @@ def test_an_acceptance_criterion_has_no_semicolon():
             {**need("R1"), "criteria": ["Antwort unter 2 s; bei 50 Nutzern"]}
         )
     assert invalid_input(err.value) == [
-        "Ungültige Eingabe bei criteria.0: darf kein Semikolon enthalten"
+        "Ungültige Eingabe bei criteria.0.text: darf kein Semikolon enthalten"
     ]
 
 
@@ -582,3 +586,11 @@ def test_a_renamed_flow_whose_steps_still_name_the_old_id_says_so():
     lines = str(err.value).splitlines()
     assert lines[0] == "Schritte, Zeile 1: unbekannter Ablauf 'A1'"
     assert lines[-1] == "Abläufe, Zeile 1 (A2): Ablauf 'A2' hat keine Schritte"
+
+
+def test_an_acceptance_criterion_id_is_used_once():
+    twice = need("R1")
+    twice["criteria"] = [{"id": "R1.1", "text": "a"}, {"id": "R1.1", "text": "b"}]
+    assert check_requirements(
+        requirements(twice, need("R2", sources=["K2"])), charter()
+    ).errors == ["Anforderung 'R1': das Akzeptanzkriterium 'R1.1' ist mehrfach vergeben"]

@@ -1600,8 +1600,9 @@ def test_a_draft_or_a_skipped_phase_is_marked_not_approved(tracked):
     # A project is adopted without charter and requirements: both were skipped.
     at = tracked.switch_page("views/kontrolle.py").run()
     path = steps(at)
-    assert all("warn" in path[name] for name in ["Auftrag", "Anforderungen", "Entwurf"])
-    assert journey(at).count("nicht freigegeben") == 3
+    skipped = ["Auftrag", "Anforderungen", "Entwurf", "Testplan"]
+    assert all("warn" in path[name] for name in skipped)
+    assert journey(at).count("nicht freigegeben") == 4
     # A draft is marked too, before any project is adopted.
     tracking.PROJECT_FILE.unlink()
     lifecycle.save(with_charter(approved=False))
@@ -1674,7 +1675,9 @@ def test_the_auftrag_prefills_step_2(app):
 
 
 def test_the_rest_does_not_ask_for_requirements_that_are_done(site, monkeypatch):
-    second = NEEDS.items[0].model_copy(update={"id": "R2", "title": "Stornieren"})
+    first = NEEDS.items[0].model_dump()
+    first["criteria"] = [c["text"] for c in first["criteria"]]  # numbered for R2 anew
+    second = Requirement.model_validate({**first, "id": "R2", "title": "Stornieren"})
     needs = Requirements(items=[*NEEDS.items, second])
     approve_needs(needs)
     data = plan_input()
@@ -1946,3 +1949,85 @@ def test_a_new_measure_for_the_same_week_starts_open(site):
     assert not at.exception
     (retro,) = tracking.load().retros
     assert (retro.measure, retro.measure_done) == ("Zweite Maßnahme", False)
+
+
+def test_test_cases_from_claude_are_checked_and_approved(site, monkeypatch):
+    from test_lifecycle import design
+    from test_testplan import cases
+
+    def drafted(project, requirements, the_design, on_round=None):
+        assert (project, requirements, the_design) == (PROJECT, NEEDS, design())
+        return cases()
+
+    monkeypatch.setattr(lifecycle, "run_cases", drafted)
+    approve_needs()
+    lifecycle.save(lifecycle.load().model_copy(update={"design": design()}))
+    at = site.switch_page("views/testplan.py").run()
+    button(at, "Testfälle mit Claude entwerfen").click()
+    at = at.run()
+    assert not at.exception and not at.error
+    assert lifecycle.load().cases == cases()
+
+    # A case for an unknown criterion blocks the approval.
+    at = edit_table(at, "cases_editor_", {0: {"Kriterien": "R9.1"}})
+    button(at, "Änderungen speichern und prüfen").click()
+    at = at.run()
+    assert any("unbekannte Akzeptanzkriterium 'R9.1'" in e.value for e in at.error)
+    assert button(at, "Testplan freigeben").disabled
+
+    at = edit_table(at, "cases_editor_", {0: {"Kriterien": "R1.1"}})
+    button(at, "Änderungen speichern und prüfen").click()
+    at = at.run()
+    button(at, "Testplan freigeben").click()
+    at = at.run()
+    assert lifecycle.approved_cases(lifecycle.load()) == cases()
+    assert "✓ Testplan: freigegeben<" in chips(at)
+
+
+def test_a_failed_case_needs_a_defect_which_can_reopen_its_task(tracked):
+    from test_lifecycle import design
+    from test_testplan import cases
+
+    lifecycle.save(
+        lifecycle.Lifecycle(project=PROJECT, requirements=NEEDS, design=design(), cases=cases())
+    )
+    at = tracked.switch_page("views/testlauf.py").run()
+    assert not at.exception
+    assert any("nicht freigegeben" in w.value for w in at.warning)
+
+    at.selectbox(key="test_case").set_value("T2").run()
+    at.radio(key="test_result").set_value("fehlgeschlagen").run()
+    button(at, "Ergebnis speichern").click()
+    at = at.run()
+    assert [(r.case_id, r.result) for r in tracking.load().results] == [("T2", "fehlgeschlagen")]
+    assert any("keinen Fehlereintrag" in e.value for e in at.error)
+
+    at.selectbox(key="defect_case").set_value("T2").run()
+    at.radio(key="defect_severity").set_value("schwer").run()
+    button(at, "Fehler erfassen").click()
+    at = at.run()
+    assert any("braucht eine Aufgabe" in e.value for e in at.error)
+    assert tracking.load().defects == []
+
+    at.text_input(key="defect_cause").input("Schema fehlt").run()
+    at.selectbox(key="defect_task").set_value("B").run()
+    button(at, "Fehler erfassen").click()
+    at = at.run()
+    (defect,) = tracking.load().defects
+    assert (defect.id, defect.task_id, defect.status) == ("F1", "B", "offen")
+    # The fields are empty again: a second click does not record the same defect twice.
+    assert at.text_input(key="defect_cause").value == ""
+    assert not any("keinen Fehlereintrag" in e.value for e in at.error)
+
+    button(at, "F1: Aufgabe B wieder öffnen").click()
+    at = at.run()
+    assert tracking.load().progress["B"].status == "in Arbeit"
+    button(at, "F1: behoben").click()
+    at = at.run()
+    assert tracking.load().defects[0].status == "behoben"
+
+
+def test_without_a_test_plan_the_test_page_leads_to_it(tracked):
+    at = tracked.switch_page("views/testlauf.py").run()
+    assert not at.exception
+    assert any("Noch kein Testplan" in i.value for i in at.info)

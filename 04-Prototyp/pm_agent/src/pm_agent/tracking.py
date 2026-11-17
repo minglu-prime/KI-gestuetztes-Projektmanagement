@@ -18,6 +18,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from pm_agent.agent import LOG_DIR
 from pm_agent.models import (
+    Cases,
     ControlReport,
     Member,
     Plan,
@@ -55,6 +56,7 @@ AGENTS = {
     "auftrag": "Projektauftrag",
     "anforderungen": "Anforderungen",
     "entwurf": "Entwurf",
+    "testplan": "Testplan",
     "run": "Planung",
     "durchfuehrung": "Durchführung",
     "kontrolle": "Kontrolle",
@@ -120,6 +122,30 @@ class Retro(BaseModel):
     measure_done: bool = False
 
 
+class CaseResult(BaseModel):
+    """What the team found when it ran a test case. Entered by the project lead."""
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    case_id: str
+    result: Literal["bestanden", "fehlgeschlagen", "blockiert"]
+    on: date
+    note: str = ""
+
+
+class Defect(BaseModel):
+    """A defect found by a test case, with its suspected cause and the task to fix it."""
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    id: str = ""  # F1 …, given by record_defect
+    case_id: str
+    severity: Literal["schwer", "mittel", "leicht"]
+    cause: str
+    task_id: str | None = None
+    status: Literal["offen", "behoben"] = "offen"
+
+
 class Tracking(BaseModel):
     """The plan the project lead adopted, and what happened to each task since."""
 
@@ -136,6 +162,9 @@ class Tracking(BaseModel):
     requirements: list[Requirement] = Field(default_factory=list)
     # One per calendar week, kept when the rest is adopted again.
     retros: list[Retro] = Field(default_factory=list)
+    # The latest result of each test case, and the defects found; kept like the retros.
+    results: list[CaseResult] = Field(default_factory=list)
+    defects: list[Defect] = Field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -220,6 +249,8 @@ def adopt(
             else []
         ),
         retros=keep.retros if keep is not None else [],
+        results=keep.results if keep is not None else [],
+        defects=keep.defects if keep is not None else [],
     )
     save(tracking, path)
     return tracking
@@ -417,6 +448,104 @@ def demo_this_week(tracking: Tracking, today: date) -> str | None:
                 f"{len(demo.task_ids)} Aufgaben fertig"
             )
     return None
+
+
+def record_result(tracking: Tracking, result: CaseResult) -> Tracking:
+    """The result of a test case, replacing an earlier one of the same case."""
+    others = [r for r in tracking.results if r.case_id != result.case_id]
+    return tracking.model_copy(update={"results": [*others, result]})
+
+
+def record_defect(tracking: Tracking, defect: Defect) -> Tracking:
+    """A defect, new (numbered F1, F2 …) or changed (same ID). Raises InputError for an
+    unknown task, and for a severe defect without a task to fix it."""
+    before = next((d for d in tracking.defects if defect.id and d.id == defect.id), None)
+    # A task that left the plan ("Rest umplanen") does not block closing its defect.
+    changed = before is None or before.task_id != defect.task_id
+    if changed and defect.task_id and defect.task_id not in tracking.progress:
+        raise InputError(f"Der Fehler nennt die unbekannte Aufgabe '{defect.task_id}'")
+    if defect.severity == "schwer" and not defect.task_id:
+        raise InputError("Ein schwerer Fehler braucht eine Aufgabe, die ihn behebt")
+    if not defect.id:
+        numbers = [int(d.id[1:]) for d in tracking.defects if d.id[1:].isdigit()]
+        defect = defect.model_copy(update={"id": f"F{max(numbers, default=0) + 1}"})
+    others = [d for d in tracking.defects if d.id != defect.id]
+    return tracking.model_copy(update={"defects": [*others, defect]})
+
+
+def reopen(tracking: Tracking, defect_id: str) -> Tracking:
+    """The task of a defect goes back to "in Arbeit": the defect is work again."""
+    defect = next((d for d in tracking.defects if d.id == defect_id), None)
+    if defect is None or not defect.task_id:
+        raise InputError(f"Der Fehler {defect_id} hat keine Aufgabe, die sich öffnen ließe")
+    if defect.task_id not in tracking.progress:
+        raise InputError(
+            f"Die Aufgabe '{defect.task_id}' von {defect_id} ist nicht mehr im Plan. Plane sie "
+            "neu ein oder gib den Fehler einer anderen Aufgabe."
+        )
+    done = tracking.progress[defect.task_id]
+    progress = {
+        **tracking.progress,
+        defect.task_id: done.model_copy(update={"status": "in Arbeit"}),
+    }
+    return tracking.model_copy(update={"progress": progress})
+
+
+def check_results(tracking: Tracking, cases: Cases) -> RetroCheck:
+    """Errors: a failed case without a defect. Warnings: cases without a result, open
+    defects whose task is finished."""
+    latest = {r.case_id: r for r in tracking.results}
+    found = {d.case_id for d in tracking.defects if d.status == "offen"}
+    errors = [
+        f"Testfall '{c.id}' ist fehlgeschlagen, aber es gibt keinen Fehlereintrag"
+        for c in cases.cases
+        if c.id in latest and latest[c.id].result == "fehlgeschlagen" and c.id not in found
+    ]
+    warnings = []
+    missing = [c.id for c in cases.cases if c.id not in latest]
+    if missing:
+        subject = "1 Testfall" if len(missing) == 1 else f"{len(missing)} Testfälle"
+        warnings.append(f"{subject} ohne Ergebnis: {', '.join(missing)}")
+    warnings += [
+        f"Fehler {d.id} ist offen, seine Aufgabe '{d.task_id}' ist aber fertig"
+        for d in tracking.defects
+        if d.status == "offen"
+        and d.task_id in tracking.progress
+        and tracking.progress[d.task_id].status == "fertig"
+    ]
+    return RetroCheck(errors, warnings)
+
+
+def quality_summary(tracking: Tracking, cases: Cases) -> dict[str, str]:
+    """How far testing is: cases with a result, passed ones, open defects by severity.
+    Not "test_…": pytest would take a function of that name for a test."""
+    latest = {r.case_id: r for r in tracking.results}
+    known = [c.id for c in cases.cases]
+    done = [cid for cid in known if cid in latest]
+    passed = [cid for cid in done if latest[cid].result == "bestanden"]
+    open_ = [d for d in tracking.defects if d.status == "offen"]
+    severe = sum(d.severity == "schwer" for d in open_)
+    return {
+        "Mit Ergebnis": f"{len(done)} von {len(known)}",
+        "Bestanden": str(len(passed)),
+        "Offene Fehler": f"{len(open_)} (schwer: {severe})" if open_ else "0",
+    }
+
+
+def case_status(tracking: Tracking, cases: Cases) -> list[dict[str, Any]]:
+    """One row per test case: its latest result and the defects it found."""
+    latest = {r.case_id: r for r in tracking.results}
+    return [
+        {
+            "ID": c.id,
+            "Testfall": c.title,
+            "Art": c.kind,
+            "Ergebnis": latest[c.id].result if c.id in latest else "offen",
+            "Am": _date(latest[c.id].on) if c.id in latest else "",
+            "Fehler": ", ".join(d.id for d in tracking.defects if d.case_id == c.id),
+        }
+        for c in cases.cases
+    ]
 
 
 def load(path: Path | None = None) -> Tracking | None:
@@ -829,9 +958,9 @@ def reassignment_effect(tracking: Tracking, today: date, task_ids: list[str], me
 
 
 def next_step(tracking: Tracking, today: date) -> tuple[str, str]:
-    """What the project lead should look at next, and on which page ("durchfuehrung" or
-    "kontrolle"). The most urgent reason wins. The text names no page: it may be shown on
-    the page it points to."""
+    """What the project lead should look at next, and on which page ("durchfuehrung",
+    "kontrolle" or "testlauf"). The most urgent reason wins. The text names no page: it may
+    be shown on the page it points to."""
     outlook = forecast(tracking, today)
     late = len(evaluate(tracking, today).overdue)
     if outlook.problem:
@@ -839,6 +968,14 @@ def next_step(tracking: Tracking, today: date) -> tuple[str, str]:
             f"Die Prognose lässt sich nicht berechnen: {outlook.problem}. Prüfe Status und "
             "Rest-Stunden der Aufgaben.",
             "durchfuehrung",
+        )
+    open_defects = [d for d in tracking.defects if d.status == "offen"]
+    if outlook.end is None and open_defects:
+        count = "1 Fehler ist" if len(open_defects) == 1 else f"{len(open_defects)} Fehler sind"
+        return (
+            f"Alle Aufgaben sind fertig, aber {count} offen. Öffne die Aufgabe wieder oder "
+            "schließe den Fehler.",
+            "testlauf",
         )
     if outlook.end is None:
         return (
