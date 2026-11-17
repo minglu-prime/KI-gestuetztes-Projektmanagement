@@ -1,6 +1,6 @@
 # Design-Vorschlag: Abschluss, Betrieb und Iteration (Batch 5 des Lebenszyklus)
 
-Stand 17.11.2026. **Vorschlag, nicht freigegeben.** Baut auf Batch 1–4 auf (Anforderungen,
+Stand 17.11.2026. **Umgesetzt auf dem Branch `feat/closing`, mit den vorgeschlagenen Antworten auf die drei Fragen unten (Archiv unter `data/archiv/<Datum>`, Betrieb optional, Lessons Learned von Claude). Der Projektpfad hat 11 Schritte in einer Zeile, die umbricht.** Baut auf Batch 1–4 auf (Anforderungen,
 Entwurf, Wochen-Demos mit Rückblick, Testplan mit Ergebnissen und Fehlern). Gesamtbild:
 `docs/lebenszyklus.md`, Phasen 8–10.
 
