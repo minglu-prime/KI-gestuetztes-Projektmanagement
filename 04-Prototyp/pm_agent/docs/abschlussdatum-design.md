@@ -1,6 +1,6 @@
 # Design-Vorschlag: Tatsächliche Enddaten
 
-Stand 17.11.2026. **Nur Vorschlag, noch kein Code.** Schließt die Lücke, die
+Stand 17.11.2026. **Umgesetzt auf dem Branch `feat/finish-dates` mit den vorgeschlagenen Antworten (Datum bearbeitbar, Verzug in Arbeitstagen des Projekts); noch nicht gepusht.** Schließt die Lücke, die
 `docs/abschluss-design.md` und PR 47 unter „Bewusst offen“ nennen.
 
 ## Wozu
@@ -53,8 +53,9 @@ und welche Aufgaben wurden später fertig als geplant?
 
 ## Prüfung
 
-- Keine neuen Fehler im Abschluss. Warnung: „N fertige Aufgaben ohne Fertigdatum, das
-  tatsächliche Ende ist eine Untergrenze.“
+- Keine neuen Fehler oder Warnungen im Abschluss. Fehlen Fertigdaten, sagt es die Zeile
+  „Tatsächliches Ende“ selbst: „N fertige Aufgaben ohne Fertigdatum: Das tatsächliche Ende
+  kann später liegen.“
 
 ## Ansätze
 
