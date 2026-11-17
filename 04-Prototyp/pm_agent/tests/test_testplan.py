@@ -152,3 +152,78 @@ def test_the_test_plan_document_lists_cases_and_coverage():
     assert "| T3 | Raum belegt | Integration | – | S1 | 409 |" in text
     assert "- R1.1 (Die Buchung steht in der Liste): T1" in text
     assert "- S1 (Buchung anlegen): T2, T3" in text
+
+
+@pytest.fixture
+def adopted(tmp_path):
+    from test_tools import TEAM, plan_input
+
+    from pm_agent.models import Plan
+    from pm_agent.tracking import adopt
+
+    return adopt(PROJECT, TEAM, Plan.model_validate(plan_input()), path=tmp_path / "p.json")
+
+
+def test_results_and_defects_are_checked_against_the_cases(adopted):
+    from datetime import date
+
+    from pm_agent.tracking import CaseResult, Defect, check_results, record_defect, record_result
+
+    day = date(2026, 11, 20)
+    tracking = record_result(adopted, CaseResult(case_id="T2", result="fehlgeschlagen", on=day))
+    result = check_results(tracking, cases())
+    assert result.errors == ["Testfall 'T2' ist fehlgeschlagen, aber es gibt keinen Fehlereintrag"]
+    assert result.warnings == ["2 Testfälle ohne Ergebnis: T1, T3"]
+
+    tracking = record_defect(
+        tracking, Defect(case_id="T2", severity="schwer", cause="Schema", task_id="B")
+    )
+    assert tracking.defects[0].id == "F1" and check_results(tracking, cases()).errors == []
+    # A later result replaces the earlier one of the same case.
+    again = record_result(tracking, CaseResult(case_id="T2", result="bestanden", on=day))
+    assert [(r.case_id, r.result) for r in again.results] == [("T2", "bestanden")]
+
+
+def test_a_defect_needs_a_known_task_and_a_severe_one_needs_one_at_all(adopted):
+    from pm_agent.tracking import Defect, record_defect
+
+    with pytest.raises(InputError, match="unbekannte Aufgabe 'Z'"):
+        record_defect(adopted, Defect(case_id="T2", severity="mittel", cause="x", task_id="Z"))
+    with pytest.raises(InputError, match="Ein schwerer Fehler braucht eine Aufgabe"):
+        record_defect(adopted, Defect(case_id="T2", severity="schwer", cause="x"))
+
+
+def test_a_defect_reopens_its_task_and_an_open_defect_on_a_finished_task_is_a_warning(adopted):
+    from pm_agent.tracking import Defect, check_results, record_defect, reopen
+
+    done = adopted.model_copy(
+        update={
+            "progress": {
+                **adopted.progress,
+                "B": adopted.progress["B"].model_copy(update={"status": "fertig"}),
+            }
+        }
+    )
+    tracking = record_defect(done, Defect(case_id="T2", severity="mittel", cause="x", task_id="B"))
+    assert (
+        "Fehler F1 ist offen, seine Aufgabe 'B' ist aber fertig"
+        in check_results(tracking, cases()).warnings
+    )
+    reopened = reopen(tracking, "F1")
+    assert reopened.progress["B"].status == "in Arbeit"
+    with pytest.raises(InputError, match="keine Aufgabe"):
+        reopen(record_defect(adopted, Defect(case_id="T1", severity="leicht", cause="y")), "F1")
+
+
+def test_results_and_defects_survive_adopting_the_rest_again(adopted, tmp_path):
+    from datetime import date
+
+    from pm_agent.tracking import CaseResult, adopt, record_result
+
+    tracking = record_result(
+        adopted, CaseResult(case_id="T1", result="bestanden", on=date(2026, 11, 20))
+    )
+    again = adopt(
+        tracking.project, tracking.team, tracking.plan, path=tmp_path / "q.json", keep=tracking
+    )
+    assert again.results == tracking.results
