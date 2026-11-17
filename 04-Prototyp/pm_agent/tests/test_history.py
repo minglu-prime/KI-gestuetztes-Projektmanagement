@@ -297,3 +297,9 @@ def test_adopting_again_without_requirements_keeps_the_snapshot(traced_again, pa
     project, rest = rest_project(traced_again, THURSDAY)
     again = adopt(project, TEAM, rest, path=path, keep=traced_again)
     assert again.requirements == NEEDS
+
+
+def test_the_agents_get_the_trace_and_the_progress_per_requirement(traced_again):
+    sent = json.loads(facts(traced_again, evaluate(traced_again, THURSDAY)))
+    assert [t["requirement_ids"] for t in sent["aufgaben"]] == [["R1", "R2"]]
+    assert sent["je_anforderung"] == requirement_progress(traced_again)

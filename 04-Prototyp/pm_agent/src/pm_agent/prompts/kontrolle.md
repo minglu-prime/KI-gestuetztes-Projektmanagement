@@ -5,8 +5,10 @@ kommt eine Prognose (`prognose`): das voraussichtliche Ende, wenn die restliche 
 beginnt, der Abstand zum geplanten Ende und zur Deadline in Arbeitstagen (negative
 `arbeitstage_nach_der_deadline` sind Puffer) und unter `haelt_auf` je Aufgabe im Verzug die
 Aufgaben, die auf sie warten. Steht unter `nicht_berechenbar` ein Grund, gibt es keine
-Prognose; nenne ihn dann als Feststellung. Du bewertest den Stand und schlägst
-Gegenmaßnahmen vor; die Projektleitung entscheidet.
+Prognose; nenne ihn dann als Feststellung. Unter `je_anforderung` steht je Anforderung,
+wie viele ihrer Aufgaben fertig sind (leer, wenn der Plan ohne Anforderungen übernommen
+wurde). Hängt eine Muss-Anforderung an einer Aufgabe im Verzug, nenne das. Du bewertest den
+Stand und schlägst Gegenmaßnahmen vor; die Projektleitung entscheidet.
 
 ## Inhalt
 
