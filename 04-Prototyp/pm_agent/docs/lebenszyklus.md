@@ -1,8 +1,7 @@
 # Lebenszyklus eines Softwareprojekts im PM-Agent
 
 Dieses Dokument beschreibt, wie der PM-Agent ein Softwareprojekt von der Idee bis zur nächsten
-Iteration begleiten soll. Umgesetzt sind alle zehn Phasen (Stand
-16.11.2026). Die übrigen Phasen sind entworfen, aber noch nicht gebaut.
+Iteration begleitet. Umgesetzt sind alle zehn Phasen (Stand 17.11.2026).
 
 ## Ein Prinzip für jede Phase
 
@@ -29,10 +28,10 @@ arbeitet ohne sie (zum Beispiel plant die Planung ohne Anforderungen wie bisher)
 | 2 | Anforderungen (PRD) | Anforderungen R1 … mit User Story, Priorität Muss/Soll/Kann, Akzeptanzkriterien R1.1 …, zugehörigen Erfolgskriterien | jedes Erfolgskriterium abgedeckt; nur bekannte genannt; mindestens eine Muss-Anforderung | umgesetzt |
 | 3 | Entwurf | Komponenten, Schnittstellen (Anbieter, Nutzer, Eingabe, Ausgabe, Fehler), Abläufe als Schritte | jeder Beteiligte eines Ablaufs ist eine bekannte Komponente; jede Schnittstelle kommt in einem Ablauf vor; jede Muss-Anforderung hat einen Ablauf. Das Sequenzdiagramm zeichnet Python aus den Schritten, nicht Claude. | umgesetzt (Design: [entwurf-design.md](entwurf-design.md)) |
 | 4 | Planung | Aufgaben mit Aufwand, Zuweisung, Abhängigkeiten und den Anforderungen, denen sie dienen; je Projektwoche ein vorführbares Ergebnis | unbekannte Anforderung = Fehler; Anforderung ohne Aufgabe = Warnung; dazu Termine, Auslastung, Puffer; jede Projektwoche mit Arbeit hat eine Demo, deren Aufgaben bis Freitag fertig sind (Warnungen) | umgesetzt |
-| 5 | Durchführung | Status, Ist-Stunden, Rest je Aufgabe; Statusbericht | jede Aufgabe im Verzug hat einen nächsten Schritt | umgesetzt |
+| 5 | Durchführung | Status, Fertigdatum, Ist-Stunden, Rest je Aufgabe; Statusbericht | jede Aufgabe im Verzug hat einen nächsten Schritt | umgesetzt |
 | 6 | Kontrolle und Wochenrückblick | Plan/Ist, Prognose, Earned Value, Stand je Anforderung; Wochenrückblick: Demo gezeigt?, Ursache von Fehlern, Maßnahme | jede Aufgabe im Verzug hat eine Gegenmaßnahme; jede ausgefallene Demo eine Maßnahme | umgesetzt ([woche-design.md](woche-design.md)) |
 | 7 | Test (Integrationstest und Fehlersuche) | Testfälle aus Akzeptanzkriterien und Schnittstellen, Ergebnisse, Fehler mit vermuteter Ursache | jedes Akzeptanzkriterium hat einen Testfall; jede Schnittstelle einen Integrationstest; jeder fehlgeschlagene Test einen Fehlereintrag | umgesetzt ([test-design.md](test-design.md)) |
-| 8 | Abschluss | Abnahme je Anforderung (abgenommen oder zurückgestellt mit Grund), Abschlussbericht, Lessons Learned | kein offener schwerer Fehler; jede Muss-Anforderung abgenommen oder begründet | umgesetzt ([abschluss-design.md](abschluss-design.md)) |
+| 8 | Abschluss | Abnahme je Anforderung (abgenommen oder zurückgestellt mit Grund), Abschlussbericht mit tatsächlichem Ende und verspäteten Aufgaben ([abschlussdatum-design.md](abschlussdatum-design.md)), Lessons Learned | kein offener schwerer Fehler; jede Muss-Anforderung abgenommen oder begründet | umgesetzt ([abschluss-design.md](abschluss-design.md)) |
 | 9 | Betrieb | Betriebshandbuch (Bereitstellung, Überwachung, Rücknahme), Störungen | jede Komponente hat Verantwortliche und Überwachung | umgesetzt ([abschluss-design.md](abschluss-design.md)) |
 | 10 | Iteration | nächster Backlog: zurückgestellte Anforderungen, offene Fehler, offene Maßnahmen der Rückblicke, Folgen von Störungen | jeder Eintrag nennt seine Herkunft | umgesetzt ([abschluss-design.md](abschluss-design.md)) |
 
