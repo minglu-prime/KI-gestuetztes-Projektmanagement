@@ -228,7 +228,7 @@ def first_end(tracking: Tracking, evaluation: Evaluation) -> str:
     """The planned end of the first plan adopted, if the rest was planned again since."""
     first = tracking.first_planned_end
     if first is None:
-        return "unbekannt (Projekt übernommen, bevor es erfasst wurde)"
+        return "unbekannt (Projekt übernommen, bevor das erste Planende erfasst wurde)"
     if first == max(t.planned_end for t in evaluation.tasks):
         return "wie oben"
     return _date(first)
