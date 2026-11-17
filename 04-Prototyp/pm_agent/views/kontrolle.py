@@ -69,7 +69,8 @@ if tracking is not None:
         st.warning(
             "Im Verzug:\n\n"
             + "\n".join(
-                f"- {t.id} · {t.title} ({t.member}), geplant bis {t.planned_end:%d.%m.%Y}, "
+                f"- {as_text(t.id)} · {as_text(t.title)} ({as_text(t.member)}), geplant bis "
+                f"{t.planned_end:%d.%m.%Y}, "
                 f"Status: {t.status}"
                 for t in result.overdue
             )

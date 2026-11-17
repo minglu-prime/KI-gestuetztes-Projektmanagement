@@ -1754,3 +1754,13 @@ def test_starting_over_clears_the_fields_too(site):
     at = at.run()  # the fields of the old project must not save it again
     assert lifecycle.load() == lifecycle.Lifecycle()
     assert at.text_area(key="auftrag_idea").value == ""
+
+
+def test_the_overdue_list_on_the_kontrolle_shows_no_link(site):
+    # The plan of 9.11. is long past: both tasks are overdue whenever the test runs.
+    tasks = [t.model_copy(update={"title": "[hier](https://evil.example)"}) for t in PLAN.tasks]
+    tracking.adopt(PROJECT, TEAM, PLAN.model_copy(update={"tasks": tasks}))
+    at = site.switch_page("views/kontrolle.py").run()
+    assert not at.exception
+    (overdue,) = [w.value for w in at.warning if w.value.startswith("Im Verzug")]
+    assert "evil.example" in overdue and not re.search(r"(?<!\\)\[", overdue)

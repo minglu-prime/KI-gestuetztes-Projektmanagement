@@ -134,7 +134,7 @@ with st.container(border=True, key="panel-progress"):
         try:
             updated = apply_rows(tracking, edited.to_dict("records"))
         except InputError as err:
-            st.error(f"Bitte korrigieren:\n\n{err}")
+            st.error(f"Bitte korrigieren:\n\n{as_text(str(err))}")
         else:
             try:
                 save(updated)
