@@ -96,7 +96,7 @@ with st.container(border=True, key="panel-signoff"):
         st.error(as_text(error))
     for warning in warnings:
         st.warning(as_text(warning))
-    if not errors:
+    if tracking.requirements and not errors:  # with nothing to accept, nothing is closed
         st.success("Nichts Schweres ist offen: Das Projekt lässt sich abschließen.")
 
 with st.container(border=True, key="panel-lessons"):

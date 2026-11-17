@@ -2143,3 +2143,10 @@ def test_the_operations_step_is_done_only_when_the_handbook_passes(tracked):
     tracking.save(tracking.load().model_copy(update={"operations": full}))
     at = tracked.switch_page("views/betrieb.py").run()
     assert "done" in steps(at)["Betrieb"]
+
+
+def test_without_requirements_the_closing_page_does_not_call_the_project_closable(tracked):
+    at = tracked.switch_page("views/abschluss.py").run()
+    assert not at.exception
+    assert not any("lässt sich abschließen" in s.value for s in at.success)
+    assert any("nichts abzunehmen" in w.value for w in at.warning)
