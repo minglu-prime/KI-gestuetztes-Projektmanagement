@@ -289,11 +289,15 @@ def strip(*chips: str) -> str:
     return f'<div class="chips">{"".join(chips)}</div>'
 
 
-def consent(key: str) -> bool:
-    """The agents for Durchführung and Kontrolle send the project with its people to Claude."""
+TEAM_DATA = "ihre Angaben (Name, Skills, Stunden, Aufgaben, Notizen)"
+
+
+def consent(key: str, data: str = TEAM_DATA) -> bool:
+    """Consent before an agent sends what people wrote or are to Claude. `data` names what
+    goes: by default the project with its people (Durchführung, Kontrolle)."""
     return st.checkbox(
-        "Alle Personen im Projekt haben zugestimmt, dass ihre Angaben (Name, Skills, Stunden, "
-        "Aufgaben, Notizen) an die Anthropic API gesendet werden.",
+        f"Alle Personen im Projekt haben zugestimmt, dass {data} an die Anthropic API "
+        "gesendet werden.",
         key=key,
     )
 

@@ -2150,3 +2150,9 @@ def test_without_requirements_the_closing_page_does_not_call_the_project_closabl
     assert not at.exception
     assert not any("lässt sich abschließen" in s.value for s in at.success)
     assert any("nichts abzunehmen" in w.value for w in at.warning)
+
+
+def test_the_consent_for_lessons_names_what_is_sent(tracked):
+    at = tracked.switch_page("views/abschluss.py").run()
+    label = at.checkbox(key="consent_abschluss").label
+    assert "Wochenrückblicke" in label and "Skills" not in label

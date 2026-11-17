@@ -114,7 +114,10 @@ with st.container(border=True, key="panel-lessons"):
     if st.button(
         "Lessons Learned mit Claude entwerfen",
         icon=":material/play_arrow:",
-        disabled=not consent("consent_abschluss"),
+        disabled=not consent(
+            "consent_abschluss",
+            "Wochenrückblicke, Fehler und Abnahmen mit ihren freien Texten",
+        ),
     ):
         drafted = run_with_progress(
             "Claude entwirft die Lessons Learned …",
