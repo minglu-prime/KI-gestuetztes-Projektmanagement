@@ -5,7 +5,7 @@ from datetime import date
 import streamlit as st
 
 from pm_agent.tracking import evaluate, forecast, forecast_text, load, next_step, percent
-from pm_agent.ui import as_text, heading
+from pm_agent.ui import JOURNEY, PAGES, as_text, heading
 from pm_agent.workbench import InputError
 
 # How every agent works, as the diagram next to the headline (styled in assets/style.css).
@@ -63,8 +63,8 @@ with st.container(key="hero"):
         st.title("Der Agent schlägt vor. *Du entscheidest.*")
         st.html(
             '<p class="lead">Diese Seite zeigt an einem Softwareprojekt, welche Aufgaben des '
-            "Projektmanagements ein KI-Agent übernehmen kann: Planung, Durchführung und "
-            "Kontrolle.</p>"
+            "Projektmanagements ein KI-Agent übernehmen kann: vom Projektauftrag über Planung, "
+            "Durchführung und Kontrolle bis zur nächsten Iteration.</p>"
         )
         with st.container(horizontal=True):
             if st.button("Projekt planen", type="primary", icon=":material/arrow_forward:"):
@@ -83,6 +83,17 @@ with st.container(key="agents"):
             heading(icon, title)
             st.write(text)
             st.page_link(target, label=f"{title} öffnen", icon=":material/arrow_forward:")
+
+with st.container(key="lifecycle"):
+    st.subheader("Der ganze Ablauf")
+    st.caption(
+        "Elf Schritte von der Idee bis zur nächsten Iteration, in dieser Reihenfolge auch im "
+        "Menü. Schritte vor der Planung dürfen übersprungen werden; die Seiten sagen dann, "
+        "was fehlt."
+    )
+    with st.container(border=True, key="steps", horizontal=True):
+        for number, (key, name, hint) in enumerate(JOURNEY, start=1):
+            st.page_link(PAGES[key][0], label=f"{number:02d} {name}", help=hint)
 
 with st.container(key="lab"):
     st.subheader("Experiment")
