@@ -50,6 +50,10 @@ und welche Aufgaben wurden später fertig als geplant?
     Arbeitstagen. Leer: „Alle Aufgaben rechtzeitig fertig.“
   - Aufgaben ohne Datum (aus der Zeit vor dieser Änderung): `Fertigdatum unbekannt`; sie
     zählen nicht zum tatsächlichen Ende, der Bericht sagt das in einem Satz.
+  - Nachtrag: `**Geplantes Ende laut erstem Plan:**` nennt das Ende des zuerst übernommenen
+    Plans (`Tracking.first_planned_end`, bleibt beim Übernehmen des Rests). Wurde neu
+    geplant, nennt „Tatsächliches Ende“ auch die Abweichung dazu („zum ersten Plan: …“).
+    Ohne Neuplanung steht dort „wie oben“, bei vorher übernommenen Projekten „unbekannt“.
 
 ## Prüfung
 

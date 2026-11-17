@@ -299,6 +299,21 @@ def test_adopting_again_without_requirements_keeps_the_snapshot(traced_again, pa
     assert again.requirements == NEEDS
 
 
+def test_both_reports_show_the_progress_per_requirement(traced_again):
+    result = evaluate(traced_again, THURSDAY)
+    for report in (status_report(traced_again, result), control_document(traced_again, result)):
+        section = report.split("## Stand je Anforderung")[1].split("\n## ")[0]
+        assert "| R1 | Räume sehen | Muss | A, B | 1 von 2 |" in section
+        assert "| R2 | Raum buchen | Soll | B | 0 von 1 |" in section
+
+
+def test_without_requirements_the_reports_say_none_were_adopted(path):
+    tracking = adopt(PROJECT, TEAM, PLAN, path=path)
+    result = evaluate(tracking, THURSDAY)
+    for report in (status_report(tracking, result), control_document(tracking, result)):
+        assert "Keine Anforderungen mit dem Plan übernommen." in report
+
+
 def test_the_agents_get_the_trace_and_the_progress_per_requirement(traced_again):
     sent = json.loads(facts(traced_again, evaluate(traced_again, THURSDAY)))
     assert [t["requirement_ids"] for t in sent["aufgaben"]] == [["R1", "R2"]]

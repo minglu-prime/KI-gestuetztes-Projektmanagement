@@ -216,6 +216,9 @@ class Tracking(BaseModel):
     lessons: list[Lesson] = Field(default_factory=list)  # changed by the lead
     operations: list[Operation] = Field(default_factory=list)
     incidents: list[Incident] = Field(default_factory=list)
+    # The planned end of the first plan adopted, kept when the rest is adopted again. None:
+    # adopted before this was recorded.
+    first_planned_end: date | None = None
 
 
 @dataclass(frozen=True)
@@ -268,7 +271,8 @@ def adopt(
     same ID goes on there "in Arbeit"; its new estimate is what was left (rest_plan).
 
     `requirements`: the approved ones the plan is traced to; they are kept with it."""
-    errors = check_plan(plan, team, project, requirements=requirements).errors
+    checked = check_plan(plan, team, project, requirements=requirements)
+    errors = checked.errors
     if errors:
         raise InputError("Der Plan hat noch Fehler: " + "; ".join(errors))
     if keep is not None and (again := finished_again(keep, plan)):
@@ -307,6 +311,7 @@ def adopt(
         lessons=keep.lessons if keep is not None else [],
         operations=keep.operations if keep is not None else [],
         incidents=keep.incidents if keep is not None else [],
+        first_planned_end=keep.first_planned_end if keep is not None else checked.end_date,
     )
     save(tracking, path)
     return tracking
@@ -1321,6 +1326,7 @@ def status_report(
             for t in tasks
         ),
         frueher=_history_text(tracking),
+        anforderungen=_requirements_text(tracking),
         risiken="\n".join(f"- {_md(r)}" for r in tracking.plan.risks) or "Keine Risiken erfasst.",
     )
 
@@ -1408,9 +1414,20 @@ def control_document(
             for row in evaluation.by_member
         ),
         frueher=_history_text(tracking),
+        anforderungen=_requirements_text(tracking),
         bewertung=judgement,
         demos=_demos_text(tracking, today),
     )
+
+
+def _requirements_text(tracking: Tracking) -> str:
+    """The progress per requirement (requirement_progress) as a Markdown table."""
+    rows = requirement_progress(tracking)
+    if not rows:
+        return "Keine Anforderungen mit dem Plan übernommen."
+    head = ["| " + " | ".join(rows[0]) + " |", "|" + "---|" * len(rows[0])]
+    body = ["| " + " | ".join(_md(str(cell)) for cell in row.values()) + " |" for row in rows]
+    return "\n".join(head + body)
 
 
 def _demos_text(tracking: Tracking, today: date) -> str:
