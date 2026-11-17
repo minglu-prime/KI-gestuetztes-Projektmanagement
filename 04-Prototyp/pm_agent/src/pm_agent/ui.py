@@ -259,6 +259,47 @@ def journey(page: str) -> None:
                 st.switch_page(target)
 
 
+def kept_editor(
+    name: str,
+    version: str,
+    basis: Any,
+    data: pd.DataFrame,
+    columns: list[str] | None = None,
+    **options: Any,
+) -> Any:
+    """`st.data_editor` whose unsaved edits survive a visit to another page.
+
+    Streamlit drops an editor's edits when another page is shown. On the return the edited
+    table comes back as the editor's input, unless `basis` (what `data` was built from)
+    changed meanwhile. `version` names the page's counter in session state: raising it starts
+    the editor again from `data`. The widget key starts with `name`.
+
+    `columns`: only these come back, the others are taken fresh from `data` (computed ones,
+    like a forecast). Only for tables with fixed rows."""
+    state = st.session_state
+    restores = f"{name}restores"
+    kept = state.get(f"{name}current")
+    if state.get("page_changed") and kept is not None and kept[0] == basis:
+        state[restores] = state.get(restores, 0) + 1
+        state[f"{name}restored"] = (state.get(version, 0), state[restores], basis, kept[1])
+    counts = (state.get(version, 0), state.get(restores, 0))
+    restored = state.get(f"{name}restored")
+    if restored is not None:
+        if restored[:2] == counts and restored[2] == basis:
+            if columns is None:
+                data = restored[3]
+            else:
+                data = data.copy()
+                data[columns] = restored[3][columns].to_numpy()
+        else:
+            # Saved or started again since: it never applies again, even if the saved data
+            # later reads as it did then.
+            del state[f"{name}restored"]
+    edited = st.data_editor(data, key=f"{name}{counts[0]}_{counts[1]}", **options)
+    state[f"{name}current"] = (basis, edited)
+    return edited
+
+
 def history_table(tracking: Tracking) -> None:
     """The work kept from earlier plans, if the project was adopted again."""
     if not tracking.history:

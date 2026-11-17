@@ -22,7 +22,14 @@ from pm_agent.closing import (
 )
 from pm_agent.models import Lessons
 from pm_agent.tracking import Signoff, evaluate, load, save
-from pm_agent.ui import adopted_project, as_text, consent, heading, run_with_progress
+from pm_agent.ui import (
+    adopted_project,
+    as_text,
+    consent,
+    heading,
+    kept_editor,
+    run_with_progress,
+)
 from pm_agent.workbench import InputError
 
 state = st.session_state
@@ -128,9 +135,11 @@ with st.container(border=True, key="panel-lessons"):
         ):
             state.lessons_version = state.get("lessons_version", 0) + 1
             st.rerun()
-    edited = st.data_editor(
+    edited = kept_editor(
+        "lessons_editor_",
+        "lessons_version",
+        tracking.lessons,
         pd.DataFrame(lesson_rows(tracking.lessons), columns=LESSON_COLUMNS),
-        key=f"lessons_editor_{state.get('lessons_version', 0)}",
         num_rows="dynamic",
         width="stretch",
     )

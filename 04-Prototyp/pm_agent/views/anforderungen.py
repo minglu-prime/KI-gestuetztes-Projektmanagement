@@ -21,6 +21,7 @@ from pm_agent.lifecycle import (
 from pm_agent.ui import (
     as_text,
     heading,
+    kept_editor,
     phase_chip,
     run_with_progress,
     saved_lifecycle,
@@ -115,9 +116,11 @@ with st.container(border=True, key="panel-requirements"):
         "Erfolgskriterien des Projektauftrags (K1 …) durch Komma."
     )
     rows = requirement_rows(life.requirements) if life.requirements is not None else []
-    edited_rows = st.data_editor(
+    edited_rows = kept_editor(
+        "requirements_editor_",
+        "requirements_version",
+        life.requirements,
         pd.DataFrame(rows, columns=REQUIREMENT_COLUMNS),
-        key=f"requirements_editor_{state.get('requirements_version', 0)}",
         num_rows="dynamic",
         width="stretch",
         column_config={

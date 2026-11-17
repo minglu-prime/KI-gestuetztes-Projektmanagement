@@ -1538,6 +1538,63 @@ def test_requirements_edited_in_the_table_are_checked_again(site):
     assert button(at, "Anforderungen freigeben").disabled
 
 
+def requirements_table(at):
+    (frame,) = [f for f in at.dataframe if f.key and f.key.startswith("requirements_editor_")]
+    return frame.value
+
+
+def test_unsaved_requirements_survive_a_visit_to_another_page(site):
+    lifecycle.save(with_charter().model_copy(update={"requirements": NEEDS}))
+    at = site.switch_page("views/anforderungen.py").run()
+    at = edit_table(at, "requirements_editor_", {0: {"Priorität": "Kann"}})
+
+    at = at.switch_page("views/auftrag.py").run()
+    at = at.switch_page("views/anforderungen.py").run()
+
+    assert not at.exception
+    assert requirements_table(at).iloc[0]["Priorität"] == "Kann"
+    assert any("nicht gespeichert" in c.value for c in at.caption)
+    assert lifecycle.load().requirements == NEEDS  # still not saved
+    button(at, "Änderungen speichern und prüfen").click()
+    at = at.run()
+    assert lifecycle.load().requirements.items[0].priority == "Kann"
+
+
+def test_a_used_restore_does_not_come_back_when_the_saved_data_returns(site):
+    lifecycle.save(with_charter().model_copy(update={"requirements": NEEDS}))
+    at = site.switch_page("views/anforderungen.py").run()
+    at = edit_table(at, "requirements_editor_", {0: {"Priorität": "Kann"}})
+    at = at.switch_page("views/auftrag.py").run()
+    at = at.switch_page("views/anforderungen.py").run()
+    button(at, "Änderungen speichern und prüfen").click()
+    at = at.run()
+    assert lifecycle.load().requirements.items[0].priority == "Kann"
+
+    at = edit_table(at, "requirements_editor_", {0: {"Priorität": "Muss"}})
+    button(at, "Änderungen speichern und prüfen").click()
+    at = at.run()
+
+    assert lifecycle.load().requirements == NEEDS
+    assert requirements_table(at).iloc[0]["Priorität"] == "Muss"
+    assert not any("nicht gespeichert" in c.value for c in at.caption)
+
+
+def test_unsaved_requirements_are_dropped_when_the_saved_ones_changed_meanwhile(site):
+    lifecycle.save(with_charter().model_copy(update={"requirements": NEEDS}))
+    at = site.switch_page("views/anforderungen.py").run()
+    at = edit_table(at, "requirements_editor_", {0: {"Priorität": "Kann"}})
+    at = at.switch_page("views/auftrag.py").run()
+    changed = NEEDS.model_copy(
+        update={"items": [NEEDS.items[0].model_copy(update={"priority": "Soll"})]}
+    )
+    lifecycle.save(lifecycle.load().model_copy(update={"requirements": changed}))
+
+    at = at.switch_page("views/anforderungen.py").run()
+
+    assert not at.exception
+    assert requirements_table(at).iloc[0]["Priorität"] == "Soll"
+
+
 def test_a_requirement_for_an_unknown_criterion_cannot_be_approved(site):
     lifecycle.save(with_charter().model_copy(update={"requirements": NEEDS}))
     at = site.switch_page("views/anforderungen.py").run()
@@ -2067,6 +2124,42 @@ def test_the_closing_page_takes_decisions_and_lessons(site, monkeypatch):
     at = at.run()
     assert tracking.load().lessons == drafted.items
     assert not at.exception
+
+
+def frame(at, prefix):
+    (editor,) = [f for f in at.dataframe if f.key and f.key.startswith(prefix)]
+    return editor.value
+
+
+def test_unsaved_design_lessons_and_handbook_survive_a_visit_to_another_page(tracked):
+    from test_lifecycle import design
+
+    from pm_agent.models import Lesson
+
+    approve_needs()
+    lifecycle.save(lifecycle.load().model_copy(update={"design": design()}))
+    lesson = Lesson(observation="a", advice="b")
+    tracking.save(tracking.load().model_copy(update={"lessons": [lesson]}))
+    saved = (lifecycle.load(), tracking.load())
+    edits = [
+        ("views/entwurf.py", "design_steps_", {1: {"Von": "B3"}}, "Von", "B3"),
+        ("views/abschluss.py", "lessons_editor_", {0: {"Empfehlung": "neu"}}, "Empfehlung", "neu"),
+        (
+            "views/betrieb.py",
+            "operations_editor",
+            {0: {"Verantwortlich": "Team"}},
+            "Verantwortlich",
+            "Team",
+        ),
+    ]
+    at = tracked
+    for page, prefix, edit, column, value in edits:
+        at = edit_table(at.switch_page(page).run(), prefix, edit)
+        at = at.switch_page("views/startseite.py").run()
+        at = at.switch_page(page).run()
+        assert not at.exception, page
+        assert frame(at, prefix).iloc[next(iter(edit))][column] == value, page
+    assert (lifecycle.load(), tracking.load()) == saved  # nothing saved
 
 
 def test_the_operations_page_checks_the_handbook_and_records_incidents(tracked):

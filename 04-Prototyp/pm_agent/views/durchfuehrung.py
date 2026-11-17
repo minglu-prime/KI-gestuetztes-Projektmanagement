@@ -31,6 +31,7 @@ from pm_agent.ui import (
     consent,
     heading,
     history_table,
+    kept_editor,
     run_with_progress,
     strip,
 )
@@ -98,21 +99,14 @@ with st.container(border=True, key="panel-progress"):
     heading("edit_note", "Fortschritt", du="trägst Status und Stunden ein")
     if state.pop("progress_saved", False):
         st.success("Fortschritt gespeichert (lokal in data/projekt.json, nicht im Repository).")
-    table = pd.DataFrame(progress_rows(tracking), columns=PROGRESS_COLUMNS)
-    editable = [c for c in PROGRESS_COLUMNS if c not in PROGRESS_READ_ONLY]
-    # Streamlit drops the editor's edits when another page is shown. Unsaved edits come back
-    # after such a visit, unless the saved project changed meanwhile.
-    kept = state.get("progress_current")
-    if state.get("page_changed") and kept is not None and kept[0] == tracking:
-        state.progress_version = state.get("progress_version", 0) + 1
-        state.progress_restored = (state.progress_version, kept[1][editable].to_numpy())
-    restored = state.get("progress_restored")
-    if restored is not None and restored[0] == state.get("progress_version", 0):
-        table[editable] = restored[1]
-    edited = st.data_editor(
-        table,
-        # A new key after saving: the editor starts again from the saved state.
-        key=f"progress_editor_{state.get('progress_version', 0)}",
+    # Unsaved edits survive a visit to another page; the forecast columns are computed anew.
+    # Saving raises the version: the editor starts again from the saved state.
+    edited = kept_editor(
+        "progress_editor_",
+        "progress_version",
+        tracking,
+        pd.DataFrame(progress_rows(tracking), columns=PROGRESS_COLUMNS),
+        columns=[c for c in PROGRESS_COLUMNS if c not in PROGRESS_READ_ONLY],
         hide_index=True,
         width="stretch",
         disabled=PROGRESS_READ_ONLY,
@@ -132,7 +126,6 @@ with st.container(border=True, key="panel-progress"):
             ),
         },
     )
-    state.progress_current = (tracking, edited)
     st.caption(
         "Status, Fertig am, Ist-Stunden, Rest und Notiz lassen sich ändern. Änderungen gelten "
         "erst nach dem Speichern. „Prognose Ende“ zeigt, wann die Aufgabe nach heutigem Stand "
