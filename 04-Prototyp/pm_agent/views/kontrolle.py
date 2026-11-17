@@ -14,6 +14,7 @@ from pm_agent.tracking import (
     agent_runs,
     check_retros,
     control_document,
+    demo_mondays,
     demo_status,
     earned_value,
     euro,
@@ -367,14 +368,15 @@ if tracking is not None:
             for warning in check_retros(tracking, date.today()).warnings:
                 st.warning(as_text(warning))
             titles = {d.week: d.title for d in tracking.plan.demos}
-            earlier = {r.week: r for r in tracking.retros}
+            mondays = demo_mondays(tracking)
+            earlier = {r.monday: r for r in tracking.retros}
             week = st.selectbox(
                 "Rückblick für",
                 sorted(titles),
                 format_func=lambda w: f"Woche {w} · {titles[w]}",
                 key="retro_week",
             )
-            was = earlier.get(week)
+            was = earlier.get(mondays.get(week))
             shown = st.radio(
                 "Demo gezeigt?",
                 ["ja", "teilweise", "nein"],
@@ -393,7 +395,7 @@ if tracking is not None:
             )
             if st.button("Rückblick speichern", icon=":material/save:"):
                 retro = Retro(
-                    week=week,
+                    monday=mondays[week],
                     shown=shown,
                     went_wrong=wrong,
                     cause=cause,
@@ -414,8 +416,8 @@ if tracking is not None:
             st.markdown("**Offene Maßnahmen**")
             for retro in measures:
                 if st.checkbox(
-                    f"Woche {retro.week}: {as_text(retro.measure)}",
-                    key=f"measure_done_{retro.week}",
+                    f"Woche ab {retro.monday:%d.%m.%Y}: {as_text(retro.measure)}",
+                    key=f"measure_done_{retro.monday:%Y%m%d}",
                 ):
                     done = retro.model_copy(update={"measure_done": True})
                     try:

@@ -1060,7 +1060,7 @@ def test_demo_status_reads_the_progress_and_the_retros(tmp_path):
             }
         }
     )
-    tracking = record_retro(tracking, Retro(week=1, shown="ja"))
+    tracking = record_retro(tracking, Retro(monday=date(2026, 11, 9), shown="ja"))
     assert demo_status(tracking, date(2026, 11, 16)) == [
         {
             "Woche": 1,
@@ -1088,13 +1088,16 @@ def test_a_missed_demo_needs_a_measure_and_a_past_week_a_retro(tmp_path):
         "Woche 2 (API zeigen) hat noch keinen Rückblick",
     ]
     with pytest.raises(
-        InputError, match="Woche 2: Die Demo fand nur teilweise statt, es fehlt eine Maßnahme"
+        InputError,
+        match="Woche ab 16.11.2026: Die Demo fand nur teilweise statt, es fehlt eine Maßnahme",
     ):
-        record_retro(tracking, Retro(week=2, shown="teilweise", went_wrong="B fehlte"))
+        record_retro(
+            tracking, Retro(monday=date(2026, 11, 16), shown="teilweise", went_wrong="B fehlte")
+        )
     tracking = record_retro(
         tracking,
         Retro(
-            week=2,
+            monday=date(2026, 11, 16),
             shown="nein",
             went_wrong="B fehlte",
             cause="Schema unklar",
@@ -1109,7 +1112,7 @@ def test_a_missed_demo_needs_a_measure_and_a_past_week_a_retro(tmp_path):
 def test_retros_survive_adopting_the_rest_again(tmp_path):
     from pm_agent.tracking import Retro, adopt, record_retro
 
-    tracking = record_retro(demo_tracking(tmp_path), Retro(week=1, shown="ja"))
+    tracking = record_retro(demo_tracking(tmp_path), Retro(monday=date(2026, 11, 9), shown="ja"))
     again = adopt(PROJECT, TEAM, PLAN, path=tmp_path / "projekt.json", keep=tracking)
     assert again.retros == tracking.retros
 
@@ -1119,7 +1122,13 @@ def test_the_control_document_has_the_demos_and_their_retros(tmp_path):
 
     tracking = record_retro(
         demo_tracking(tmp_path),
-        Retro(week=1, shown="nein", went_wrong="A | fehlte", cause="krank", measure="Vertretung"),
+        Retro(
+            monday=date(2026, 11, 9),
+            shown="nein",
+            went_wrong="A | fehlte",
+            cause="krank",
+            measure="Vertretung",
+        ),
     )
     text = control_document(tracking, evaluate(tracking, date(2026, 11, 23)))
     assert "## Wochen-Demos" in text
@@ -1153,3 +1162,32 @@ def test_the_status_report_names_the_demo_of_this_week(tmp_path):
     tracking = demo_tracking(tmp_path)
     report = status_report(tracking, evaluate(tracking, today=date(2026, 11, 18)))
     assert "Demo dieser Woche (bis 20.11.2026): API zeigen, 0 von 2 Aufgaben fertig" in report
+
+
+def test_retros_stay_with_their_calendar_week_when_the_rest_is_planned_again(tmp_path):
+    from pm_agent.tracking import Retro, demo_status, record_retro, rest_project
+
+    tracking = record_retro(
+        demo_tracking(tmp_path),
+        Retro(monday=date(2026, 11, 16), shown="nein", measure="Schema zuerst"),
+    )
+    project, rest = rest_project(tracking, date(2026, 11, 18))
+    # The rest starts on Wednesday 18.11: its week 1 is the week of 16.11.
+    rest = Plan.model_validate(
+        {
+            **rest.model_dump(),
+            "demos": [
+                {"week": 1, "title": "Rest A", "task_ids": [rest.tasks[0].id]},
+                {"week": 2, "title": "Rest B", "task_ids": [rest.tasks[-1].id]},
+            ],
+        }
+    )
+    again = adopt(
+        project,
+        TEAM,
+        Plan.model_validate(rest.model_dump()),
+        path=tmp_path / "r.json",
+        keep=tracking,
+    )
+    rows = demo_status(again, date(2026, 11, 18))
+    assert [(r["Demo"], r["Gezeigt"]) for r in rows] == [("Rest A", "nein"), ("Rest B", "kommt")]

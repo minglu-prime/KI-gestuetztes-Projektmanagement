@@ -162,7 +162,13 @@ def rows_to_plan(rows: list[dict[str, Any]], original: Plan, risks: list[str]) -
             tasks=tasks,
             assignments=assignments,
             risks=[r for r in risks if r.strip()],
-            demos=original.demos,  # not in the table, like the descriptions
+            # Not in the table, like the descriptions. A task removed there leaves its
+            # demos; a demo left with no task goes.
+            demos=[
+                demo.model_copy(update={"task_ids": kept})
+                for demo in original.demos
+                if (kept := [t for t in demo.task_ids if t in {task.id for task in tasks}])
+            ],
         )
     except ValidationError as err:
         raise InputError(_reason(err)) from err
@@ -818,7 +824,13 @@ def demo_rows(plan: Plan, result: CheckResult, project: Project) -> list[dict[st
                 "Bis": _date(friday) if friday else "nach der Deadline",
                 "Demo": demo.title,
                 "Aufgaben": ", ".join(demo.task_ids),
-                "Rechtzeitig fertig": f"nein: {', '.join(late)}" if late else "ja",
+                "Rechtzeitig fertig": (
+                    "nicht geprüft"
+                    if result.errors or any(tid not in ends for tid in demo.task_ids)
+                    else f"nein: {', '.join(late)}"
+                    if late
+                    else "ja"
+                ),
             }
         )
     return rows

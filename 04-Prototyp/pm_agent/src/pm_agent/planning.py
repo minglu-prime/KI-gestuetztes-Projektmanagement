@@ -200,6 +200,8 @@ def check_plan(
         for week, first, last in project_weeks(project.start_date, max(project.deadline, end_date)):
             if first > end_date:
                 break
+            if working_days(project, first, last) == 0:
+                continue  # free days for everyone: nothing to show
             demo = demos.get(week)
             if demo is None:
                 warn(

@@ -761,3 +761,39 @@ def test_demo_rows_say_whether_each_demo_is_ready_in_its_week():
             "Rechtzeitig fertig": "ja",
         },
     ]
+
+
+def test_a_task_removed_in_the_table_leaves_the_demos():
+    from test_tools import plan_input
+
+    from pm_agent.models import Plan
+    from pm_agent.workbench import plan_rows, rows_to_plan
+
+    plan = Plan.model_validate(
+        {
+            **plan_input(),
+            "demos": [
+                {"week": 1, "title": "beides", "task_ids": ["A", "B"]},
+                {"week": 2, "title": "nur B", "task_ids": ["B"]},
+            ],
+        }
+    )
+    rows = [row for row in plan_rows(plan) if row["ID"] != "B"]
+    rows[0]["Abhängig von"] = ""
+    demos = rows_to_plan(rows, plan, plan.risks).demos
+    assert [(d.week, d.task_ids) for d in demos] == [(1, ["A"])]
+
+
+def test_demo_rows_of_a_plan_with_errors_are_not_checked():
+    from test_tools import PROJECT, TEAM, plan_input
+
+    from pm_agent.models import Plan
+    from pm_agent.planning import check_plan
+    from pm_agent.workbench import demo_rows
+
+    plan = Plan.model_validate(
+        {**plan_input(), "demos": [{"week": 1, "title": "x", "task_ids": ["A", "Z"]}]}
+    )
+    result = check_plan(plan, TEAM, PROJECT)
+    assert result.errors
+    assert demo_rows(plan, result, PROJECT)[0]["Rechtzeitig fertig"] == "nicht geprüft"

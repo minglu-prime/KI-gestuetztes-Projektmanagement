@@ -1914,10 +1914,14 @@ def test_the_weekly_retro_needs_a_measure_for_a_missed_demo(site):
     button(at, "Rückblick speichern").click()
     at = at.run()
     (retro,) = tracking.load().retros
-    assert (retro.week, retro.shown, retro.measure) == (2, "nein", "Schema zuerst klären")
+    assert (retro.monday, retro.shown, retro.measure) == (
+        datetime.date(2026, 11, 16),
+        "nein",
+        "Schema zuerst klären",
+    )
     assert any("Schema zuerst klären" in c.label for c in at.checkbox)
 
-    at.checkbox(key="measure_done_2").check().run()
+    at.checkbox(key="measure_done_20261116").check().run()
     assert tracking.load().retros[0].measure_done is True
 
 
@@ -1935,7 +1939,7 @@ def test_a_new_measure_for_the_same_week_starts_open(site):
     at.text_input(key="retro_measure_2").input("Erste Maßnahme").run()
     button(at, "Rückblick speichern").click()
     at = at.run()
-    at.checkbox(key="measure_done_2").check().run()
+    at.checkbox(key="measure_done_20261116").check().run()
     at.text_input(key="retro_measure_2").input("Zweite Maßnahme").run()
     button(at, "Rückblick speichern").click()
     at = at.run()

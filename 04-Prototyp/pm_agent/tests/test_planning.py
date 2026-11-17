@@ -861,3 +861,15 @@ def test_demos_with_a_deadline_at_the_end_of_the_calendar():
     plan = demo_plan(demos=[{"week": 1, "title": "API zeigen", "task_ids": ["B"]}])
     result = check_plan(plan, [ANNA], project(deadline=date.max), dates_only=True)
     assert result.ok and not [k for k in result.warning_kinds if k[0].startswith("demo")]
+
+
+def test_a_week_of_free_days_needs_no_demo():
+    from pm_agent.models import Absence
+
+    plan = demo_plan(b_hours=40, demos=[{"week": 1, "title": "A zeigen", "task_ids": ["A"]}])
+    free = project().model_copy(
+        update={"free_days": [Absence(first=date(2026, 11, 16), last=date(2026, 11, 20))]}
+    )
+    result = check_plan(plan, [ANNA], free)
+    assert ("demo_missing", "2") not in result.warning_kinds
+    assert ("demo_missing", "3") in result.warning_kinds  # B ends in week 3

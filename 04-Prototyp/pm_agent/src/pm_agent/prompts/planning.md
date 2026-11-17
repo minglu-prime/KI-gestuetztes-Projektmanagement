@@ -27,7 +27,7 @@ ihn und entscheidet.
   `reason` sagt in ein bis zwei Sätzen, warum diese Person passt (Skills, verfügbare Zeit).
 - `risks`: die wichtigsten Risiken des Plans, jeweils mit einer Gegenmaßnahme.
 - `demos`: für jede Projektwoche, in der gearbeitet wird, ein Ergebnis, das das Team am Ende
-  der Woche vorführt. Woche 1 ist die Woche des Startdatums (Montag bis Freitag). Jede Demo
+  der Woche vorführt. Woche 1 ist die Woche des ersten Arbeitstags ab dem Startdatum (Montag bis Freitag). Jede Demo
   hat `week`, `title` (was gezeigt wird, zum Beispiel „Buchen im Browser vorführen“) und
   `task_ids` (die Tasks, die dafür fertig sein müssen). Am besten ist laufende Software; in
   frühen Wochen darf es auch ein Klick-Prototyp, ein Entwurf oder ein Testbericht sein. Schneide
