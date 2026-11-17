@@ -3,7 +3,8 @@
 **Projekt:** $projekt  
 **Stand:** $stand  
 **Zeitraum:** $start bis $deadline  
-**Geplantes Ende laut Plan:** $planende
+**Geplantes Ende laut Plan:** $planende  
+**Tatsächliches Ende:** $istende
 
 ## Ziel und Erfolgskriterien
 
@@ -20,6 +21,10 @@ $abnahme
 - Fortschritt: $fortschritt (fertige Aufgaben, gewichtet nach Planstunden)
 - Planstunden gesamt: $plan_h h
 - Ist-Stunden: $ist_h h
+
+## Später fertig als geplant
+
+$spaet
 
 ## Wochen-Demos
 

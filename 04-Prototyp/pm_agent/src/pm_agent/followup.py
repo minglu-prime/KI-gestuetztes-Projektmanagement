@@ -171,6 +171,7 @@ def facts(tracking: Tracking, evaluation: Evaluation) -> str:
                 **asdict(t),
                 "planned_start": t.planned_start.isoformat(),
                 "planned_end": t.planned_end.isoformat(),
+                "finished_on": t.finished_on.isoformat() if t.finished_on else None,
                 "depends_on": plan[t.id].depends_on,
             }
             for t in evaluation.tasks

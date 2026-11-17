@@ -48,6 +48,7 @@ def replanned(path):
             {"ID": "A", "Status": "fertig", "Ist (h)": 10, "Notiz": "Schema zweimal geändert"},
             {"ID": "B", "Status": "in Arbeit", "Ist (h)": 4, "Notiz": "Auth fehlt"},
         ],
+        today=THURSDAY,
     )
     project, rest = rest_project(first, THURSDAY)
     return adopt(project, TEAM, rest, path=path, keep=first)
@@ -65,6 +66,7 @@ def test_the_work_before_the_new_plan_is_kept_as_history(replanned, path):
             finished=True,
             note="Schema zweimal geändert",
             until=day,
+            finished_on=THURSDAY,
         ),
         # The part of B's estimate the 4 booked hours stood for; 12 h are in the new plan.
         Earlier(

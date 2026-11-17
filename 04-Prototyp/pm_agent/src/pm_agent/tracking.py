@@ -71,6 +71,7 @@ PROGRESS_COLUMNS = [
     "Geplantes Ende",
     "Prognose Ende",
     "Status",
+    "Fertig am",
     "Ist (h)",
     "Rest (h)",
     "Notiz",
@@ -86,6 +87,9 @@ class Progress(BaseModel):
     # the estimate, less the booked hours for a started task.
     remaining_hours: float | None = Field(default=None, gt=0, allow_inf_nan=False)
     note: str = ""
+    # The day the task was finished. None while it is not, and for tasks finished before
+    # this was recorded: their day is unknown.
+    finished_on: date | None = None
 
 
 class Earlier(BaseModel):
@@ -106,6 +110,7 @@ class Earlier(BaseModel):
     note: str = ""
     until: date  # the day the next plan was adopted
     requirement_ids: list[str] = Field(default_factory=list)  # what the task served
+    finished_on: date | None = None  # a finished task: the day, if it was recorded
 
 
 class Retro(BaseModel):
@@ -225,6 +230,7 @@ class TaskState:
     remaining_hours: float | None  # the project lead's own estimate of what is left
     note: str
     overdue: bool  # planned end is past and the task is not finished
+    finished_on: date | None = None
 
 
 @dataclass(frozen=True)
@@ -382,6 +388,7 @@ def _closed(tracking: Tracking, day: date) -> list[Earlier]:
                 note=state.note,
                 until=day,
                 requirement_ids=estimates[state.id].requirement_ids,
+                finished_on=state.finished_on if finished else None,
             )
         )
     return closed
@@ -535,7 +542,7 @@ def reopen(tracking: Tracking, defect_id: str) -> Tracking:
     done = tracking.progress[defect.task_id]
     progress = {
         **tracking.progress,
-        defect.task_id: done.model_copy(update={"status": "in Arbeit"}),
+        defect.task_id: done.model_copy(update={"status": "in Arbeit", "finished_on": None}),
     }
     return tracking.model_copy(update={"progress": progress})
 
@@ -634,8 +641,57 @@ def has_progress(tracking: Tracking) -> bool:
     return bool(tracking.history) or any(p != Progress() for p in tracking.progress.values())
 
 
-def apply_rows(tracking: Tracking, rows: list[dict[str, Any]]) -> Tracking:
+def _finish_date(value: Any, where: str) -> date | None:
+    """A cell of "Fertig am": empty, a date, or a date as text in either form."""
+    text = _cell(value)  # empty for None, NaN and pandas.NaT (a datetime unequal to itself)
+    if not text:
+        return None
+    if isinstance(value, datetime):  # also pandas.Timestamp
+        return value.date()
+    if isinstance(value, date):
+        return value
+    for form in ("%d.%m.%Y", "%Y-%m-%d"):
+        try:
+            return datetime.strptime(text, form).date()
+        except ValueError:
+            pass
+    raise InputError(f"{where}: Fertig am '{text}' ist kein Datum (TT.MM.JJJJ)")
+
+
+def _finished_on(
+    before: Progress, status: str, row: dict[str, Any], where: str, start: date, today: date
+) -> date | None:
+    """The day a task was finished, after the project lead's edit. Set to today when the task
+    becomes finished; kept on saving again; dropped when the task is no longer finished. A day
+    entered in the table wins, an emptied cell means unknown."""
+    old = before.finished_on if before.status == "fertig" else None
+    if "Fertig am" not in row:  # a row from elsewhere, without the column
+        entered = old
+    else:
+        entered = _finish_date(row["Fertig am"], where)
+    if status != "fertig":
+        if entered is not None and entered != old:
+            raise InputError(
+                f"{where}: Fertig am gesetzt, aber Status '{status}'. Setze den Status auf "
+                "fertig oder leere das Datum"
+            )
+        return None
+    if before.status != "fertig" and entered is None:
+        return today
+    if entered is not None and entered > today:
+        raise InputError(f"{where}: Fertig am {_date(entered)} liegt in der Zukunft")
+    if entered is not None and entered < start:
+        raise InputError(
+            f"{where}: Fertig am {_date(entered)} liegt vor dem Projektstart {_date(start)}"
+        )
+    return entered
+
+
+def apply_rows(
+    tracking: Tracking, rows: list[dict[str, Any]], today: date | None = None
+) -> Tracking:
     """The progress table as the project lead edited it. Tasks without a row keep their state."""
+    today = today or date.today()
     progress = dict(tracking.progress)
     for number, row in enumerate(rows, start=1):
         task_id = _cell(row.get("ID"))
@@ -667,8 +723,20 @@ def apply_rows(tracking: Tracking, rows: list[dict[str, Any]]) -> Tracking:
                 f"{where}: Rest 0 h, aber Status '{status}'. Setze den Status auf fertig "
                 "oder trage ein, was noch zu tun ist"
             )
+        finished_on = _finished_on(
+            tracking.progress[task_id],
+            status,
+            row,
+            where,
+            tracking.project.start_date,
+            today,
+        )
         progress[task_id] = Progress(
-            status=status, actual_hours=hours, remaining_hours=rest, note=_cell(row.get("Notiz"))
+            status=status,
+            actual_hours=hours,
+            remaining_hours=rest,
+            note=_cell(row.get("Notiz")),
+            finished_on=finished_on,
         )
     return tracking.model_copy(update={"progress": progress})
 
@@ -692,6 +760,7 @@ def evaluate(tracking: Tracking, today: date) -> Evaluation:
                 remaining_hours=done.remaining_hours,
                 note=done.note,
                 overdue=planned.end < today and done.status != "fertig",
+                finished_on=done.finished_on,
             )
         )
     finished_ids = {t.id for t in tasks if t.status == "fertig"}
@@ -1134,8 +1203,13 @@ def progress_rows(tracking: Tracking, today: date | None = None) -> list[dict[st
                     t.member,
                     t.planned_hours,
                     _date(t.planned_end),
-                    "fertig" if t.status == "fertig" else expected.get(t.id, "nicht berechenbar"),
+                    (
+                        (f"fertig am {_date(t.finished_on)}" if t.finished_on else "fertig")
+                        if t.status == "fertig"
+                        else expected.get(t.id, "nicht berechenbar")
+                    ),
                     t.status,
+                    t.finished_on,
                     t.actual_hours,
                     t.remaining_hours,
                     t.note,
