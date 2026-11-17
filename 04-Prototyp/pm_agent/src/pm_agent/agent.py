@@ -9,12 +9,12 @@ from collections.abc import Callable
 from contextlib import closing
 from datetime import datetime
 from pathlib import Path
-from typing import Any, TypeVar
+from typing import Any, NamedTuple, TypeVar
 
 from anthropic import Anthropic
 
-from pm_agent.models import Member, Plan, Project
-from pm_agent.tools import PlanningTools
+from pm_agent.models import Member, Plan, Project, Requirement
+from pm_agent.tools import PlanningTools, Submission
 
 DEFAULT_MODEL = "claude-opus-5-5"
 # One round is one reply from Claude. Drafting, a few checks and the submission take about
@@ -53,12 +53,22 @@ def run_planning(
     team: list[Member],
     log_dir: Path | None = LOG_DIR,
     on_round: Callable[[dict[str, Any]], None] | None = None,
+    *,
+    requirements: list[Requirement] | None = None,
+    covered: frozenset[str] = frozenset(),
 ) -> Plan:
     """Let Claude plan the project. Returns the first plan that submit_plan accepts: no
     errors, warnings possible. Raises PlanningError; errors of the API itself propagate.
     Each run, successful or not, is written to `log_dir` as one JSON file (None: no log).
-    `on_round` gets each round as soon as its tools have run, for live progress."""
-    return _plan_run(SYSTEM_PROMPT, _request(project, team), project, team, {}, log_dir, on_round)
+    `on_round` gets each round as soon as its tools have run, for live progress.
+    `requirements`: the approved ones; Claude links each task to them and the check traces
+    the plan (`covered`: served by finished work outside the plan)."""
+    trace = Trace(requirements, covered)
+    request = (
+        f"{_inputs(project, team, trace)}\n\n"
+        "Erstelle den Plan, prüfe ihn mit check_plan und reiche ihn mit submit_plan ein."
+    )
+    return _plan_run(SYSTEM_PROMPT, request, project, team, {}, log_dir, on_round, trace)
 
 
 def run_replanning(
@@ -68,18 +78,25 @@ def run_replanning(
     wish: str,
     log_dir: Path | None = LOG_DIR,
     on_round: Callable[[dict[str, Any]], None] | None = None,
+    *,
+    requirements: list[Requirement] | None = None,
+    covered: frozenset[str] = frozenset(),
 ) -> Plan:
     """Let Claude change `plan` the way the project lead asks in `wish`. Same tools, same
     check and same kind of log as run_planning; the log also keeps the wish."""
     wish = wish.strip()
     if not wish:
         raise AgentError("Beschreibe, was sich ändern soll.")
+    trace = Trace(requirements, covered)
     request = (
-        f"{_inputs(project, team)}\n\nAktueller Plan:\n{plan.model_dump_json(indent=2)}\n\n"
+        f"{_inputs(project, team, trace)}\n\nAktueller Plan:\n"
+        f"{plan.model_dump_json(indent=2)}\n\n"
         f"Wunsch der Projektleitung:\n{wish}\n\n"
         "Passe den Plan an, prüfe ihn mit check_plan und reiche ihn mit submit_plan ein."
     )
-    return _plan_run(REPLANNING_PROMPT, request, project, team, {"wish": wish}, log_dir, on_round)
+    return _plan_run(
+        REPLANNING_PROMPT, request, project, team, {"wish": wish}, log_dir, on_round, trace
+    )
 
 
 def _plan_run(
@@ -90,8 +107,11 @@ def _plan_run(
     extra: dict[str, Any],
     log_dir: Path | None,
     on_round: Callable[[dict[str, Any]], None] | None,
+    trace: "Trace",
 ) -> Plan:
-    tools = PlanningTools(project, team)
+    tools = PlanningTools(project, team, trace.requirements, trace.covered)
+    if trace.requirements is not None:  # what the plan was traced to, for the record
+        extra = {**extra, "requirements": [r.model_dump(mode="json") for r in trace.requirements]}
     return run_agent(
         log_prefix="run",
         noun="Plan",
@@ -105,6 +125,31 @@ def _plan_run(
             "team": [member.model_dump(mode="json") for member in team],
             "plan": plan.model_dump(mode="json") if plan is not None else None,
             **extra,
+        },
+        log_dir=log_dir,
+        on_round=on_round,
+    )
+
+
+def run_submission(
+    name: str,
+    submission: Submission[T],
+    data: str,
+    log_dir: Path | None = LOG_DIR,
+    on_round: Callable[[dict[str, Any]], None] | None = None,
+) -> T:
+    """An agent with one submit tool: the system prompt is prompts/<name>.md, the request
+    the JSON text `data`, and the log keeps input and result under the prefix `name`."""
+    return run_agent(
+        log_prefix=name,
+        noun=submission.noun,
+        system=(PROMPTS / f"{name}.md").read_text(encoding="utf-8"),
+        request=f"{data}\n\nReiche dein Ergebnis mit {submission.tool.name} ein.",
+        tools=[submission.tool],
+        result=lambda: submission.result,
+        record=lambda result: {
+            "input": json.loads(data),
+            "result": result.model_dump(mode="json") if result is not None else None,
         },
         log_dir=log_dir,
         on_round=on_round,
@@ -264,13 +309,21 @@ def _text(content: Any) -> str:
     return "\n".join(block.get("text", "") for block in content or [])
 
 
-def _inputs(project: Project, team: list[Member]) -> str:
+class Trace(NamedTuple):
+    """The approved requirements a plan is traced to, and those finished work served."""
+
+    requirements: list[Requirement] | None
+    covered: frozenset[str]
+
+
+def _inputs(project: Project, team: list[Member], trace: Trace) -> str:
     members = json.dumps([m.model_dump(mode="json") for m in team], ensure_ascii=False, indent=2)
-    return f"Projekt:\n{project.model_dump_json(indent=2)}\n\nTeam:\n{members}"
-
-
-def _request(project: Project, team: list[Member]) -> str:
-    return (
-        f"{_inputs(project, team)}\n\n"
-        "Erstelle den Plan, prüfe ihn mit check_plan und reiche ihn mit submit_plan ein."
-    )
+    text = f"Projekt:\n{project.model_dump_json(indent=2)}\n\nTeam:\n{members}"
+    if trace.requirements is not None:
+        needs = json.dumps(
+            [r.model_dump(mode="json") for r in trace.requirements], ensure_ascii=False, indent=2
+        )
+        text += f"\n\nFreigegebene Anforderungen:\n{needs}"
+        if trace.covered:
+            text += f"\n\nSchon durch fertige Arbeit erfüllt: {', '.join(sorted(trace.covered))}"
+    return text

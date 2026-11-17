@@ -11,7 +11,7 @@ from anthropic import beta_tool
 from anthropic.lib.tools import ToolError
 from pydantic import BaseModel, ValidationError
 
-from pm_agent.models import CheckResult, Member, Plan, Project
+from pm_agent.models import CheckResult, Member, Plan, Project, Requirement
 from pm_agent.planning import check_plan
 
 T = TypeVar("T", bound=BaseModel)
@@ -23,9 +23,18 @@ REPORTED = {"errors", "warnings", "end_date", "critical_path", "load"}
 class PlanningTools:
     """The tools of one planning run. `plan` is set when submit_plan accepts a plan."""
 
-    def __init__(self, project: Project, team: list[Member]) -> None:
+    def __init__(
+        self,
+        project: Project,
+        team: list[Member],
+        requirements: list[Requirement] | None = None,
+        covered: frozenset[str] = frozenset(),
+    ) -> None:
         self.project = project
         self.team = team
+        # The approved requirements: with them the check traces each task (check_plan).
+        self.requirements = requirements
+        self.covered = covered
         self.plan: Plan | None = None
         self.check_plan = beta_tool(
             self._check,
@@ -65,7 +74,9 @@ class PlanningTools:
             plan = Plan.model_validate(data)
         except ValidationError as err:
             return None, CheckResult(errors=invalid_input(err))
-        return plan, check_plan(plan, self.team, self.project)
+        return plan, check_plan(
+            plan, self.team, self.project, requirements=self.requirements, covered=self.covered
+        )
 
 
 # The project lead reads these too (each round is shown on the page): German for the usual
@@ -87,6 +98,9 @@ GERMAN = {
     "list_type": "muss eine Liste sein",
     "dict_type": "muss ein Objekt sein",
     "model_type": "muss ein Objekt sein",
+    "string_pattern_mismatch": "darf nur Buchstaben, Ziffern, Punkt, Binde- und Unterstrich "
+    "enthalten",
+    "literal_error": "muss {expected} sein",
 }
 
 
@@ -99,7 +113,14 @@ def invalid_input(err: ValidationError) -> list[str]:
             key: f"{value:g}".replace(".", ",") if isinstance(value, float) else value
             for key, value in e.get("ctx", {}).items()
         }
-        text = GERMAN[e["type"]].format(**limits) if e["type"] in GERMAN else e["msg"]
+        if isinstance(limits.get("expected"), str):  # "'Muss', 'Soll' or 'Kann'"
+            limits["expected"] = limits["expected"].replace("'", "").replace(" or ", " oder ")
+        if e["type"] == "value_error":  # our own validators speak German already
+            text = e["msg"].removeprefix("Value error, ")
+        elif e["type"] in GERMAN:
+            text = GERMAN[e["type"]].format(**limits)
+        else:
+            text = e["msg"]
         messages.append(
             f"Ungültige Eingabe bei {where}: {text}" if where else f"Ungültige Eingabe: {text}"
         )

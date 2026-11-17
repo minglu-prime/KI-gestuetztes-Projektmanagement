@@ -26,6 +26,7 @@ from pm_agent.models import (
     Member,
     Plan,
     Project,
+    Requirement,
     Task,
 )
 from pm_agent.planning import workday_shift, working_shift
@@ -35,7 +36,16 @@ TEAM_FILE = DATA_DIR / "team.json"
 RUNS_CSV = LOG_DIR / "runs.csv"
 
 TEAM_COLUMNS = ["Name", "Skills", "Stunden/Woche", "Abwesend", "Notiz"]
-PLAN_COLUMNS = ["ID", "Aufgabe", "Person", "Stunden", "Abhängig von", "Skills", "Begründung"]
+PLAN_COLUMNS = [
+    "ID",
+    "Aufgabe",
+    "Person",
+    "Stunden",
+    "Abhängig von",
+    "Skills",
+    "Anforderungen",
+    "Begründung",
+]
 _SKILL = re.compile(r"^(.+?)\s*[: ]\s*([1-5])$")
 _DAY = r"(\d{1,2}\.\d{1,2}\.\d{4})"
 # One day, or two days with "-", "–" or "bis" between them.
@@ -106,6 +116,7 @@ def plan_rows(plan: Plan) -> list[dict[str, Any]]:
             "Stunden": t.estimate_hours,
             "Abhängig von": ", ".join(t.depends_on),
             "Skills": ", ".join(t.required_skills),
+            "Anforderungen": ", ".join(t.requirement_ids),
             "Begründung": owner[t.id].reason if t.id in owner else "",
         }
         for t in plan.tasks
@@ -130,6 +141,7 @@ def rows_to_plan(rows: list[dict[str, Any]], original: Plan, risks: list[str]) -
                     required_skills=_list(row.get("Skills")),
                     estimate_hours=row.get("Stunden"),
                     depends_on=_list(row.get("Abhängig von")),
+                    requirement_ids=_list(row.get("Anforderungen")),
                 )
             )
             if _cell(row.get("Person")):
@@ -544,6 +556,11 @@ def plan_changes(before: Plan, after: Plan) -> list[str]:
                 f"braucht {', '.join(task.required_skills) or 'keine Skills'} "
                 f"(vorher {', '.join(was.required_skills) or 'keine Skills'})"
             )
+        if set(task.requirement_ids) != set(was.requirement_ids):
+            parts.append(
+                f"dient {', '.join(task.requirement_ids) or 'keiner Anforderung'} "
+                f"(vorher {', '.join(was.requirement_ids) or 'keiner Anforderung'})"
+            )
         if parts:
             label = tid if tid == old_id else f"{tid} (vorher {old_id})"
             lines.append(f"{label} · {was.title}: " + "; ".join(parts))
@@ -674,7 +691,26 @@ def gantt(plan: Plan, result: CheckResult, deadline: date) -> tuple[list[dict[st
     return bars, bar_end(deadline)
 
 
-def to_markdown(project: Project, plan: Plan, result: CheckResult) -> str:
+def trace_rows(requirements: list[Requirement], plan: Plan) -> list[dict[str, Any]]:
+    """Per requirement, the tasks of the plan that serve it."""
+    return [
+        {
+            "ID": need.id,
+            "Anforderung": need.title,
+            "Priorität": need.priority,
+            "Aufgaben": ", ".join(t.id for t in plan.tasks if need.id in t.requirement_ids)
+            or "keine",
+        }
+        for need in requirements
+    ]
+
+
+def to_markdown(
+    project: Project,
+    plan: Plan,
+    result: CheckResult,
+    requirements: list[Requirement] | None = None,
+) -> str:
     owner = {a.task_id: a for a in plan.assignments}
     dates = {s.task_id: s for s in result.schedule}
     lines = [
@@ -699,6 +735,12 @@ def to_markdown(project: Project, plan: Plan, result: CheckResult) -> str:
         )
     if result.critical_path:
         lines += ["", f"**Kritischer Pfad:** {' → '.join(result.critical_path)}"]
+    if requirements is not None:
+        lines += ["", "## Anforderungen", ""] + [
+            f"- {_md(row['ID'])} · {_md(row['Anforderung'])} ({row['Priorität']}): "
+            f"{_md(row['Aufgaben'])}"
+            for row in trace_rows(requirements, plan)
+        ]
     for title, items in (
         ("Fehler", result.errors),
         ("Warnungen", result.warnings),
@@ -716,11 +758,11 @@ def to_csv(plan: Plan, result: CheckResult) -> str:
     out = io.StringIO()
     out.write("﻿")
     writer = csv.writer(out, delimiter=";")  # semicolon: German Excel splits it into columns
-    writer.writerow(PLAN_COLUMNS[:6] + ["Start", "Ende", "Begründung"])
+    writer.writerow(PLAN_COLUMNS[:-1] + ["Start", "Ende", "Begründung"])
     for row in plan_rows(plan):
         s = dates.get(row["ID"])
         writer.writerow(
-            [_csv_cell(row[c]) for c in PLAN_COLUMNS[:6]]
+            [_csv_cell(row[c]) for c in PLAN_COLUMNS[:-1]]
             + [
                 _date(s.start) if s else "",
                 _date(s.end) if s else "",

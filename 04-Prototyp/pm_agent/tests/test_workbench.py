@@ -10,7 +10,7 @@ import pytest
 from test_tools import PROJECT, TEAM, plan_input
 
 from pm_agent import workbench
-from pm_agent.models import Member, Plan
+from pm_agent.models import Member, Plan, Requirement
 from pm_agent.planning import check_plan
 from pm_agent.workbench import (
     InputError,
@@ -665,3 +665,47 @@ def test_a_link_that_cannot_be_finished_is_taken_back(tmp_path, monkeypatch):
     with pytest.raises(PermissionError):
         workbench._link_and_unlink(source, target)
     assert [file.name for file in tmp_path.iterdir()] == ["runs.csv"]
+
+
+def traced_plan():
+    data = plan_input()
+    data["tasks"][0]["requirement_ids"] = ["R1", "R2"]
+    return Plan.model_validate(data)
+
+
+def test_plan_table_round_trip_keeps_requirement_ids():
+    plan = traced_plan()
+    rows = plan_rows(plan)
+    assert rows[0]["Anforderungen"] == "R1, R2" and rows[1]["Anforderungen"] == ""
+    back = rows_to_plan(rows, plan, plan.risks)
+    assert [t.requirement_ids for t in back.tasks] == [["R1", "R2"], []]
+    assert table_plan(plan) == plan
+
+
+def test_the_csv_has_the_requirements_before_the_dates():
+    plan = traced_plan()
+    rows = list(
+        csv.reader(io.StringIO(to_csv(plan, check_plan(plan, TEAM, PROJECT))), delimiter=";")
+    )
+    assert rows[0][-4:] == ["Anforderungen", "Start", "Ende", "Begründung"]
+    assert rows[1][-4] == "R1, R2"
+
+
+def test_the_exported_plan_lists_the_tasks_of_each_requirement():
+    needs = [
+        Requirement(
+            id=rid,
+            title=title,
+            story="Als Nutzerin will ich das.",
+            priority="Muss",
+            criteria=["geht"],
+        )
+        for rid, title in [("R1", "Raum | sehen"), ("R2", "Buchen"), ("R3", "Export")]
+    ]
+    plan = traced_plan()  # A serves R1 and R2
+    markdown = to_markdown(PROJECT, plan, check_plan(plan, TEAM, PROJECT), needs)
+    assert "## Anforderungen" in markdown
+    assert r"- R1 · Raum \| sehen (Muss): A" in markdown
+    assert "- R3 · Export (Muss): keine" in markdown
+    # Without approved requirements the export is as before.
+    assert "## Anforderungen" not in to_markdown(PROJECT, plan, check_plan(plan, TEAM, PROJECT))

@@ -4,7 +4,7 @@ from datetime import date, timedelta
 
 import pytest
 
-from pm_agent.models import Absence, Assignment, Member, Plan, Project, Task
+from pm_agent.models import Absence, Assignment, Member, Plan, Project, Requirement, Task
 from pm_agent.planning import (
     add_workdays,
     add_working_days,
@@ -737,3 +737,61 @@ def test_a_free_day_after_the_deadline_does_not_change_what_is_said_about_an_abs
         "Anna ist bis zur Deadline durchgehend abwesend, hat aber 8 h zugewiesen"
         in check_plan(p, [gone], later).warnings
     )
+
+
+def requirement(rid, priority="Muss"):
+    return Requirement(
+        id=rid,
+        title=f"Anforderung {rid}",
+        story="Als Nutzerin will ich das, damit es geht.",
+        priority=priority,
+        criteria=["Es geht"],
+    )
+
+
+def traced(**served):
+    """Task A (8 h) and B (8 h, after A) for Anna, serving the given requirements."""
+    a = task("A", 8).model_copy(update={"requirement_ids": served.get("A", [])})
+    b = task("B", 8, deps=["A"]).model_copy(update={"requirement_ids": served.get("B", [])})
+    return plan(a, b, owners={"A": "Anna", "B": "Anna"})
+
+
+def test_without_requirements_the_check_says_nothing_about_them():
+    result = check_plan(traced(A=["R9"]), [ANNA], project())
+    assert result.ok and result.warnings == []
+
+
+def test_an_unknown_requirement_is_an_error():
+    result = check_plan(
+        traced(A=["R1"], B=["R9"]), [ANNA], project(), requirements=[requirement("R1")]
+    )
+    assert result.errors == ["Task 'B' dient der unbekannten Anforderung 'R9'"]
+
+
+def test_a_requirement_without_task_is_a_warning_with_its_priority():
+    needs = [requirement("R1"), requirement("R2", "Soll"), requirement("R3", "Kann")]
+    result = check_plan(traced(A=["R1"], B=["R1"]), [ANNA], project(), requirements=needs)
+    assert result.ok
+    assert result.warnings == [
+        "Soll-Anforderung 'R2' (Anforderung R2) hat keine Task",
+        "Kann-Anforderung 'R3' (Anforderung R3) hat keine Task",
+    ]
+    assert result.warning_kinds == [("uncovered", "R2"), ("uncovered", "R3")]
+
+
+def test_tasks_without_requirement_are_one_warning():
+    result = check_plan(traced(), [ANNA], project(), requirements=[requirement("R1")])
+    assert result.warnings == [
+        "Muss-Anforderung 'R1' (Anforderung R1) hat keine Task",
+        "2 Tasks dienen keiner Anforderung: A, B",
+    ]
+    assert result.warning_kinds[-1] == ("untraced",)
+
+
+def test_a_requirement_done_earlier_counts_as_covered():
+    # The rest of a project: R2 was served by tasks that are finished and not in this plan.
+    needs = [requirement("R1"), requirement("R2")]
+    result = check_plan(
+        traced(A=["R1"], B=["R1"]), [ANNA], project(), requirements=needs, covered=frozenset({"R2"})
+    )
+    assert result.warnings == []

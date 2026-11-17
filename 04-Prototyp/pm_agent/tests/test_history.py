@@ -7,18 +7,20 @@ import pytest
 from test_tools import PROJECT, TEAM, plan_input
 
 from pm_agent.followup import check_report, facts
-from pm_agent.models import ControlReport, Plan
+from pm_agent.models import ControlReport, Plan, Requirement
 from pm_agent.tracking import (
     Earlier,
     adopt,
     apply_rows,
     control_document,
+    covered_requirements,
     earned_value,
     evaluate,
     finished_again,
     has_progress,
     load,
     progress_rows,
+    requirement_progress,
     rest_project,
     save,
     status_report,
@@ -199,3 +201,95 @@ def test_the_documents_and_the_agents_see_the_history(replanned):
     assert "## Aus früheren Plänen" in control_document(replanned, result)
     sent = json.loads(facts(replanned, result))
     assert [(e["id"], e["finished"]) for e in sent["frueher"]] == [("A", True), ("B", False)]
+
+
+NEEDS = [
+    Requirement(
+        id="R1",
+        title="Räume sehen",
+        story="Als Studentin will ich freie Räume sehen.",
+        priority="Muss",
+        criteria=["Die Liste zeigt freie Räume"],
+    ),
+    Requirement(
+        id="R2",
+        title="Raum buchen",
+        story="Als Studentin will ich buchen.",
+        priority="Soll",
+        criteria=["Die Buchung steht in der Liste"],
+    ),
+]
+
+
+def traced_plan():
+    data = plan_input()
+    data["tasks"][0]["requirement_ids"] = ["R1"]
+    data["tasks"][1]["requirement_ids"] = ["R1", "R2"]
+    return Plan.model_validate(data)
+
+
+def test_adopting_keeps_the_requirements(path):
+    adopt(PROJECT, TEAM, traced_plan(), path=path, requirements=NEEDS)
+    assert load(path).requirements == NEEDS
+    with pytest.raises(InputError, match="unbekannten Anforderung 'R2'"):
+        adopt(PROJECT, TEAM, traced_plan(), path=path, requirements=NEEDS[:1])
+    # Without requirements nothing is traced, as before.
+    assert load(path).requirements == NEEDS  # the refused adoption changed nothing
+    assert adopt(PROJECT, TEAM, PLAN, path=path).requirements == []
+
+
+@pytest.fixture
+def traced_again(path):
+    first = adopt(PROJECT, TEAM, traced_plan(), path=path, requirements=NEEDS)
+    first = apply_rows(
+        first, [{"ID": "A", "Status": "fertig", "Ist (h)": 10}, {"ID": "B", "Status": "in Arbeit"}]
+    )
+    assert covered_requirements(first) == frozenset()  # B serves R1 too and is not done
+    project, rest = rest_project(first, THURSDAY)
+    assert [t.requirement_ids for t in rest.tasks] == [["R1", "R2"]]  # the rest keeps its trace
+    return adopt(project, TEAM, rest, path=path, keep=first, requirements=NEEDS)
+
+
+def test_history_keeps_the_requirements_of_closed_tasks(traced_again):
+    assert [(e.id, e.requirement_ids) for e in traced_again.history] == [
+        ("A", ["R1"]),
+        ("B", ["R1", "R2"]),
+    ]
+    assert covered_requirements(traced_again) == frozenset()  # B goes on, for R1 and R2
+
+
+def test_progress_per_requirement_counts_earlier_plans(traced_again):
+    assert requirement_progress(traced_again) == [
+        {
+            "ID": "R1",
+            "Anforderung": "Räume sehen",
+            "Priorität": "Muss",
+            "Aufgaben": "A, B",
+            "Fertig": "1 von 2",
+        },
+        {
+            "ID": "R2",
+            "Anforderung": "Raum buchen",
+            "Priorität": "Soll",
+            "Aufgaben": "B",
+            "Fertig": "0 von 1",
+        },
+    ]
+
+
+def test_a_requirement_counts_as_done_only_when_all_its_tasks_are(path):
+    adopted = adopt(PROJECT, TEAM, traced_plan(), path=path, requirements=NEEDS)
+    half = apply_rows(adopted, [{"ID": "A", "Status": "fertig"}])
+    assert covered_requirements(half) == frozenset()
+    done = apply_rows(half, [{"ID": "B", "Status": "fertig"}])
+    assert covered_requirements(done) == {"R1", "R2"}
+    # A requirement that means something else now is not covered by the old work.
+    changed = [NEEDS[0], NEEDS[1].model_copy(update={"title": "Export"})]
+    assert covered_requirements(done, changed) == {"R1"}
+    assert covered_requirements(done, NEEDS[:1]) == {"R1"}
+
+
+def test_adopting_again_without_requirements_keeps_the_snapshot(traced_again, path):
+    project, rest = rest_project(traced_again, THURSDAY)
+    again = adopt(project, TEAM, rest, path=path, keep=traced_again)
+    assert again.requirements == NEEDS

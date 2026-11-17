@@ -17,10 +17,17 @@ import streamlit as st
 from anthropic import APIError
 from pydantic import ValidationError
 
+from pm_agent import lifecycle
 from pm_agent.agent import PlanningError, run_planning, run_replanning
 from pm_agent.models import Project
 from pm_agent.planning import check_plan
-from pm_agent.tracking import adopt, finished_again, has_progress, rest_project
+from pm_agent.tracking import (
+    adopt,
+    covered_requirements,
+    finished_again,
+    has_progress,
+    rest_project,
+)
 from pm_agent.tracking import load as load_tracking
 from pm_agent.ui import (
     BUSY_HINT,
@@ -29,6 +36,7 @@ from pm_agent.ui import (
     chip,
     heading,
     on_panel,
+    phase_chip,
     roles,
     round_printer,
     strip,
@@ -59,6 +67,7 @@ from pm_agent.workbench import (
     team_rows,
     to_csv,
     to_markdown,
+    trace_rows,
 )
 
 state = st.session_state
@@ -93,6 +102,8 @@ def init() -> None:
         chat=[],
         proposal=None,
         rounds_start=None,
+        # Requirements served by finished work outside the current plan (its rest).
+        covered=frozenset(),
     )
 
 
@@ -162,18 +173,39 @@ def reset_table() -> None:
     )
 
 
-def open_run(path) -> None:
-    """Callback: runs before the widgets, so it may fill their keys."""
-    project, team, plan, record = load_run(path)
-    state.team_df = pd.DataFrame(team_rows(team), columns=TEAM_COLUMNS)
-    state.team_current = None
-    state.team_version += 1
+def fill_project(project: Project) -> None:
+    """Put a project into the fields of step 2. Only before they are drawn: from a callback,
+    or from code that runs before the widgets."""
     state.update(
         idea=project.idea,
         start=project.start_date,
         deadline=project.deadline,
         free_days=free_days_text(project.free_days),
     )
+
+
+def take_dates(project: Project) -> None:
+    """Callback: idea and dates from the Projektauftrag. Free days stay: they are entered
+    here."""
+    state.update(idea=project.idea, start=project.start_date, deadline=project.deadline)
+
+
+def lifecycle_requirements():
+    """The approved requirements, read again: callbacks run before the page sets `needs`."""
+    try:
+        return lifecycle.approved_requirements(lifecycle.load())
+    except InputError:
+        return None  # the project path above the page says why
+
+
+def open_run(path) -> None:
+    """Callback: runs before the widgets, so it may fill their keys."""
+    project, team, plan, record = load_run(path)
+    state.team_df = pd.DataFrame(team_rows(team), columns=TEAM_COLUMNS)
+    state.team_current = None
+    state.team_version += 1
+    fill_project(project)
+    state.covered = frozenset()  # a whole plan: nothing done outside it
     show_plan(plan, record["rounds"], f"Protokoll {path.name}", record.get("seconds"))
     forget_conversation()
     state.step = STEPS[3]  # straight to the result
@@ -190,14 +222,11 @@ def load_rest() -> None:
     state.team_df = pd.DataFrame(team_rows(adopted.team), columns=TEAM_COLUMNS)
     state.team_current = None
     state.team_version += 1
-    state.update(
-        idea=project.idea,
-        start=project.start_date,
-        deadline=project.deadline,
-        free_days=free_days_text(project.free_days),
-    )
+    fill_project(project)
     show_plan(plan, [], "Rest des übernommenen Projekts", None)
     forget_conversation()
+    # What finished tasks served needs no new task in the rest.
+    state.covered = covered_requirements(adopted, lifecycle_requirements())
     state.step = STEPS[4]  # straight to the step with the conversation
 
 
@@ -266,6 +295,13 @@ if state.pop("rest_requested", False):  # set by the Kontrolle page
         load_rest()
     except InputError as err:
         rest_error = str(err)
+try:
+    life = lifecycle.load()
+except InputError:
+    life = None  # the project path above the page says why
+needs = lifecycle.approved_requirements(life)
+# Only with approved requirements does the plan get traced; without, all stays as before.
+trace = {"requirements": needs, "covered": state.covered} if needs is not None else {}
 st.header("Planung")
 st.caption(
     "Claude schlägt einen Plan vor, Python prüft ihn deterministisch, die Projektleitung "
@@ -346,6 +382,15 @@ with tabs[1]:
     st.subheader("Projekt")
     st.html(roles(du="beschreibst Ziel und Termine"))
     st.caption("Was soll bis wann entstehen? Aus der Idee leitet Claude die Aufgaben ab.")
+    if life is not None and life.project is not None:
+        st.button(
+            "Eckdaten aus dem Projektauftrag übernehmen",
+            icon=":material/input:",
+            on_click=take_dates,
+            args=(life.project,),
+            help="Idee, Start und Deadline, wie sie auf der Seite Projektauftrag stehen. "
+            "Freie Tage bleiben, wie sie hier stehen.",
+        )
     idea = st.text_area(
         "Projektidee",
         key="idea",
@@ -426,7 +471,7 @@ with tabs[2]:
                 started = time.monotonic()
                 failure = None
                 try:
-                    plan = run_planning(project, team, on_round=on_round)
+                    plan = run_planning(project, team, on_round=on_round, **trace)
                 except PlanningError as err:
                     failure = str(err)
                 except APIError as err:
@@ -471,7 +516,7 @@ with tabs[2]:
         next_step("Ergebnis ansehen", STEPS[3], False, "to_result")
 
 # The current check, shared by steps 4–6. No LLM: it runs on every rerun.
-result = check_plan(state.plan, team, project) if state.plan and team and project else None
+result = check_plan(state.plan, team, project, **trace) if state.plan and team and project else None
 
 # 4 · Ergebnis -----------------------------------------------------------------------------
 with tabs[3]:
@@ -576,6 +621,16 @@ with tabs[3]:
                 st.markdown("\n".join(f"- {r}" for r in state.plan.risks))
             else:
                 st.caption("Der Plan nennt keine Risiken.")
+
+        with st.container(border=True, key="panel-trace"):
+            heading("checklist", "Anforderungen und Aufgaben", python="ordnet zu")
+            if needs is None:
+                st.caption(
+                    "Keine freigegebenen Anforderungen: Die Aufgaben sind keiner Anforderung "
+                    "zugeordnet. Lege sie auf der Seite Anforderungen an und gib sie frei."
+                )
+            else:
+                st.dataframe(pd.DataFrame(trace_rows(needs, state.plan)), hide_index=True)
 
         with st.container(border=True, key="panel-reasons"):
             heading("assignment_ind", "Zuweisungen und Begründungen")
@@ -770,7 +825,7 @@ with tabs[4]:
                         failure = None
                         try:
                             changed_plan = run_replanning(
-                                project, team, state.plan, wish, on_round=on_change_round
+                                project, team, state.plan, wish, on_round=on_change_round, **trace
                             )
                         except PlanningError as err:
                             failure = str(err)
@@ -800,7 +855,7 @@ with tabs[4]:
                     st.rerun()
 
             if proposal is not None:
-                proposed = check_plan(proposal["plan"], team, project) if result else None
+                proposed = check_plan(proposal["plan"], team, project, **trace) if result else None
                 with st.chat_message("assistant"):
                     st.markdown("**Vorschlag von Claude, von Python geprüft**")
                     st.text(proposal["wish"])
@@ -910,7 +965,7 @@ with tabs[5]:
             with st.container(horizontal=True):
                 st.download_button(
                     "Als Markdown herunterladen",
-                    to_markdown(project, state.plan, result),
+                    to_markdown(project, state.plan, result, needs),
                     file_name=f"projektplan-{stamp}.md",
                     mime="text/markdown",
                     on_click=record_export,
@@ -983,7 +1038,7 @@ with tabs[5]:
                 disabled=bool(result.errors) or not overwrite,
             ):
                 try:
-                    adopt(project, team, state.plan, keep=keep)
+                    adopt(project, team, state.plan, keep=keep, requirements=needs)
                 except InputError as err:  # the checks above already keep the button off
                     st.error(f"Nicht übernommen: {err}.")
                 except OSError as err:
@@ -995,7 +1050,7 @@ with tabs[5]:
                     st.success("Übernommen. Weiter auf den Seiten Durchführung und Kontrolle.")
 
         with st.expander("Vorschau Markdown"):
-            st.markdown(to_markdown(project, state.plan, result))
+            st.markdown(to_markdown(project, state.plan, result, needs))
 
 # Where the planning stands, above the steps.
 if state.plan is None:
@@ -1028,6 +1083,7 @@ with status:
             chip(people, "on" if team else ""),
             chip("Zustimmung", "on" if consent else ""),
             chip("Projekt", "on" if project is not None else ""),
+            phase_chip("Anforderungen", lifecycle.requirements_state(life)),
             plan_chip,
         )
     )

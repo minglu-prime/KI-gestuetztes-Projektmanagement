@@ -154,3 +154,24 @@ def test_replanning_needs_a_wish(api, tmp_path):
     with pytest.raises(PlanningError, match="Beschreibe, was sich ändern soll"):
         run_replanning(PROJECT, TEAM, Plan.model_validate(plan_input()), "  ", log_dir=tmp_path)
     assert requests == []  # nothing was sent
+
+
+def test_planning_sends_the_requirements_and_logs_them(api, tmp_path):
+    from test_tools import NEEDS
+
+    replies, requests = api
+    replies += [reply([submit(plan_input(), "call_1")])]
+    run_planning(PROJECT, TEAM, log_dir=tmp_path, requirements=NEEDS, covered=frozenset({"R7"}))
+    sent = requests[0]["messages"][0]["content"]
+    sent = sent if isinstance(sent, str) else json.dumps(sent, ensure_ascii=False)
+    assert "Freigegebene Anforderungen" in sent and "Raum buchen" in sent
+    assert "Schon durch fertige Arbeit erfüllt: R7" in sent
+    assert read_log(tmp_path)["requirements"] == [n.model_dump(mode="json") for n in NEEDS]
+
+
+def test_planning_without_requirements_sends_and_logs_none(api, tmp_path):
+    replies, requests = api
+    replies += [reply([submit(plan_input(), "call_1")])]
+    run_planning(PROJECT, TEAM, log_dir=tmp_path)
+    assert "Anforderungen" not in json.dumps(requests[0]["messages"], ensure_ascii=False)
+    assert "requirements" not in read_log(tmp_path)
