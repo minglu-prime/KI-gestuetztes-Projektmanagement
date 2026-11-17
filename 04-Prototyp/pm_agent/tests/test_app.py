@@ -1980,3 +1980,50 @@ def test_test_cases_from_claude_are_checked_and_approved(site, monkeypatch):
     at = at.run()
     assert lifecycle.approved_cases(lifecycle.load()) == cases()
     assert "✓ Testplan: freigegeben<" in chips(at)
+
+
+def test_a_failed_case_needs_a_defect_which_can_reopen_its_task(tracked):
+    from test_lifecycle import design
+    from test_testplan import cases
+
+    lifecycle.save(
+        lifecycle.Lifecycle(project=PROJECT, requirements=NEEDS, design=design(), cases=cases())
+    )
+    at = tracked.switch_page("views/testlauf.py").run()
+    assert not at.exception
+    assert any("nicht freigegeben" in w.value for w in at.warning)
+
+    at.selectbox(key="test_case").set_value("T2").run()
+    at.radio(key="test_result").set_value("fehlgeschlagen").run()
+    button(at, "Ergebnis speichern").click()
+    at = at.run()
+    assert [(r.case_id, r.result) for r in tracking.load().results] == [("T2", "fehlgeschlagen")]
+    assert any("keinen Fehlereintrag" in e.value for e in at.error)
+
+    at.selectbox(key="defect_case").set_value("T2").run()
+    at.radio(key="defect_severity").set_value("schwer").run()
+    button(at, "Fehler erfassen").click()
+    at = at.run()
+    assert any("braucht eine Aufgabe" in e.value for e in at.error)
+    assert tracking.load().defects == []
+
+    at.text_input(key="defect_cause").input("Schema fehlt").run()
+    at.selectbox(key="defect_task").set_value("B").run()
+    button(at, "Fehler erfassen").click()
+    at = at.run()
+    (defect,) = tracking.load().defects
+    assert (defect.id, defect.task_id, defect.status) == ("F1", "B", "offen")
+    assert not any("keinen Fehlereintrag" in e.value for e in at.error)
+
+    button(at, "F1: Aufgabe B wieder öffnen").click()
+    at = at.run()
+    assert tracking.load().progress["B"].status == "in Arbeit"
+    button(at, "F1: behoben").click()
+    at = at.run()
+    assert tracking.load().defects[0].status == "behoben"
+
+
+def test_without_a_test_plan_the_test_page_leads_to_it(tracked):
+    at = tracked.switch_page("views/testlauf.py").run()
+    assert not at.exception
+    assert any("Noch kein Testplan" in i.value for i in at.info)

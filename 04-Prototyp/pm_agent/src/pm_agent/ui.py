@@ -144,6 +144,7 @@ JOURNEY = [
     ("testplan", "Testplan", "Python prüft die Abdeckung"),
     ("planung", "Planen", "Claude entwirft, du übernimmst"),
     ("durchfuehrung", "Ausführen", "du trägst den Fortschritt ein"),
+    ("testlauf", "Testen", "du trägst Ergebnisse und Fehler ein"),
     ("kontrolle", "Prüfen", "Python rechnet, Claude bewertet"),
 ]
 PAGES = {
@@ -153,6 +154,7 @@ PAGES = {
     "testplan": ("views/testplan.py", "Zum Testplan"),
     "planung": ("views/planung.py", "Zur Planung"),
     "durchfuehrung": ("views/durchfuehrung.py", "Zur Durchführung"),
+    "testlauf": ("views/testlauf.py", "Zum Test"),
     "kontrolle": ("views/kontrolle.py", "Zur Kontrolle"),
 }
 
@@ -199,6 +201,7 @@ def journey(page: str) -> None:
         **{slug: phase == "freigegeben" for slug, phase in phases.items()},
         "planung": tracking is not None,
         "durchfuehrung": tracking is not None and has_progress(tracking),
+        "testlauf": tracking is not None and bool(tracking.results),
         "kontrolle": False,  # checking never ends while the project runs
     }
     # Not approved: a draft or a changed one, or skipped although the project goes on.
