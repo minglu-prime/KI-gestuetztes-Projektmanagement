@@ -36,31 +36,34 @@ vermuteter Ursache, der in die Durchführung zurückgeht.
 ## Datenformat
 
 ```python
-class TestCase(_Model):            # models.py
-    id: Ref                        # T1, T2 …
+class TestCase(_Model):  # models.py
+    id: Ref  # T1, T2 …
     title: NonEmpty
     kind: Literal["Akzeptanz", "Integration"]
-    criteria: list[Ref] = []       # R1.1 … (Akzeptanzkriterien)
-    interface: Ref | None = None   # S1 (Integration)
+    criteria: list[Ref] = []  # R1.1 … (Akzeptanzkriterien)
+    interface: Ref | None = None  # S1 (Integration)
     error_code: Ref | None = None  # 409: der Fall löst diesen Fehler aus
-    steps: list[NonEmpty]          # was man tut
-    expected: NonEmpty             # was herauskommen muss
+    steps: list[NonEmpty]  # was man tut
+    expected: NonEmpty  # was herauskommen muss
 
-class TestPlan(_Model):            # in vorhaben.json: Lifecycle.tests, tests_ok
+
+class TestPlan(_Model):  # in vorhaben.json: Lifecycle.tests, tests_ok
     cases: list[TestCase]
 
-class TestRun(BaseModel):          # in projekt.json: Tracking.test_runs
+
+class TestRun(BaseModel):  # in projekt.json: Tracking.test_runs
     case_id: str
     result: Literal["bestanden", "fehlgeschlagen", "blockiert"]
     on: date
     note: str = ""
 
-class Defect(BaseModel):           # in projekt.json: Tracking.defects
-    id: str                        # F1 …
+
+class Defect(BaseModel):  # in projekt.json: Tracking.defects
+    id: str  # F1 …
     case_id: str
     severity: Literal["schwer", "mittel", "leicht"]
-    cause: str                     # vermutete Ursache
-    task_id: str | None            # die Aufgabe, die es beheben soll
+    cause: str  # vermutete Ursache
+    task_id: str | None  # die Aufgabe, die es beheben soll
     status: Literal["offen", "behoben"]
 ```
 

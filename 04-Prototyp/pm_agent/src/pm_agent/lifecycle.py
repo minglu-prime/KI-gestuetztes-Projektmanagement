@@ -202,6 +202,12 @@ def check_requirements(requirements: Requirements, charter: Charter | None) -> C
         for rid in dict.fromkeys(ids)
         if ids.count(rid) > 1
     ]
+    for r in items:
+        errors += [
+            f"Anforderung '{r.id}': das Akzeptanzkriterium '{cid}' ist mehrfach vergeben"
+            for cid in dict.fromkeys(c.id for c in r.criteria)
+            if [c.id for c in r.criteria].count(cid) > 1
+        ]
     if not any(r.priority == "Muss" for r in items):
         errors.append("Es gibt keine Muss-Anforderung: mindestens eine Muss-Anforderung ist nötig")
     if charter is None:
@@ -358,7 +364,7 @@ def requirement_rows(requirements: Requirements) -> list[dict[str, Any]]:
             "Titel": r.title,
             "User Story": r.story,
             "Priorität": r.priority,
-            "Akzeptanzkriterien": "; ".join(r.criteria),
+            "Akzeptanzkriterien": "; ".join(f"{c.id}: {c.text}" for c in r.criteria),
             "Erfolgskriterien": ", ".join(r.sources),
         }
         for r in requirements.items
@@ -379,7 +385,7 @@ def rows_to_requirements(rows: list[dict[str, Any]]) -> Requirements:
                     title=_cell(row.get("Titel")),
                     story=_cell(row.get("User Story")),
                     priority=_cell(row.get("Priorität")),
-                    criteria=_split(row.get("Akzeptanzkriterien"), ";"),
+                    criteria=_criteria(rid, row.get("Akzeptanzkriterien")),
                     sources=_split(row.get("Erfolgskriterien"), ","),
                 )
             )
@@ -570,6 +576,22 @@ def rows_to_design(rows: dict[str, list[dict[str, Any]]]) -> Design:
         return Design(components=components, interfaces=interfaces, flows=flows)
     except ValidationError as err:
         raise InputError(f"Entwurf: {_reason(err)}") from err
+
+
+def _criteria(rid: str, cell: Any) -> list[Any]:
+    """The acceptance criteria of a table cell: "R1.1: text" keeps its ID, a plain text
+    gets the next number. Only "<requirement ID>.<n>:" reads as an ID; any other colon is
+    part of the text."""
+    criteria = []
+    for part in _split(cell, ";"):
+        cid, colon, text = part.partition(":")
+        cid = cid.strip()
+        number = cid.removeprefix(f"{rid}.")
+        if colon and cid.startswith(f"{rid}.") and number.isdigit():
+            criteria.append({"id": cid, "text": text.strip()})
+        else:
+            criteria.append(part)
+    return criteria
 
 
 def criteria_lines(criteria: list[Criterion]) -> str:
@@ -769,7 +791,7 @@ def requirements_document(life: Lifecycle) -> str:
     )
     single = "\n\n".join(
         f"### {_md(r.id)} · {_md(r.title)}\n\n*{_md(r.story)}* ({r.priority})\n\n"
-        + "\n".join(f"- {_md(r.id)}.{n} {_md(text)}" for n, text in enumerate(r.criteria, 1))
+        + "\n".join(f"- {_md(c.id)} {_md(c.text)}" for c in r.criteria)
         for r in items
     )
     if life.charter is None:

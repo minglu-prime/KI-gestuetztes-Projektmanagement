@@ -171,3 +171,20 @@ def test_a_contract_rejects_bad_field_names_types_and_errors(make):
 def test_a_contract_field_is_required_unless_marked():
     field = DataField(name="raum_id", type="Liste[Termin]")
     assert field.required is True
+
+
+def test_acceptance_criteria_get_fixed_ids_from_their_requirement():
+    from pm_agent.models import Requirement
+
+    fresh = Requirement.model_validate(
+        requirement(criteria=["Liste zeigt sie", "Antwort: schnell"])
+    )
+    assert [(c.id, c.text) for c in fresh.criteria] == [
+        ("R1.1", "Liste zeigt sie"),
+        ("R1.2", "Antwort: schnell"),  # a colon in the text is no ID
+    ]
+    # Kept IDs stay; a new one gets the next number, not a gap left by a deleted one.
+    edited = Requirement.model_validate(
+        requirement(criteria=[{"id": "R1.2", "text": "Antwort: schnell"}, "Neu"])
+    )
+    assert [c.id for c in edited.criteria] == ["R1.2", "R1.3"]
