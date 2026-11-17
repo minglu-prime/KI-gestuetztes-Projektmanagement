@@ -16,7 +16,14 @@ from typing import Any
 from pm_agent.agent import LOG_DIR, run_submission
 from pm_agent.models import ControlReport, Member, StatusSummary
 from pm_agent.tools import Submission
-from pm_agent.tracking import Evaluation, Forecast, Tracking, evaluate, forecast
+from pm_agent.tracking import (
+    Evaluation,
+    Forecast,
+    Tracking,
+    evaluate,
+    forecast,
+    requirement_progress,
+)
 
 
 def run_status_summary(
@@ -173,6 +180,7 @@ def facts(tracking: Tracking, evaluation: Evaluation) -> str:
                 "planned_end": t.planned_end.isoformat(),
                 "finished_on": t.finished_on.isoformat() if t.finished_on else None,
                 "depends_on": plan[t.id].depends_on,
+                "requirement_ids": plan[t.id].requirement_ids,
             }
             for t in evaluation.tasks
         ],
@@ -180,6 +188,8 @@ def facts(tracking: Tracking, evaluation: Evaluation) -> str:
         # booked part of a task whose rest is in "aufgaben".
         "frueher": [e.model_dump(mode="json") for e in evaluation.history],
         "je_person": evaluation.by_member,
+        # Empty when no approved requirements were adopted with the plan.
+        "je_anforderung": requirement_progress(tracking),
         "team": [m.model_dump(mode="json") for m in tracking.team],
         "risiken": tracking.plan.risks,
     }

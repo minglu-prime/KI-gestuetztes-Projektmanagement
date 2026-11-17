@@ -312,3 +312,9 @@ def test_without_requirements_the_reports_say_none_were_adopted(path):
     result = evaluate(tracking, THURSDAY)
     for report in (status_report(tracking, result), control_document(tracking, result)):
         assert "Keine Anforderungen mit dem Plan übernommen." in report
+
+
+def test_the_agents_get_the_trace_and_the_progress_per_requirement(traced_again):
+    sent = json.loads(facts(traced_again, evaluate(traced_again, THURSDAY)))
+    assert [t["requirement_ids"] for t in sent["aufgaben"]] == [["R1", "R2"]]
+    assert sent["je_anforderung"] == requirement_progress(traced_again)
