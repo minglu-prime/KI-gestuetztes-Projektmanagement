@@ -2156,3 +2156,15 @@ def test_the_consent_for_lessons_names_what_is_sent(tracked):
     at = tracked.switch_page("views/abschluss.py").run()
     label = at.checkbox(key="consent_abschluss").label
     assert "Wochenrückblicke" in label and "Skills" not in label
+
+
+def test_the_startseite_leads_to_the_test_page_for_open_defects(tracked):
+    from pm_agent.tracking import Defect, record_defect
+
+    done = tracking.apply_rows(
+        tracking.load(), [{"ID": "A", "Status": "fertig"}, {"ID": "B", "Status": "fertig"}]
+    )
+    tracking.save(record_defect(done, Defect(case_id="T1", severity="mittel", cause="x")))
+    at = tracked.switch_page("views/startseite.py").run()
+    assert not at.exception
+    assert button(at, "Fehler beheben").proto.type == "primary"

@@ -140,3 +140,8 @@ with st.container(key="project"):
                     type="primary" if where == "kontrolle" else "secondary",
                 ):
                     st.switch_page("views/kontrolle.py")
+                # Only when open defects are what is next: then they block the end.
+                if where == "testlauf" and st.button(
+                    "Fehler beheben", icon=":material/bug_report:", type="primary"
+                ):
+                    st.switch_page("views/testlauf.py")
