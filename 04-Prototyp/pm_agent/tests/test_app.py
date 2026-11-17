@@ -780,12 +780,14 @@ def test_nonzero_progress_survives_reopen_and_reaches_control_and_documents(flow
             "actual_hours": 10,
             "remaining_hours": None,
             "note": "Schema erneut geprüft",
+            "finished_on": date.today().isoformat(),  # set on saving
         },
         "B": {
             "status": "in Arbeit",
             "actual_hours": 4,
             "remaining_hours": None,
             "note": "Integration läuft",
+            "finished_on": None,
         },
     }
     restored = tracking.load()

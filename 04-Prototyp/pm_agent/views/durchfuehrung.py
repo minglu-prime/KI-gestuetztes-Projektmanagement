@@ -118,6 +118,11 @@ with st.container(border=True, key="panel-progress"):
         disabled=PROGRESS_READ_ONLY,
         column_config={
             "Status": st.column_config.SelectboxColumn(options=STATUSES, required=True),
+            "Fertig am": st.column_config.DateColumn(
+                format="DD.MM.YYYY",
+                help="Wird beim Speichern auf heute gesetzt, wenn die Aufgabe fertig wird. "
+                "Nachtragen, wenn sie früher fertig war.",
+            ),
             "Ist (h)": st.column_config.NumberColumn(min_value=0.0, step=0.5),
             "Rest (h)": st.column_config.NumberColumn(
                 min_value=0.0,
@@ -129,9 +134,9 @@ with st.container(border=True, key="panel-progress"):
     )
     state.progress_current = (tracking, edited)
     st.caption(
-        "Status, Ist-Stunden, Rest und Notiz lassen sich ändern. Änderungen gelten erst nach "
-        "dem Speichern. „Prognose Ende“ zeigt, wann die Aufgabe nach heutigem Stand fertig "
-        "wird."
+        "Status, Fertig am, Ist-Stunden, Rest und Notiz lassen sich ändern. Änderungen gelten "
+        "erst nach dem Speichern. „Prognose Ende“ zeigt, wann die Aufgabe nach heutigem Stand "
+        "fertig wird."
     )
     history_table(tracking)
     if st.button("Fortschritt speichern", type="primary", icon=":material/save:"):

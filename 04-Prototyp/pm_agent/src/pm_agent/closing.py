@@ -15,6 +15,7 @@ from pydantic import ValidationError
 from pm_agent.agent import LOG_DIR, run_submission
 from pm_agent.lifecycle import Check
 from pm_agent.models import BacklogItem, Cases, Charter, Design, Lesson, Lessons
+from pm_agent.planning import working_shift
 from pm_agent.tools import Submission
 from pm_agent.tracking import (
     Evaluation,
@@ -189,6 +190,72 @@ def run_lessons(
     return run_submission("lessons", submission, data, log_dir, on_round)
 
 
+def _days(shift: int) -> str:
+    """-2 -> "2 Arbeitstage vor Plan"."""
+    if shift == 0:
+        return "wie geplant"
+    count = f"{abs(shift)} Arbeitstag{'' if abs(shift) == 1 else 'e'}"
+    return f"{count} {'nach' if shift > 0 else 'vor'} Plan"
+
+
+def actual_end(tracking: Tracking, evaluation: Evaluation) -> str:
+    """The day the last task was finished, against the planned end. Tasks finished before the
+    day was recorded have none: then the end is a lower bound, and the text says so."""
+    tasks = evaluation.tasks
+    finished = [t for t in tasks if t.status == "fertig"]
+    if len(finished) < len(tasks):
+        return f"noch offen ({len(finished)} von {len(tasks)} Aufgaben fertig)"
+    earlier = [e for e in tracking.history if e.finished]
+    days = [t.finished_on for t in finished] + [e.finished_on for e in earlier]
+    known = [d for d in days if d is not None]
+    if not known:
+        return "unbekannt (keine Fertigdaten erfasst)"
+    last = max(known)
+    planned = max(t.planned_end for t in tasks)
+    text = f"{_date(last)} ({_days(working_shift(tracking.project, planned, last))})"
+    if unknown := len(days) - len(known):
+        text += (
+            f". {unknown} fertige Aufgabe{'' if unknown == 1 else 'n'} ohne Fertigdatum: "
+            "Das tatsächliche Ende kann später liegen"
+        )
+    return text
+
+
+def late_tasks(tracking: Tracking, evaluation: Evaluation) -> str:
+    """Tasks finished after their planned end, in this plan and in earlier ones, as a
+    Markdown table. Finished tasks without a day may have been late too: then it says so."""
+    finished = [
+        (e.id, e.title, e.planned_end, e.finished_on) for e in tracking.history if e.finished
+    ] + [
+        (t.id, t.title, t.planned_end, t.finished_on)
+        for t in evaluation.tasks
+        if t.status == "fertig"
+    ]
+    rows = []
+    for task_id, title, planned, day in finished:
+        if planned is None or day is None:
+            continue
+        shift = working_shift(tracking.project, planned, day)
+        if shift > 0:
+            cells = [task_id, title, _date(planned), _date(day), str(shift)]
+            rows.append("| " + " | ".join(_md(cell) for cell in cells) + " |")
+    unknown = sum(planned is None or day is None for _, _, planned, day in finished)
+    note = (
+        f"Von {unknown} fertigen Aufgabe{'' if unknown == 1 else 'n'} ohne Fertigdatum ist "
+        "unbekannt, ob sie rechtzeitig fertig "
+        f"{'wurde' if unknown == 1 else 'wurden'}."
+        if unknown
+        else ""
+    )
+    if not rows:
+        return note or "Keine Aufgabe wurde später fertig als geplant."
+    head = [
+        "| ID | Aufgabe | Geplantes Ende | Fertig am | Verzug (Arbeitstage) |",
+        "|---|---|---|---|---|",
+    ]
+    return "\n".join(head + rows) + (f"\n\n{note}" if note else "")
+
+
 def closing_document(
     tracking: Tracking,
     cases: Cases | None,
@@ -235,6 +302,8 @@ def closing_document(
         start=_date(project.start_date),
         deadline=_date(project.deadline),
         planende=_date(max(t.planned_end for t in evaluation.tasks)),
+        istende=actual_end(tracking, evaluation),
+        spaet=late_tasks(tracking, evaluation),
         abnahme="\n".join(rows) or f"| {DASH} | Keine Anforderungen | | | | |",
         fortschritt=percent(evaluation.progress),
         plan_h=hours_text(evaluation.planned_hours),

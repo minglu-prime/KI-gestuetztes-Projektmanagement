@@ -73,7 +73,7 @@ def test_a_plan_with_errors_cannot_be_adopted(tmp_path):
 
 
 def test_recorded_progress_is_kept_and_saved(tracking, tmp_path):
-    updated = apply_rows(tracking, ROWS)
+    updated = apply_rows(tracking, ROWS, today=date(2026, 11, 12))
     save(updated, tmp_path / "projekt.json")
 
     assert load(tmp_path / "projekt.json") == updated
@@ -83,6 +83,7 @@ def test_recorded_progress_is_kept_and_saved(tracking, tmp_path):
         "actual_hours": 10,
         "remaining_hours": None,
         "note": "Schema zweimal geändert",
+        "finished_on": date(2026, 11, 12),
     }
     assert updated.progress["B"].note == ""
 
@@ -241,7 +242,7 @@ def progressed(tracking, **status):
     for task_id, state in status.items():
         name, hours = state if isinstance(state, tuple) else (state, 0)
         rows.append({"ID": task_id, "Status": name, "Ist (h)": hours})
-    return apply_rows(tracking, rows)
+    return apply_rows(tracking, rows, today=date(2026, 11, 10))
 
 
 def test_on_schedule_the_forecast_is_the_plan(tracking):
@@ -673,7 +674,7 @@ def test_the_progress_table_says_when_each_task_is_expected_to_end(tracking):
         ("B", "11.11.2026", "12.11.2026"),
     ]
     done = progress_rows(progressed(tracking, A="fertig"), today=date(2026, 11, 10))
-    assert [r["Prognose Ende"] for r in done] == ["fertig", "11.11.2026"]
+    assert [r["Prognose Ende"] for r in done] == ["fertig am 10.11.2026", "11.11.2026"]
     # No forecast, no dates: the reason is on the Kontrolle page.
     absurd = apply_rows(tracking, [{"ID": "B", "Status": "in Arbeit", "Rest (h)": 20_000_000}])
     assert [r["Prognose Ende"] for r in progress_rows(absurd, today=date(2026, 11, 10))] == [
@@ -691,9 +692,10 @@ def test_a_finished_task_reads_finished_even_when_the_rest_cannot_be_forecast(tr
             {"ID": "A", "Status": "fertig", "Ist (h)": 8},
             {"ID": "B", "Status": "in Arbeit", "Rest (h)": 20_000_000},
         ],
+        today=date(2026, 11, 10),
     )
     assert [r["Prognose Ende"] for r in progress_rows(absurd, today=date(2026, 11, 10))] == [
-        "fertig",
+        "fertig am 10.11.2026",
         "nicht berechenbar",
     ]
 
