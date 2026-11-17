@@ -253,7 +253,8 @@ class Case(_Model):
     criteria: list[Ref] = Field(default_factory=list)  # R1.1 …
     interface: Ref | None = None  # S1
     error_code: Ref | None = None  # 409
-    steps: list[NonEmpty] = Field(min_length=1)
+    # No semicolon: it separates the steps in the table.
+    steps: list[Annotated[NonEmpty, AfterValidator(_no_semicolon)]] = Field(min_length=1)
     expected: NonEmpty
 
 

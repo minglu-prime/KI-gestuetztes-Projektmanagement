@@ -20,6 +20,7 @@ from pydantic import BaseModel, ConfigDict, ValidationError
 from pm_agent.agent import LOG_DIR, run_submission
 from pm_agent.diagram import sequence_mermaid
 from pm_agent.models import (
+    Case,
     Cases,
     Charter,
     Component,
@@ -691,6 +692,65 @@ def _criteria(rid: str, cell: Any) -> list[Any]:
     return criteria
 
 
+CASE_COLUMNS = [
+    "ID",
+    "Titel",
+    "Art",
+    "Kriterien",
+    "Schnittstelle",
+    "Fehlercode",
+    "Schritte",
+    "Erwartet",
+]
+
+
+def case_rows(cases: Cases) -> list[dict[str, Any]]:
+    """The test cases as rows of the table editor: criteria separated by commas, steps by
+    semicolons."""
+    return [
+        {
+            "ID": c.id,
+            "Titel": c.title,
+            "Art": c.kind,
+            "Kriterien": ", ".join(c.criteria),
+            "Schnittstelle": c.interface or "",
+            "Fehlercode": c.error_code or "",
+            "Schritte": "; ".join(c.steps),
+            "Erwartet": c.expected,
+        }
+        for c in cases.cases
+    ]
+
+
+def rows_to_cases(rows: list[dict[str, Any]]) -> Cases:
+    """The edited table as test cases. Raises InputError naming each unreadable row."""
+    items, errors = [], []
+    for number, row in enumerate(rows, start=1):
+        cid = _cell(row.get("ID"))
+        if not cid and not _cell(row.get("Titel")):
+            continue  # an empty row the editor adds
+        try:
+            items.append(
+                Case(
+                    id=cid,
+                    title=_cell(row.get("Titel")),
+                    kind=_cell(row.get("Art")),
+                    criteria=_split(row.get("Kriterien"), ","),
+                    interface=_cell(row.get("Schnittstelle")) or None,
+                    error_code=_cell(row.get("Fehlercode")) or None,
+                    steps=_split(row.get("Schritte"), ";"),
+                    expected=_cell(row.get("Erwartet")),
+                )
+            )
+        except ValidationError as err:
+            errors.append(f"Zeile {number} ({cid or 'ohne ID'}): {_reason(err)}")
+    if errors:
+        raise InputError("\n".join(errors))
+    if not items:
+        raise InputError("Noch kein Testfall: Trag mindestens eine Zeile ein.")
+    return Cases(cases=items)
+
+
 def criteria_lines(criteria: list[Criterion]) -> str:
     """Success criteria as text, one "K1: text" per line, for a text area."""
     return "\n".join(f"{c.id}: {c.text}" for c in criteria)
@@ -851,6 +911,100 @@ def design_document(life: Lifecycle) -> str:
         bausteine=parts,
         schnittstellen=contracts or "| – | | | | | | |",
         ablaeufe=flows,
+    )
+
+
+def run_cases(
+    project: Project,
+    requirements: Requirements | None,
+    design: Design | None,
+    log_dir: Path | None = LOG_DIR,
+    on_round: Callable[[dict[str, Any]], None] | None = None,
+) -> Cases:
+    """Claude drafts the test cases from the acceptance criteria and the contracts; Python
+    rejects them until `check_cases` has no errors. No team data goes to the API. Raises
+    AgentError."""
+    submission = Submission(
+        name="submit_testplan",
+        noun="Testplan",
+        description=(
+            "Reicht den Testplan ein. Lehnt ihn ab, wenn ein Akzeptanzkriterium einer "
+            "Muss-Anforderung keinen Testfall hat, ein Fall Unbekanntes nennt, ein Fall nicht "
+            "sagt, was er prüft, oder eine ID doppelt vorkommt, und nennt die Gründe."
+        ),
+        schema=Cases,
+        check=lambda cases: check_cases(cases, requirements, design).errors,
+    )
+    data = json.dumps(
+        {
+            "projekt": project.model_dump(mode="json"),
+            "anforderungen": requirements.model_dump(mode="json") if requirements else None,
+            "schnittstellen": (
+                [i.model_dump(mode="json") for i in design.interfaces] if design else None
+            ),
+        },
+        ensure_ascii=False,
+        indent=2,
+    )
+    return run_submission("testplan", submission, data, log_dir, on_round)
+
+
+def cases_document(life: Lifecycle) -> str:
+    """The test plan as Markdown: the cases, and which cases cover each criterion and each
+    interface."""
+    cases, project = life.cases, life.project
+    if cases is None or project is None:
+        raise InputError("Ohne Projektdaten und Testfälle gibt es kein Dokument.")
+    items = cases.cases
+    overview = "\n".join(
+        "| "
+        + " | ".join(
+            _md(cell) or "–"
+            for cell in [
+                c.id,
+                c.title,
+                c.kind,
+                ", ".join(c.criteria),
+                c.interface or "",
+                c.error_code or "",
+            ]
+        )
+        + " |"
+        for c in items
+    )
+    single = "\n\n".join(
+        f"### {_md(c.id)} · {_md(c.title)}\n\n"
+        + "\n".join(f"{n}. {_md(step)}" for n, step in enumerate(c.steps, 1))
+        + f"\n\n**Erwartet:** {_md(c.expected)}"
+        for c in items
+    )
+    if life.requirements is None:
+        criteria = "Keine Anforderungen: Die Abdeckung lässt sich nicht zeigen."
+    else:
+        criteria = _items(
+            f"{a.id} ({a.text}): "
+            + (", ".join(c.id for c in items if a.id in c.criteria) or "kein Testfall")
+            for r in life.requirements.items
+            for a in r.criteria
+        )
+    if life.design is None:
+        contracts = "Kein Entwurf: Die Abdeckung lässt sich nicht zeigen."
+    else:
+        contracts = _items(
+            f"{i.id} ({i.name}): "
+            + (", ".join(c.id for c in items if c.interface == i.id) or "kein Testfall")
+            for i in life.design.interfaces
+        )
+    return _fill(
+        "testplan.md",
+        projekt=_md(project.idea),
+        start=_date(project.start_date),
+        deadline=_date(project.deadline),
+        stand=_stand(cases_state(life), life.cases_ok),
+        ueberblick=overview,
+        einzeln=single,
+        kriterien=criteria,
+        schnittstellen=contracts,
     )
 
 

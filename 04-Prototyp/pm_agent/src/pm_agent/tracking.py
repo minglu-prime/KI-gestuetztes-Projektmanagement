@@ -55,6 +55,7 @@ AGENTS = {
     "auftrag": "Projektauftrag",
     "anforderungen": "Anforderungen",
     "entwurf": "Entwurf",
+    "testplan": "Testplan",
     "run": "Planung",
     "durchfuehrung": "Durchführung",
     "kontrolle": "Kontrolle",

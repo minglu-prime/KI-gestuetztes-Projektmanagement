@@ -98,3 +98,57 @@ def test_the_test_plan_approval_holds_until_anything_upstream_changes():
     assert lifecycle.cases_state(changed) == "geändert"
     with pytest.raises(InputError, match="mehrfach vergeben"):
         lifecycle.approve_cases(life.model_copy(update={"cases": cases(ACCEPT, ACCEPT)}), NOW)
+
+
+def test_case_rows_round_trip_and_say_which_row():
+    from pm_agent.lifecycle import case_rows, rows_to_cases
+
+    rows = case_rows(cases())
+    assert rows[2] == {
+        "ID": "T3",
+        "Titel": "Raum belegt",
+        "Art": "Integration",
+        "Kriterien": "",
+        "Schnittstelle": "S1",
+        "Fehlercode": "409",
+        "Schritte": "POST mit raum und datum",
+        "Erwartet": "buchung_id kommt zurück",
+    }
+    assert rows_to_cases(rows) == cases()
+    rows[0]["Art"] = "Unit"
+    rows.append({"ID": None, "Titel": None})  # an empty row the editor adds
+    with pytest.raises(InputError, match=r"Zeile 1 \(T1\): kind"):
+        rows_to_cases(rows)
+    with pytest.raises(InputError, match="Noch kein Testfall"):
+        rows_to_cases([{"ID": None}])
+
+
+def test_a_test_plan_that_misses_a_muss_criterion_goes_back_to_claude(api, tmp_path):
+    import json
+
+    from test_agent_loop import read_log, reply
+    from test_lifecycle import call
+
+    from pm_agent.tracking import agent_runs
+
+    replies, requests = api
+    replies += [
+        reply([call("submit_testplan", cases(INTEGRATE, CONFLICT).model_dump(mode="json"), "c1")]),
+        reply([call("submit_testplan", cases().model_dump(mode="json"), "c2")]),
+    ]
+    result = lifecycle.run_cases(PROJECT, ONE, design(), log_dir=tmp_path)
+    assert result == cases()
+    sent = json.dumps(requests[0], ensure_ascii=False)
+    assert "Buchung anlegen" in sent and "hours_per_week" not in sent
+    assert "'R1.1'" in json.dumps(requests[1]["messages"][-1], ensure_ascii=False)
+    assert read_log(tmp_path, "testplan")["outcome"] == "testplan"
+    assert [(r["Agent"], r["Ergebnis"]) for r in agent_runs(tmp_path)] == [("Testplan", "Testplan")]
+
+
+def test_the_test_plan_document_lists_cases_and_coverage():
+    life = Lifecycle(project=PROJECT, requirements=ONE, design=design(), cases=cases())
+    text = lifecycle.cases_document(life)
+    assert text.startswith("# Testplan")
+    assert "| T3 | Raum belegt | Integration | – | S1 | 409 |" in text
+    assert "- R1.1 (Die Buchung steht in der Liste): T1" in text
+    assert "- S1 (Buchung anlegen): T2, T3" in text
