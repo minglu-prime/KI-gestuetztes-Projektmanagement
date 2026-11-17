@@ -1560,6 +1560,25 @@ def test_unsaved_requirements_survive_a_visit_to_another_page(site):
     assert lifecycle.load().requirements.items[0].priority == "Kann"
 
 
+def test_a_used_restore_does_not_come_back_when_the_saved_data_returns(site):
+    lifecycle.save(with_charter().model_copy(update={"requirements": NEEDS}))
+    at = site.switch_page("views/anforderungen.py").run()
+    at = edit_table(at, "requirements_editor_", {0: {"Priorität": "Kann"}})
+    at = at.switch_page("views/auftrag.py").run()
+    at = at.switch_page("views/anforderungen.py").run()
+    button(at, "Änderungen speichern und prüfen").click()
+    at = at.run()
+    assert lifecycle.load().requirements.items[0].priority == "Kann"
+
+    at = edit_table(at, "requirements_editor_", {0: {"Priorität": "Muss"}})
+    button(at, "Änderungen speichern und prüfen").click()
+    at = at.run()
+
+    assert lifecycle.load().requirements == NEEDS
+    assert requirements_table(at).iloc[0]["Priorität"] == "Muss"
+    assert not any("nicht gespeichert" in c.value for c in at.caption)
+
+
 def test_unsaved_requirements_are_dropped_when_the_saved_ones_changed_meanwhile(site):
     lifecycle.save(with_charter().model_copy(update={"requirements": NEEDS}))
     at = site.switch_page("views/anforderungen.py").run()

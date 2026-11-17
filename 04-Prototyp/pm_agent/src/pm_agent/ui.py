@@ -274,8 +274,13 @@ def kept_editor(name: str, version: str, basis: Any, data: pd.DataFrame, **optio
         state[f"{name}restored"] = (state.get(version, 0), state[restores], basis, kept[1])
     counts = (state.get(version, 0), state.get(restores, 0))
     restored = state.get(f"{name}restored")
-    if restored is not None and restored[:2] == counts and restored[2] == basis:
-        data = restored[3]
+    if restored is not None:
+        if restored[:2] == counts and restored[2] == basis:
+            data = restored[3]
+        else:
+            # Saved or started again since: it never applies again, even if the saved data
+            # later reads as it did then.
+            del state[f"{name}restored"]
     edited = st.data_editor(data, key=f"{name}{counts[0]}_{counts[1]}", **options)
     state[f"{name}current"] = (basis, edited)
     return edited
