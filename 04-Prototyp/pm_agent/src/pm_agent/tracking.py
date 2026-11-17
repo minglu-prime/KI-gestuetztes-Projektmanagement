@@ -216,6 +216,9 @@ class Tracking(BaseModel):
     lessons: list[Lesson] = Field(default_factory=list)  # changed by the lead
     operations: list[Operation] = Field(default_factory=list)
     incidents: list[Incident] = Field(default_factory=list)
+    # The planned end of the first plan adopted, kept when the rest is adopted again. None:
+    # adopted before this was recorded.
+    first_planned_end: date | None = None
 
 
 @dataclass(frozen=True)
@@ -268,7 +271,8 @@ def adopt(
     same ID goes on there "in Arbeit"; its new estimate is what was left (rest_plan).
 
     `requirements`: the approved ones the plan is traced to; they are kept with it."""
-    errors = check_plan(plan, team, project, requirements=requirements).errors
+    checked = check_plan(plan, team, project, requirements=requirements)
+    errors = checked.errors
     if errors:
         raise InputError("Der Plan hat noch Fehler: " + "; ".join(errors))
     if keep is not None and (again := finished_again(keep, plan)):
@@ -307,6 +311,7 @@ def adopt(
         lessons=keep.lessons if keep is not None else [],
         operations=keep.operations if keep is not None else [],
         incidents=keep.incidents if keep is not None else [],
+        first_planned_end=keep.first_planned_end if keep is not None else checked.end_date,
     )
     save(tracking, path)
     return tracking

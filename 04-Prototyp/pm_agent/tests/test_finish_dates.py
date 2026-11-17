@@ -168,3 +168,28 @@ def test_tasks_without_a_date_keep_the_late_table_from_claiming_none_was_late(tr
     text = report(old)
     assert "Keine Aufgabe wurde später fertig als geplant." not in text
     assert "Von 2 fertigen Aufgaben ohne Fertigdatum ist unbekannt" in text
+
+
+def test_the_first_plan_end_is_kept_when_the_rest_is_adopted_again(tracking, tmp_path):
+    assert tracking.first_planned_end == WED
+    done = apply_rows(tracking, [{"ID": "A", "Status": "fertig", "Fertig am": WED}], WED)
+    project, rest = rest_project(done, date(2026, 11, 12))
+    again = adopt(project, TEAM, rest, path=tmp_path / "neu.json", keep=done)
+    assert again.first_planned_end == WED
+    finished = apply_rows(again, [{"ID": "B", "Status": "fertig"}], today=date(2026, 11, 16))
+    text = report(finished, today=date(2026, 11, 16))
+    assert "**Geplantes Ende laut erstem Plan:** 11.11.2026" in text
+    assert "zum ersten Plan: 3 Arbeitstage nach Plan" in text
+
+
+def test_without_replanning_the_report_does_not_repeat_the_first_plan(tracking):
+    done = apply_rows(tracking, [{"ID": "A", "Status": "fertig", "Fertig am": MON}], FRI)
+    done = apply_rows(done, [{"ID": "B", "Status": "fertig", "Fertig am": FRI}], FRI)
+    text = report(done)
+    assert "**Geplantes Ende laut erstem Plan:** wie oben" in text
+    assert "zum ersten Plan" not in text
+
+
+def test_a_project_adopted_before_the_first_end_was_kept_says_unknown(tracking):
+    old = tracking.model_copy(update={"first_planned_end": None})
+    assert "**Geplantes Ende laut erstem Plan:** unbekannt" in report(old)

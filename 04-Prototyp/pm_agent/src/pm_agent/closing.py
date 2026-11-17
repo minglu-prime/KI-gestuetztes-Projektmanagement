@@ -213,12 +213,25 @@ def actual_end(tracking: Tracking, evaluation: Evaluation) -> str:
     last = max(known)
     planned = max(t.planned_end for t in tasks)
     text = f"{_date(last)} ({_days(working_shift(tracking.project, planned, last))})"
+    first = tracking.first_planned_end
+    if first is not None and first != planned:
+        text += f"; zum ersten Plan: {_days(working_shift(tracking.project, first, last))}"
     if unknown := len(days) - len(known):
         text += (
             f". {unknown} fertige Aufgabe{'' if unknown == 1 else 'n'} ohne Fertigdatum: "
             "Das tatsächliche Ende kann später liegen"
         )
     return text
+
+
+def first_end(tracking: Tracking, evaluation: Evaluation) -> str:
+    """The planned end of the first plan adopted, if the rest was planned again since."""
+    first = tracking.first_planned_end
+    if first is None:
+        return "unbekannt (Projekt übernommen, bevor es erfasst wurde)"
+    if first == max(t.planned_end for t in evaluation.tasks):
+        return "wie oben"
+    return _date(first)
 
 
 def late_tasks(tracking: Tracking, evaluation: Evaluation) -> str:
@@ -302,6 +315,7 @@ def closing_document(
         start=_date(project.start_date),
         deadline=_date(project.deadline),
         planende=_date(max(t.planned_end for t in evaluation.tasks)),
+        erstende=first_end(tracking, evaluation),
         istende=actual_end(tracking, evaluation),
         spaet=late_tasks(tracking, evaluation),
         abnahme="\n".join(rows) or f"| {DASH} | Keine Anforderungen | | | | |",
