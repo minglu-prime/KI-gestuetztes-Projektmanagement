@@ -20,6 +20,7 @@ from pydantic import BaseModel, ConfigDict, ValidationError
 from pm_agent.agent import LOG_DIR, run_submission
 from pm_agent.diagram import sequence_mermaid
 from pm_agent.models import (
+    Cases,
     Charter,
     Component,
     Criterion,
@@ -70,6 +71,8 @@ class Lifecycle(BaseModel):
     requirements_ok: Approval | None = None
     design: Design | None = None
     design_ok: Approval | None = None
+    cases: Cases | None = None
+    cases_ok: Approval | None = None
 
 
 class Check(NamedTuple):
@@ -117,6 +120,10 @@ def _design_digest(life: Lifecycle) -> str:
     return _digest(life.project, life.charter, life.requirements, life.design)
 
 
+def _cases_digest(life: Lifecycle) -> str:
+    return _digest(life.project, life.charter, life.requirements, life.design, life.cases)
+
+
 def _state(artefact: Any, approval: Approval | None, digest: str) -> State:
     if artefact is None:
         return "offen"
@@ -149,6 +156,96 @@ def approved_design(life: Lifecycle | None) -> Design | None:
     if life is None or design_state(life) != "freigegeben":
         return None
     return life.design
+
+
+def cases_state(life: Lifecycle | None) -> State:
+    if life is None:
+        return "offen"
+    return _state(life.cases, life.cases_ok, _cases_digest(life))
+
+
+def approved_cases(life: Lifecycle | None) -> Cases | None:
+    if life is None or cases_state(life) != "freigegeben":
+        return None
+    return life.cases
+
+
+def approve_cases(life: Lifecycle, now: datetime) -> Lifecycle:
+    """The project lead approves the test plan. Raises InputError while it has errors."""
+    if life.cases is None:
+        raise InputError("Noch keine Testfälle zum Freigeben.")
+    errors = check_cases(life.cases, life.requirements, life.design).errors
+    if errors:
+        raise InputError("\n".join(errors))
+    return life.model_copy(update={"cases_ok": Approval(at=now, digest=_cases_digest(life))})
+
+
+def check_cases(cases: Cases, requirements: Requirements | None, design: Design | None) -> Check:
+    """Errors: duplicate IDs, unknown criteria, interfaces and error codes, a case without
+    what it tests, a Muss criterion without a case. Warnings: other criteria, interfaces and
+    error codes without a case."""
+    items = cases.cases
+    errors = _twice([c.id for c in items], "Die Testfall-ID '{}' ist mehrfach vergeben")
+    criteria = (
+        {c.id: (r, c) for r in requirements.items for c in r.criteria} if requirements else None
+    )
+    contracts = {i.id: i for i in design.interfaces} if design else None
+    for case in items:
+        if criteria is not None:
+            errors += [
+                f"Testfall '{case.id}' nennt das unbekannte Akzeptanzkriterium '{cid}'"
+                for cid in case.criteria
+                if cid not in criteria
+            ]
+        if case.interface and contracts is not None:
+            contract = contracts.get(case.interface)
+            if contract is None:
+                errors.append(
+                    f"Testfall '{case.id}' nennt die unbekannte Schnittstelle '{case.interface}'"
+                )
+            elif case.error_code and case.error_code not in {e.code for e in contract.errors}:
+                errors.append(
+                    f"Testfall '{case.id}': die Schnittstelle '{contract.id}' kennt den "
+                    f"Fehlercode '{case.error_code}' nicht"
+                )
+        if case.kind == "Akzeptanz" and not case.criteria:
+            errors.append(f"Akzeptanztest '{case.id}' nennt kein Akzeptanzkriterium")
+        if case.kind == "Integration" and not case.interface:
+            errors.append(f"Integrationstest '{case.id}' nennt keine Schnittstelle")
+    warnings = []
+    if criteria is None:
+        warnings.append(
+            "Ohne Anforderungen lässt sich nicht prüfen, ob jedes Akzeptanzkriterium einen "
+            "Testfall hat"
+        )
+    else:
+        tested = {cid for case in items for cid in case.criteria}
+        for cid, (need, criterion) in criteria.items():
+            if cid not in tested:
+                text = (
+                    f"{need.priority}-Anforderung '{need.id}': das Akzeptanzkriterium '{cid}' "
+                    f"({criterion.text}) hat keinen Testfall"
+                )
+                (errors if need.priority == "Muss" else warnings).append(text)
+    if contracts is None:
+        warnings.append(
+            "Ohne Entwurf lässt sich nicht prüfen, ob jede Schnittstelle einen Integrationstest hat"
+        )
+    else:
+        integrated = {c.interface for c in items if c.kind == "Integration"}
+        provoked = {(c.interface, c.error_code) for c in items if c.error_code}
+        warnings += [
+            f"Die Schnittstelle '{i.id}' ({i.name}) hat keinen Integrationstest"
+            for i in contracts.values()
+            if i.id not in integrated
+        ]
+        warnings += [
+            f"Der Fehlercode '{e.code}' der Schnittstelle '{i.id}' hat keinen Testfall"
+            for i in contracts.values()
+            for e in i.errors
+            if (i.id, e.code) not in provoked
+        ]
+    return Check(list(dict.fromkeys(errors)), list(dict.fromkeys(warnings)))
 
 
 def approved_requirements(life: Lifecycle | None) -> list[Requirement] | None:

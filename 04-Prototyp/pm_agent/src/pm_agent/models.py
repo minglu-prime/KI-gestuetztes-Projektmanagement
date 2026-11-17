@@ -243,6 +243,26 @@ class Design(_Model):
     flows: list[Flow] = Field(min_length=1)
 
 
+class Case(_Model):
+    """A test case: an acceptance test for criteria of the requirements, or an integration
+    test of an interface of the design (with `error_code`: the case that provokes it)."""
+
+    id: Ref
+    title: NonEmpty
+    kind: Literal["Akzeptanz", "Integration"]
+    criteria: list[Ref] = Field(default_factory=list)  # R1.1 …
+    interface: Ref | None = None  # S1
+    error_code: Ref | None = None  # 409
+    steps: list[NonEmpty] = Field(min_length=1)
+    expected: NonEmpty
+
+
+class Cases(_Model):
+    """The test plan. Not "TestPlan": pytest would take a class named Test… for tests."""
+
+    cases: list[Case] = Field(min_length=1)
+
+
 class ScheduledTask(_Model):
     task_id: str
     member: str
