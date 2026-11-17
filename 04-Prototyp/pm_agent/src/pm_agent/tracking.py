@@ -146,6 +146,17 @@ class Defect(BaseModel):
     status: Literal["offen", "behoben"] = "offen"
 
 
+class Signoff(BaseModel):
+    """The project lead's decision on a requirement at the end: accepted, or deferred with a
+    reason (it goes into the next backlog)."""
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    requirement_id: str
+    decision: Literal["abgenommen", "zurückgestellt"]
+    reason: str = ""
+
+
 class Tracking(BaseModel):
     """The plan the project lead adopted, and what happened to each task since."""
 
@@ -165,6 +176,8 @@ class Tracking(BaseModel):
     # The latest result of each test case, and the defects found; kept like the retros.
     results: list[CaseResult] = Field(default_factory=list)
     defects: list[Defect] = Field(default_factory=list)
+    # The decisions at the end, one per requirement (closing.record_signoff).
+    signoffs: list[Signoff] = Field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -251,6 +264,7 @@ def adopt(
         retros=keep.retros if keep is not None else [],
         results=keep.results if keep is not None else [],
         defects=keep.defects if keep is not None else [],
+        signoffs=keep.signoffs if keep is not None else [],
     )
     save(tracking, path)
     return tracking
