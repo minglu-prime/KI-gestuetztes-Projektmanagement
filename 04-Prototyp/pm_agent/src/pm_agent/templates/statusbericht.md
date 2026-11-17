@@ -32,6 +32,10 @@ $naechste
 |---|---|---|---|---|---|---|
 $aufgaben
 
+## Stand je Anforderung
+
+$anforderungen
+
 ## Aus früheren Plänen
 
 $frueher

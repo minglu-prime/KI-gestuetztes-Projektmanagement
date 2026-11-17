@@ -1321,6 +1321,7 @@ def status_report(
             for t in tasks
         ),
         frueher=_history_text(tracking),
+        anforderungen=_requirements_text(tracking),
         risiken="\n".join(f"- {_md(r)}" for r in tracking.plan.risks) or "Keine Risiken erfasst.",
     )
 
@@ -1408,9 +1409,20 @@ def control_document(
             for row in evaluation.by_member
         ),
         frueher=_history_text(tracking),
+        anforderungen=_requirements_text(tracking),
         bewertung=judgement,
         demos=_demos_text(tracking, today),
     )
+
+
+def _requirements_text(tracking: Tracking) -> str:
+    """The progress per requirement (requirement_progress) as a Markdown table."""
+    rows = requirement_progress(tracking)
+    if not rows:
+        return "Keine Anforderungen mit dem Plan übernommen."
+    head = ["| " + " | ".join(rows[0]) + " |", "|" + "---|" * len(rows[0])]
+    body = ["| " + " | ".join(_md(str(cell)) for cell in row.values()) + " |" for row in rows]
+    return "\n".join(head + body)
 
 
 def _demos_text(tracking: Tracking, today: date) -> str:
