@@ -22,7 +22,7 @@ für jede Anforderung Aufgaben.
 
 ## Vorgehen
 
-Jedes Erfolgskriterium des Projektauftrags braucht mindestens eine Anforderung. Bleib im
+Jedes Erfolgskriterium des Projektauftrags braucht mindestens eine Anforderung. Gibt es `offen_aus_dem_letzten_durchlauf`, mach aus diesen Punkten Anforderungen, wo sie zum Projektauftrag passen. Bleib im
 Rahmen des Projektauftrags: Was dort unter `out_of_scope` steht, wird keine Anforderung.
 Schneide die Anforderungen so, dass ein Team sie in der Zeit bis zur Deadline umsetzen kann,
 und gib dem Rest eine niedrigere Priorität statt ihn wegzulassen. Reiche die Anforderungen mit

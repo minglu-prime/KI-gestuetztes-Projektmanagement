@@ -2031,3 +2031,140 @@ def test_without_a_test_plan_the_test_page_leads_to_it(tracked):
     at = tracked.switch_page("views/testlauf.py").run()
     assert not at.exception
     assert any("Noch kein Testplan" in i.value for i in at.info)
+
+
+def test_the_closing_page_takes_decisions_and_lessons(site, monkeypatch):
+    from pm_agent import closing
+    from pm_agent.models import Lessons
+
+    tracking.adopt(PROJECT, TEAM, PLAN, requirements=NEEDS.items)
+    drafted = Lessons.model_validate({"items": [{"observation": "a", "advice": "b"}]})
+    monkeypatch.setattr(closing, "run_lessons", lambda tracking, today, on_round=None: drafted)
+    at = site.switch_page("views/abschluss.py").run()
+    assert not at.exception
+    assert any("Muss-Anforderung 'R1'" in e.value for e in at.error)
+
+    at.radio(key="signoff_decision").set_value("zurückgestellt").run()
+    button(at, "Entscheidung speichern").click()
+    at = at.run()
+    assert any("braucht einen Grund" in e.value for e in at.error)
+    at.text_input(key="signoff_reason").input("keine Zeit").run()
+    button(at, "Entscheidung speichern").click()
+    at = at.run()
+    (signoff,) = tracking.load().signoffs
+    assert (signoff.requirement_id, signoff.decision, signoff.reason) == (
+        "R1",
+        "zurückgestellt",
+        "keine Zeit",
+    )
+    assert at.text_input(key="signoff_reason").value == ""
+    assert any("lässt sich abschließen" in s.value for s in at.success)
+
+    at.checkbox(key="consent_abschluss").check().run()
+    button(at, "Lessons Learned mit Claude entwerfen").click()
+    at = at.run()
+    assert tracking.load().lessons == drafted.items
+    assert not at.exception
+
+
+def test_the_operations_page_checks_the_handbook_and_records_incidents(tracked):
+    from test_lifecycle import design
+
+    lifecycle.save(lifecycle.Lifecycle(project=PROJECT, design=design()))
+    at = tracked.switch_page("views/betrieb.py").run()
+    assert not at.exception
+    assert any("keine Verantwortlichen" in e.value for e in at.error)
+
+    at = edit_table(
+        at,
+        "operations_editor",
+        {
+            0: {"Verantwortlich": "Frontend-Team", "Überwachung": "Fehler zählen"},
+            1: {"Verantwortlich": "Backend-Team", "Überwachung": "Health-Check"},
+        },
+    )
+    button(at, "Betriebshandbuch speichern").click()
+    at = at.run()
+    assert [o.owner for o in tracking.load().operations] == ["Frontend-Team", "Backend-Team"]
+    assert not at.error
+
+    at.text_input(key="incident_impact").input("Buchen geht nicht").run()
+    button(at, "Störung erfassen").click()
+    at = at.run()
+    (incident,) = tracking.load().incidents
+    assert (incident.id, incident.component_id) == ("ST1", "B1")
+    assert at.text_input(key="incident_impact").value == ""
+    button(at, "ST1: behoben").click()
+    at = at.run()
+    assert tracking.load().incidents[0].status == "behoben"
+
+
+def test_a_new_run_starts_from_the_backlog(site, monkeypatch, tmp_path):
+    from pm_agent import closing, workbench
+    from pm_agent.tracking import Signoff
+
+    monkeypatch.setattr(workbench, "DATA_DIR", tmp_path)
+    adopted = tracking.adopt(PROJECT, TEAM, PLAN, requirements=NEEDS.items)
+    tracking.save(
+        closing.record_signoff(
+            adopted, Signoff(requirement_id="R1", decision="zurückgestellt", reason="keine Zeit")
+        )
+    )
+    lifecycle.save(lifecycle.Lifecycle(project=PROJECT))
+    at = site.switch_page("views/iteration.py").run()
+    assert not at.exception
+    (backlog,) = [d.value for d in at.dataframe if "Herkunft" in d.value.columns]
+    assert list(backlog["Herkunft"]) == ["R1 zurückgestellt"]
+    assert button(at, "Neuen Durchlauf beginnen").disabled
+
+    at.checkbox(key="next_run_sure").check().run()
+    button(at, "Neuen Durchlauf beginnen").click()
+    at = at.run()
+    assert not at.exception and not at.error
+    assert tracking.load() is None
+    assert [b.origin for b in lifecycle.load().backlog] == ["R1 zurückgestellt"]
+    at = at.switch_page("views/anforderungen.py").run()
+    assert any("Offen aus dem letzten Durchlauf" in m.value for m in at.markdown)
+
+
+def test_the_operations_step_is_done_only_when_the_handbook_passes(tracked):
+    from test_lifecycle import design
+
+    from pm_agent.tracking import Operation
+
+    lifecycle.save(lifecycle.Lifecycle(project=PROJECT, design=design()))
+    empty = [Operation(component_id="B2"), Operation(component_id="B3")]
+    tracking.save(tracking.load().model_copy(update={"operations": empty}))
+    at = tracked.switch_page("views/betrieb.py").run()
+    assert "done" not in steps(at)["Betrieb"]
+    full = [
+        Operation(component_id=c, owner="Team", monitoring="Health-Check") for c in ["B2", "B3"]
+    ]
+    tracking.save(tracking.load().model_copy(update={"operations": full}))
+    at = tracked.switch_page("views/betrieb.py").run()
+    assert "done" in steps(at)["Betrieb"]
+
+
+def test_without_requirements_the_closing_page_does_not_call_the_project_closable(tracked):
+    at = tracked.switch_page("views/abschluss.py").run()
+    assert not at.exception
+    assert not any("lässt sich abschließen" in s.value for s in at.success)
+    assert any("nichts abzunehmen" in w.value for w in at.warning)
+
+
+def test_the_consent_for_lessons_names_what_is_sent(tracked):
+    at = tracked.switch_page("views/abschluss.py").run()
+    label = at.checkbox(key="consent_abschluss").label
+    assert "Wochenrückblicke" in label and "Skills" not in label
+
+
+def test_the_startseite_leads_to_the_test_page_for_open_defects(tracked):
+    from pm_agent.tracking import Defect, record_defect
+
+    done = tracking.apply_rows(
+        tracking.load(), [{"ID": "A", "Status": "fertig"}, {"ID": "B", "Status": "fertig"}]
+    )
+    tracking.save(record_defect(done, Defect(case_id="T1", severity="mittel", cause="x")))
+    at = tracked.switch_page("views/startseite.py").run()
+    assert not at.exception
+    assert button(at, "Fehler beheben").proto.type == "primary"

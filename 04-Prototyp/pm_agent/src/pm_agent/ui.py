@@ -11,7 +11,7 @@ import pandas as pd
 import streamlit as st
 from anthropic import APIError
 
-from pm_agent import lifecycle
+from pm_agent import closing, lifecycle
 from pm_agent.agent import AgentError
 from pm_agent.lifecycle import Lifecycle
 from pm_agent.models import Plan
@@ -146,6 +146,9 @@ JOURNEY = [
     ("durchfuehrung", "Ausführen", "du trägst den Fortschritt ein"),
     ("testlauf", "Testen", "du trägst Ergebnisse und Fehler ein"),
     ("kontrolle", "Prüfen", "Python rechnet, Claude bewertet"),
+    ("abschluss", "Abschluss", "du nimmst ab, Claude zieht Lehren"),
+    ("betrieb", "Betrieb", "optional"),
+    ("iteration", "Iteration", "Python sammelt den nächsten Backlog"),
 ]
 PAGES = {
     "auftrag": ("views/auftrag.py", "Zum Projektauftrag"),
@@ -156,6 +159,9 @@ PAGES = {
     "durchfuehrung": ("views/durchfuehrung.py", "Zur Durchführung"),
     "testlauf": ("views/testlauf.py", "Zum Test"),
     "kontrolle": ("views/kontrolle.py", "Zur Kontrolle"),
+    "abschluss": ("views/abschluss.py", "Zum Abschluss"),
+    "betrieb": ("views/betrieb.py", "Zum Betrieb"),
+    "iteration": ("views/iteration.py", "Zur Iteration"),
 }
 
 
@@ -203,6 +209,15 @@ def journey(page: str) -> None:
         "durchfuehrung": tracking is not None and has_progress(tracking),
         "testlauf": tracking is not None and bool(tracking.results),
         "kontrolle": False,  # checking never ends while the project runs
+        # Closed: decisions taken, and nothing severe left open.
+        "abschluss": tracking is not None
+        and bool(tracking.signoffs)
+        and not closing.check_closing(tracking, None).errors,
+        "betrieb": tracking is not None
+        and bool(tracking.operations)
+        and life is not None
+        and not closing.check_operations(life.design, tracking.operations).errors,
+        "iteration": False,  # it begins the next run
     }
     # Not approved: a draft or a changed one, or skipped although the project goes on.
     skipped = {
@@ -274,11 +289,15 @@ def strip(*chips: str) -> str:
     return f'<div class="chips">{"".join(chips)}</div>'
 
 
-def consent(key: str) -> bool:
-    """The agents for Durchführung and Kontrolle send the project with its people to Claude."""
+TEAM_DATA = "ihre Angaben (Name, Skills, Stunden, Aufgaben, Notizen)"
+
+
+def consent(key: str, data: str = TEAM_DATA) -> bool:
+    """Consent before an agent sends what people wrote or are to Claude. `data` names what
+    goes: by default the project with its people (Durchführung, Kontrolle)."""
     return st.checkbox(
-        "Alle Personen im Projekt haben zugestimmt, dass ihre Angaben (Name, Skills, Stunden, "
-        "Aufgaben, Notizen) an die Anthropic API gesendet werden.",
+        f"Alle Personen im Projekt haben zugestimmt, dass {data} an die Anthropic API "
+        "gesendet werden.",
         key=key,
     )
 

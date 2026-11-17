@@ -264,6 +264,25 @@ class Cases(_Model):
     cases: list[Case] = Field(min_length=1)
 
 
+class Lesson(_Model):
+    """What the team does differently next time, and what it rests on."""
+
+    observation: NonEmpty
+    advice: NonEmpty
+    refs: list[NonEmpty] = Field(default_factory=list)  # defect IDs, Mondays of weeks
+
+
+class Lessons(_Model):
+    items: list[Lesson] = Field(min_length=1)
+
+
+class BacklogItem(_Model):
+    """An entry of the next run, with where it comes from."""
+
+    text: NonEmpty
+    origin: NonEmpty  # "R2 zurückgestellt", "F1 offen (schwer)" …
+
+
 class ScheduledTask(_Model):
     task_id: str
     member: str

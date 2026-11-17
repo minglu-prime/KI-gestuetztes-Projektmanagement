@@ -43,6 +43,14 @@ if life is None:
 status = st.container()  # filled at the end, when the requirements of this run are known
 
 # 1 · Grundlage --------------------------------------------------------------------------
+if life.backlog:
+    with st.container(border=True, key="panel-backlog"):
+        st.markdown("**Offen aus dem letzten Durchlauf**")
+        st.caption("Claude bekommt diese Punkte beim Entwurf der Anforderungen.")
+        st.dataframe(
+            pd.DataFrame([{"Eintrag": b.text, "Herkunft": b.origin} for b in life.backlog]),
+            hide_index=True,
+        )
 charter_phase = charter_state(life)
 if life.project is None:
     st.info(
@@ -83,7 +91,10 @@ with st.container(border=True, key="panel-draft"):
         drafted = run_with_progress(
             "Claude entwirft die Anforderungen …",
             lambda on_round: lifecycle.run_requirements(
-                life.project, life.charter, on_round=on_round
+                life.project,
+                life.charter,
+                on_round=on_round,
+                **({"backlog": life.backlog} if life.backlog else {}),
             ),
         )
         if drafted is not None:

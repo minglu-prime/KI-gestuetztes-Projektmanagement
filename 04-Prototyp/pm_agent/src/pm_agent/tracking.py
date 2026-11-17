@@ -20,6 +20,7 @@ from pm_agent.agent import LOG_DIR
 from pm_agent.models import (
     Cases,
     ControlReport,
+    Lesson,
     Member,
     Plan,
     Project,
@@ -57,6 +58,7 @@ AGENTS = {
     "anforderungen": "Anforderungen",
     "entwurf": "Entwurf",
     "testplan": "Testplan",
+    "lessons": "Lessons Learned",
     "run": "Planung",
     "durchfuehrung": "Durchführung",
     "kontrolle": "Kontrolle",
@@ -146,6 +148,44 @@ class Defect(BaseModel):
     status: Literal["offen", "behoben"] = "offen"
 
 
+class Signoff(BaseModel):
+    """The project lead's decision on a requirement at the end: accepted, or deferred with a
+    reason (it goes into the next backlog)."""
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    requirement_id: str
+    decision: Literal["abgenommen", "zurückgestellt"]
+    reason: str = ""
+
+
+class Operation(BaseModel):
+    """How one component of the design is run: who is responsible (a role, not a name),
+    how it is deployed, watched and taken back."""
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    component_id: str
+    owner: str = ""
+    deployment: str = ""
+    monitoring: str = ""
+    rollback: str = ""
+
+
+class Incident(BaseModel):
+    """A disruption in operation."""
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    id: str = ""  # S1 …, given by closing.record_incident
+    on: date
+    component_id: str
+    impact: str
+    cause: str = ""
+    measure: str = ""
+    status: Literal["offen", "behoben"] = "offen"
+
+
 class Tracking(BaseModel):
     """The plan the project lead adopted, and what happened to each task since."""
 
@@ -165,6 +205,11 @@ class Tracking(BaseModel):
     # The latest result of each test case, and the defects found; kept like the retros.
     results: list[CaseResult] = Field(default_factory=list)
     defects: list[Defect] = Field(default_factory=list)
+    # The decisions at the end, one per requirement (closing.record_signoff).
+    signoffs: list[Signoff] = Field(default_factory=list)
+    lessons: list[Lesson] = Field(default_factory=list)  # changed by the lead
+    operations: list[Operation] = Field(default_factory=list)
+    incidents: list[Incident] = Field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -251,6 +296,10 @@ def adopt(
         retros=keep.retros if keep is not None else [],
         results=keep.results if keep is not None else [],
         defects=keep.defects if keep is not None else [],
+        signoffs=keep.signoffs if keep is not None else [],
+        lessons=keep.lessons if keep is not None else [],
+        operations=keep.operations if keep is not None else [],
+        incidents=keep.incidents if keep is not None else [],
     )
     save(tracking, path)
     return tracking
