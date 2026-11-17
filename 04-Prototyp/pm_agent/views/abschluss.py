@@ -145,7 +145,8 @@ with st.container(border=True, key="panel-lessons"):
 
 with st.container(border=True, key="panel-document"):
     heading("description", "Abschlussbericht", python="füllt die Vorlage aus")
-    document = closing_document(tracking, cases, evaluate(tracking, today))
+    charter = life.charter if life is not None else None
+    document = closing_document(tracking, cases, evaluate(tracking, today), charter)
     st.download_button(
         "Abschlussbericht als Markdown herunterladen",
         document,

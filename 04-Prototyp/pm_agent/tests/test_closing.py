@@ -110,7 +110,8 @@ def test_lessons_cover_every_severe_defect_and_missed_demo(project):
     assert closing.check_lessons(loose, tracking) == [
         "Lehre 1 nennt den unbekannten Bezug 'F9'",
         "Der schwere Fehler F1 kommt in keiner Lehre vor",
-        "Die ausgefallene Demo der Woche ab 16.11.2026 kommt in keiner Lehre vor",
+        "Die ausgefallene Demo der Woche ab 16.11.2026 (Bezug 2026-11-16) kommt in keiner "
+        "Lehre vor",
     ]
     full = lessons(
         {"observation": "Schema zu spät", "advice": "Schema zuerst", "refs": ["F1", "2026-11-16"]}
@@ -226,7 +227,7 @@ def test_an_incident_names_a_known_component_and_gets_a_number(project):
 
     incident = Incident(on=DAY, component_id="B3", impact="Buchen geht nicht")
     tracking = closing.record_incident(project, incident, design())
-    assert tracking.incidents[0].id == "S1"
+    assert tracking.incidents[0].id == "ST1"
     with pytest.raises(InputError, match="unbekannten Baustein 'B9'"):
         closing.record_incident(
             project, incident.model_copy(update={"component_id": "B9"}), design()
@@ -257,7 +258,7 @@ def test_the_next_backlog_says_where_each_entry_comes_from(project):
         ("Anforderung R2 (Anforderung R2): keine Zeit", "R2 zurückgestellt"),
         ("Fehler beheben: Schema", "F1 offen (schwer)"),
         ("früher testen", "Maßnahme der Woche ab 16.11.2026"),
-        ("Störung beheben: Ausfall (Ursache: Speicher)", "S1 offen"),
+        ("Störung beheben: Ausfall (Ursache: Speicher)", "ST1 offen"),
     ]
 
 
@@ -297,3 +298,72 @@ def test_the_requirements_agent_hears_of_the_backlog(api, tmp_path):
     backlog = [BacklogItem(text="Stornieren nachholen", origin="R2 zurückgestellt")]
     lifecycle.run_requirements(PROJECT, charter(), log_dir=tmp_path, backlog=backlog)
     assert "Stornieren nachholen" in json.dumps(requests[0], ensure_ascii=False)
+
+
+def test_a_new_run_that_fails_halfway_leaves_everything_in_place(project, tmp_path, monkeypatch):
+    from pathlib import Path
+
+    from pm_agent import lifecycle, tracking
+
+    monkeypatch.setattr(lifecycle, "FILE", tmp_path / "vorhaben.json")
+    monkeypatch.setattr(tracking, "PROJECT_FILE", tmp_path / "projekt.json")
+    lifecycle.save(lifecycle.Lifecycle(project=PROJECT))
+    tracking.save(project)
+    before = {p.name: p.read_bytes() for p in tmp_path.glob("*.json")}
+    rename = Path.rename
+
+    def locked(self, target):
+        if self.name == "projekt.json":
+            raise PermissionError("in use")
+        return rename(self, target)
+
+    monkeypatch.setattr(Path, "rename", locked)
+    with pytest.raises(PermissionError):
+        closing.start_next_run(project, datetime(2026, 12, 18, 16, 30), tmp_path / "archiv")
+    monkeypatch.setattr(Path, "rename", rename)
+    # Both files where they were, as they were; no half archive, no leftover temp file.
+    assert {p.name: p.read_bytes() for p in tmp_path.glob("*.json")} == before
+    assert list((tmp_path / "archiv").rglob("*")) == []
+
+
+def test_suggestions_count_cases_of_criteria_added_after_adopting(project):
+    later = {**ACCEPT, "id": "T9", "criteria": ["R1.2"]}
+    tracking = passed(project, "T1")
+    tracking = record_result(tracking, CaseResult(case_id="T9", result="fehlgeschlagen", on=DAY))
+    assert (
+        closing.suggestions(tracking, cases(ACCEPT, later))["R1"] == "Testfall T9 nicht bestanden"
+    )
+
+
+def test_signoffs_of_requirements_no_longer_adopted_leave_the_backlog(project):
+    from pm_agent.tracking import Signoff as S
+
+    stale = project.model_copy(
+        update={"signoffs": [S(requirement_id="R9", decision="zurückgestellt", reason="alt")]}
+    )
+    assert closing.next_backlog(stale) == []
+
+
+def test_lesson_references_to_weeks_take_both_date_forms(project):
+    from pm_agent.tracking import Retro, record_retro
+
+    tracking = record_retro(project, Retro(monday=date(2026, 11, 16), shown="nein", measure="m"))
+    german = lessons({"observation": "a", "advice": "b", "refs": ["16.11.2026"]})
+    assert closing.check_lessons(german, tracking) == []
+    none = lessons({"observation": "a", "advice": "b", "refs": []})
+    assert closing.check_lessons(none, tracking) == [
+        "Die ausgefallene Demo der Woche ab 16.11.2026 (Bezug 2026-11-16) kommt in keiner Lehre vor"
+    ]
+
+
+def test_the_closing_report_names_goal_and_success_criteria(project):
+    from test_lifecycle import charter
+
+    from pm_agent.tracking import evaluate
+
+    text = closing.closing_document(project, None, evaluate(project, DAY), charter())
+    assert "## Ziel und Erfolgskriterien" in text
+    assert "Lerngruppen buchen Räume online" in text
+    assert "- K2: Doppelbuchungen sind ausgeschlossen" in text
+    plain = closing.closing_document(project, None, evaluate(project, DAY))
+    assert "Kein Projektauftrag." in plain

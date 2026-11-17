@@ -213,7 +213,10 @@ def journey(page: str) -> None:
         "abschluss": tracking is not None
         and bool(tracking.signoffs)
         and not closing.check_closing(tracking, None).errors,
-        "betrieb": tracking is not None and bool(tracking.operations),
+        "betrieb": tracking is not None
+        and bool(tracking.operations)
+        and life is not None
+        and not closing.check_operations(life.design, tracking.operations).errors,
         "iteration": False,  # it begins the next run
     }
     # Not approved: a draft or a changed one, or skipped although the project goes on.

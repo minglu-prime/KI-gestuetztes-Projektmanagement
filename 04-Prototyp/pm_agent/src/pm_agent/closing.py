@@ -14,7 +14,7 @@ from pydantic import ValidationError
 
 from pm_agent.agent import LOG_DIR, run_submission
 from pm_agent.lifecycle import Check
-from pm_agent.models import BacklogItem, Cases, Design, Lesson, Lessons
+from pm_agent.models import BacklogItem, Cases, Charter, Design, Lesson, Lessons
 from pm_agent.tools import Submission
 from pm_agent.tracking import (
     Evaluation,
@@ -39,8 +39,8 @@ def suggestions(tracking: Tracking, cases: Cases | None) -> dict[str, str]:
     items = cases.cases if cases else []
     verdicts = {}
     for need in tracking.requirements:
-        criteria = {c.id for c in need.criteria}
-        mine = [c for c in items if criteria & set(c.criteria)]
+        prefix = f"{need.id}."
+        mine = [c for c in items if any(cid.startswith(prefix) for cid in c.criteria)]
         if not mine:
             verdicts[need.id] = "kein Testfall"
             continue
@@ -105,6 +105,21 @@ def check_closing(tracking: Tracking, cases: Cases | None) -> Check:
     return Check(errors, warnings)
 
 
+def _week_ref(ref: str) -> str:
+    """ "16.11.2026" as "2026-11-16"; anything else as it is."""
+    try:
+        return datetime.strptime(ref, "%d.%m.%Y").date().isoformat()
+    except ValueError:
+        return ref
+
+
+def _current_signoffs(tracking: Tracking) -> list[Signoff]:
+    """Sign-offs of the requirements adopted now: a plan adopted again with other
+    requirements keeps the old ones in the file."""
+    known = {n.id for n in tracking.requirements}
+    return [s for s in tracking.signoffs if s.requirement_id in known]
+
+
 def check_lessons(lessons: Lessons, tracking: Tracking) -> list[str]:
     """Errors: a reference that is neither a defect nor the Monday of a reviewed week; a
     severe defect or a missed demo no lesson mentions."""
@@ -114,16 +129,17 @@ def check_lessons(lessons: Lessons, tracking: Tracking) -> list[str]:
         f"Lehre {n} nennt den unbekannten Bezug '{ref}'"
         for n, lesson in enumerate(lessons.items, start=1)
         for ref in lesson.refs
-        if ref not in known
+        if _week_ref(ref) not in known
     ]
-    named = {ref for lesson in lessons.items for ref in lesson.refs}
+    named = {_week_ref(ref) for lesson in lessons.items for ref in lesson.refs}
     errors += [
         f"Der schwere Fehler {d.id} kommt in keiner Lehre vor"
         for d in tracking.defects
         if d.severity == "schwer" and d.id not in named
     ]
     errors += [
-        f"Die ausgefallene Demo der Woche ab {_date(r.monday)} kommt in keiner Lehre vor"
+        f"Die ausgefallene Demo der Woche ab {_date(r.monday)} (Bezug {monday}) kommt in "
+        "keiner Lehre vor"
         for monday, r in weeks.items()
         if r.shown != "ja" and monday not in named
     ]
@@ -153,7 +169,7 @@ def run_lessons(
             "fehler": [d.model_dump(mode="json") for d in tracking.defects],
             "abnahme": [
                 {**s.model_dump(mode="json"), "titel": titles.get(s.requirement_id, "")}
-                for s in tracking.signoffs
+                for s in _current_signoffs(tracking)
             ],
         },
         ensure_ascii=False,
@@ -173,7 +189,12 @@ def run_lessons(
     return run_submission("lessons", submission, data, log_dir, on_round)
 
 
-def closing_document(tracking: Tracking, cases: Cases | None, evaluation: Evaluation) -> str:
+def closing_document(
+    tracking: Tracking,
+    cases: Cases | None,
+    evaluation: Evaluation,
+    charter: Charter | None = None,
+) -> str:
     """The closing report: sign-offs with Python's suggestion, figures, demos, defects,
     lessons, and what the check still finds open."""
     advice = suggestions(tracking, cases)
@@ -204,6 +225,12 @@ def closing_document(tracking: Tracking, cases: Cases | None, evaluation: Evalua
     return _fill(
         "abschluss.md",
         projekt=_md(project.idea),
+        ziel=(
+            f"{_md(charter.goal)}\n\n"
+            + "\n".join(f"- {_md(c.id)}: {_md(c.text)}" for c in charter.success_criteria)
+            if charter
+            else "Kein Projektauftrag."
+        ),
         stand=_date(evaluation.today),
         start=_date(project.start_date),
         deadline=_date(project.deadline),
@@ -339,8 +366,8 @@ def record_incident(tracking: Tracking, incident: Incident, design: Design | Non
     if incident.component_id not in known:
         raise InputError(f"Die Störung nennt den unbekannten Baustein '{incident.component_id}'")
     if not incident.id:
-        numbers = [int(i.id[1:]) for i in tracking.incidents if i.id[1:].isdigit()]
-        incident = incident.model_copy(update={"id": f"S{max(numbers, default=0) + 1}"})
+        numbers = [int(i.id[2:]) for i in tracking.incidents if i.id[2:].isdigit()]
+        incident = incident.model_copy(update={"id": f"ST{max(numbers, default=0) + 1}"})
     others = [i for i in tracking.incidents if i.id != incident.id]
     return tracking.model_copy(update={"incidents": [*others, incident]})
 
@@ -358,7 +385,7 @@ def next_backlog(tracking: Tracking) -> list[BacklogItem]:
             ),
             origin=f"{s.requirement_id} zurückgestellt",
         )
-        for s in tracking.signoffs
+        for s in _current_signoffs(tracking)
         if s.decision == "zurückgestellt"
     ]
     items += [
@@ -395,9 +422,23 @@ def start_next_run(tracking: Tracking, now: datetime, archive: Path) -> Path:
     while folder.exists():
         n += 1
         folder = base.with_name(f"{base.name}-{n}")
-    folder.mkdir(parents=True)
-    for path in [lifecycle_module.FILE, tracking_module.PROJECT_FILE]:  # read at call time
-        if path.exists():
-            path.rename(folder / path.name)
-    lifecycle_module.save(lifecycle_module.Lifecycle(backlog=backlog))
+    # Everything or nothing: the new Vorhaben is written first, beside the old one; a
+    # failure on the way puts back what was moved and removes what was written.
+    fresh = lifecycle_module.FILE.with_name("vorhaben.neu.json")  # read at call time
+    lifecycle_module.save(lifecycle_module.Lifecycle(backlog=backlog), fresh)
+    moved: list[Path] = []
+    try:
+        folder.mkdir(parents=True)
+        for path in [lifecycle_module.FILE, tracking_module.PROJECT_FILE]:
+            if path.exists():
+                path.rename(folder / path.name)
+                moved.append(path)
+        fresh.rename(lifecycle_module.FILE)
+    except OSError:
+        for path in reversed(moved):
+            (folder / path.name).rename(path)
+        fresh.unlink(missing_ok=True)
+        if folder.exists() and not any(folder.iterdir()):
+            folder.rmdir()
+        raise
     return folder

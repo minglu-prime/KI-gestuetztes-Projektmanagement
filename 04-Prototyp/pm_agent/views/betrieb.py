@@ -65,6 +65,14 @@ def on_incident() -> None:
             state[key] = ""
 
 
+def on_fixed(incident_id: str) -> None:
+    def fix(t):
+        incident = next(i for i in t.incidents if i.id == incident_id)
+        return closing.record_incident(t, incident.model_copy(update={"status": "behoben"}), design)
+
+    change(fix)
+
+
 with st.container(border=True, key="panel-handbook"):
     heading("settings", "Betriebshandbuch", du="trägst ein", python="prüft")
     if design is None:
@@ -101,6 +109,14 @@ with st.container(border=True, key="panel-incidents"):
         st.text_input("Ursache", key="incident_cause")
         st.text_input("Maßnahme", key="incident_measure")
         st.button("Störung erfassen", icon=":material/add:", on_click=on_incident)
+    for incident in [i for i in tracking.incidents if i.status == "offen"]:
+        st.button(
+            f"{incident.id}: behoben",
+            key=f"incident_fixed_{incident.id}",
+            icon=":material/check:",
+            on_click=on_fixed,
+            args=(incident.id,),
+        )
     if tracking.incidents:
         st.dataframe(
             pd.DataFrame([i.model_dump(mode="json") for i in tracking.incidents]),

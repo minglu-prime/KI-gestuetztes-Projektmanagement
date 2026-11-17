@@ -5,6 +5,10 @@
 **Zeitraum:** $start bis $deadline  
 **Geplantes Ende laut Plan:** $planende
 
+## Ziel und Erfolgskriterien
+
+$ziel
+
 ## Abnahme der Anforderungen
 
 | ID | Anforderung | Priorität | Vorschlag (Python) | Entscheidung | Grund |

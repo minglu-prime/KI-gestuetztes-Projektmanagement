@@ -2092,8 +2092,11 @@ def test_the_operations_page_checks_the_handbook_and_records_incidents(tracked):
     button(at, "Störung erfassen").click()
     at = at.run()
     (incident,) = tracking.load().incidents
-    assert (incident.id, incident.component_id) == ("S1", "B1")
+    assert (incident.id, incident.component_id) == ("ST1", "B1")
     assert at.text_input(key="incident_impact").value == ""
+    button(at, "ST1: behoben").click()
+    at = at.run()
+    assert tracking.load().incidents[0].status == "behoben"
 
 
 def test_a_new_run_starts_from_the_backlog(site, monkeypatch, tmp_path):
@@ -2122,3 +2125,21 @@ def test_a_new_run_starts_from_the_backlog(site, monkeypatch, tmp_path):
     assert [b.origin for b in lifecycle.load().backlog] == ["R1 zurückgestellt"]
     at = at.switch_page("views/anforderungen.py").run()
     assert any("Offen aus dem letzten Durchlauf" in m.value for m in at.markdown)
+
+
+def test_the_operations_step_is_done_only_when_the_handbook_passes(tracked):
+    from test_lifecycle import design
+
+    from pm_agent.tracking import Operation
+
+    lifecycle.save(lifecycle.Lifecycle(project=PROJECT, design=design()))
+    empty = [Operation(component_id="B2"), Operation(component_id="B3")]
+    tracking.save(tracking.load().model_copy(update={"operations": empty}))
+    at = tracked.switch_page("views/betrieb.py").run()
+    assert "done" not in steps(at)["Betrieb"]
+    full = [
+        Operation(component_id=c, owner="Team", monitoring="Health-Check") for c in ["B2", "B3"]
+    ]
+    tracking.save(tracking.load().model_copy(update={"operations": full}))
+    at = tracked.switch_page("views/betrieb.py").run()
+    assert "done" in steps(at)["Betrieb"]
