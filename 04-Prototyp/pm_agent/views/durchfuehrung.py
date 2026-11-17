@@ -142,9 +142,9 @@ with st.container(border=True, key="panel-progress"):
                 save(updated)
             except OSError as err:
                 st.error(
-                    f"Der Fortschritt konnte nicht gespeichert werden: {err}. Die Tabelle bleibt, "
-                    "wie sie ist; die gespeicherte Datei auch. Ist data/projekt.json in einem "
-                    "anderen Programm geöffnet?"
+                    f"Der Fortschritt konnte nicht gespeichert werden: {as_text(str(err))}. "
+                    "Die Tabelle bleibt, wie sie ist; die gespeicherte Datei auch. "
+                    "Ist data/projekt.json in einem anderen Programm geöffnet?"
                 )
             else:
                 state.progress_saved = True

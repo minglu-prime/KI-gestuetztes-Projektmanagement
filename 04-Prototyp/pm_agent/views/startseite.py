@@ -112,7 +112,7 @@ with st.container(key="project"):
         tracking = load()
     except InputError as err:
         tracking = None
-        st.error(f"Das übernommene Projekt konnte nicht gelesen werden: {err}")
+        st.error(f"Das übernommene Projekt konnte nicht gelesen werden: {as_text(str(err))}")
     else:
         if tracking is None:
             st.info("Noch kein Projekt übernommen.")

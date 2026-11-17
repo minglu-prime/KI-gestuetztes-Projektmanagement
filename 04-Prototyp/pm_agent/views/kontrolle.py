@@ -424,7 +424,7 @@ if tracking is not None:
                 except InputError as err:
                     st.error(as_text(str(err)))
                 except OSError as err:
-                    st.error(f"Der Rückblick konnte nicht gespeichert werden: {err}.")
+                    st.error(f"Der Rückblick konnte nicht gespeichert werden: {as_text(str(err))}.")
                 else:
                     st.rerun()
         measures = open_measures(tracking)
@@ -439,7 +439,9 @@ if tracking is not None:
                     try:
                         save(record_retro(tracking, done))
                     except OSError as err:
-                        st.error(f"Die Maßnahme konnte nicht gespeichert werden: {err}.")
+                        st.error(
+                            f"Die Maßnahme konnte nicht gespeichert werden: {as_text(str(err))}."
+                        )
                     else:
                         st.rerun()
 
@@ -561,11 +563,14 @@ with st.container(border=True, key="panel-effort"):
         exports = workbench.read_runs()
     except workbench.InputError as err:
         st.error(
-            f"{record.parent.name}/{record.name} konnte nicht gelesen werden: {err}. Die Datei "
-            "bleibt, wie sie ist; der nächste Export legt sie beiseite und beginnt eine neue."
+            f"{record.parent.name}/{record.name} konnte nicht gelesen werden: "
+            f"{as_text(str(err))}. Die Datei bleibt, wie sie ist; der nächste Export legt sie "
+            "beiseite und beginnt eine neue."
         )
     except OSError as err:  # cannot be opened at all: the next export cannot either
-        st.error(f"{record.parent.name}/{record.name} konnte nicht gelesen werden: {err}.")
+        st.error(
+            f"{record.parent.name}/{record.name} konnte nicht gelesen werden: {as_text(str(err))}."
+        )
     else:
         if exports:
             st.dataframe(pd.DataFrame(exports), hide_index=True)

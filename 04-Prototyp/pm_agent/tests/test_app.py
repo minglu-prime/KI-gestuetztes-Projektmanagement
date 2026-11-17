@@ -1372,6 +1372,31 @@ def test_text_from_claude_shows_no_image_or_link_on_the_pages(tracked, monkeypat
     assert not [text for text in shown if re.search(r"(?<!\\)\[", text)]
 
 
+def test_an_error_quoting_a_cell_shows_no_link(app):
+    # The message quotes the cell. Rendered as Markdown, the link hid where it leads.
+    at = edit_table(app, "team_editor_", {0: {"Skills": "[hier](https://evil.example)"}})
+    errors = [e.value for e in at.error]
+    assert any("evil.example" in text for text in errors)
+    assert not [text for text in errors if re.search(r"(?<!\\)\[", text)]
+
+
+REAL_LOAD_TEAM = workbench.load_team  # bound before the local fixture replaces it
+
+
+def test_a_damaged_team_file_shows_no_link(local, monkeypatch, tmp_path):
+    # The reason names the place of the error, and a skill name is a place.
+    path = tmp_path / "team.json"
+    path.write_text(
+        '[{"name": "Anna", "skills": {"[hier](https://evil.example)": 9}, "hours_per_week": 10}]',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(workbench, "load_team", lambda: REAL_LOAD_TEAM(path))
+    at = AppTest.from_file(str(SITE.parent / PLANUNG), default_timeout=30).run()
+    errors = [e.value for e in at.error]
+    assert any("evil.example" in text for text in errors)
+    assert not [text for text in errors if re.search(r"(?<!\\)\[", text)]
+
+
 def test_a_failing_agent_shows_the_reason_and_no_result(tracked, monkeypatch):
     def failing(adopted, today, on_round=None):
         raise AgentError("Kein Zugang zur Claude API: ANTHROPIC_API_KEY ist nicht gesetzt.")
@@ -2170,6 +2195,22 @@ def test_unsaved_design_lessons_and_handbook_survive_a_visit_to_another_page(tra
         assert not at.exception, page
         assert frame(at, prefix).iloc[next(iter(edit))][column] == value, page
     assert (lifecycle.load(), tracking.load()) == saved  # nothing saved
+
+
+def test_unsaved_test_cases_survive_a_visit_to_another_page(site):
+    from test_lifecycle import design
+    from test_testplan import cases
+
+    approve_needs()
+    lifecycle.save(lifecycle.load().model_copy(update={"design": design(), "cases": cases()}))
+    saved = lifecycle.load()
+    at = edit_table(
+        site.switch_page("views/testplan.py").run(), "cases_editor_", {0: {"Titel": "neu"}}
+    )
+    at = at.switch_page("views/startseite.py").run().switch_page("views/testplan.py").run()
+    assert not at.exception
+    assert frame(at, "cases_editor_").iloc[0]["Titel"] == "neu"
+    assert lifecycle.load() == saved  # nothing saved
 
 
 def test_the_operations_page_checks_the_handbook_and_records_incidents(tracked):

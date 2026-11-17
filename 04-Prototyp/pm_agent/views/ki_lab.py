@@ -6,7 +6,7 @@ import streamlit as st
 
 from pm_agent import lab_server
 from pm_agent.lab_server import LabError
-from pm_agent.ui import heading
+from pm_agent.ui import as_text, heading
 
 st.header("KI-Lab")
 st.caption(
@@ -65,7 +65,7 @@ with st.container(horizontal=True):
 try:
     framed = lab_server.allows_frame(origin, lab_server.PORT)
 except OSError as err:
-    st.error(f"Das KI-Lab antwortet nicht mehr: {err}")
+    st.error(f"Das KI-Lab antwortet nicht mehr: {as_text(str(err))}")
     st.stop()
 if framed:
     st.iframe(lab_url, height=900)

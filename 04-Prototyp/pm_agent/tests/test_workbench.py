@@ -105,6 +105,19 @@ def test_team_file_round_trip_missing_file_and_damaged_file(tmp_path):
         load_team(path)
 
 
+def test_a_damaged_file_says_in_german_what_is_wrong(tmp_path):
+    # The page is German; pydantic's own text said "Input should be less than or equal to 5".
+    path = tmp_path / "team.json"
+    path.write_text(
+        '[{"name": "Anna", "skills": {"SQL": 9}, "hours_per_week": 10, "x": 1}]', encoding="utf-8"
+    )
+    with pytest.raises(InputError) as raised:
+        load_team(path)
+    assert str(raised.value) == (
+        "team.json ist beschädigt: skills.SQL: darf höchstens 5 sein; x: Feld ist nicht vorgesehen"
+    )
+
+
 def test_only_runs_with_plan_project_and_team_can_be_reopened(tmp_path):
     record = {
         "outcome": "plan",
@@ -303,8 +316,9 @@ def test_runs_csv_takes_every_line_of_exports_at_the_same_time(tmp_path):
     # two at once could write over each other, and the page said nothing.
     path = tmp_path / "runs.csv"
 
+    # 25 each: without the lock this lost lines in 5 of 5 runs; 150 took 17 s on Windows.
     def export(session):
-        for number in range(150):
+        for number in range(25):
             append_run({"quelle": f"sitzung-{session}", "runden": number}, path)
 
     threads = [threading.Thread(target=export, args=(session,)) for session in range(8)]
@@ -314,7 +328,7 @@ def test_runs_csv_takes_every_line_of_exports_at_the_same_time(tmp_path):
         thread.join()
     lines = list(csv.DictReader(io.StringIO(path.read_text(encoding="utf-8"))))
     assert sorted((line["quelle"], int(line["runden"])) for line in lines) == sorted(
-        (f"sitzung-{session}", number) for session in range(8) for number in range(150)
+        (f"sitzung-{session}", number) for session in range(8) for number in range(25)
     )
 
 
@@ -797,3 +811,27 @@ def test_demo_rows_of_a_plan_with_errors_are_not_checked():
     result = check_plan(plan, TEAM, PROJECT)
     assert result.errors
     assert demo_rows(plan, result, PROJECT)[0]["Rechtzeitig fertig"] == "nicht geprüft"
+
+
+@pytest.mark.parametrize(
+    ("content", "reason"),
+    [
+        ("{kaputt", "kein gültiges JSON (Zeile 1, Spalte 2)"),
+        (
+            '[{"name": "A", "hours_per_week": 10, "absences": [{"first": "x", "last": "x"}]}]',
+            "absences.0.first: muss ein Datum sein, z. B. 2026-12-01; "
+            "absences.0.last: muss ein Datum sein, z. B. 2026-12-01",
+        ),
+        (
+            '[{"name": "A", "hours_per_week": 10, '
+            '"absences": [{"first": "2026-12-01T10:00", "last": "2026-12-01"}]}]',
+            "absences.0.first: muss ein Datum ohne Uhrzeit sein",
+        ),
+    ],
+)
+def test_a_damaged_file_names_json_and_date_errors_in_german(tmp_path, content, reason):
+    path = tmp_path / "team.json"
+    path.write_text(content, encoding="utf-8")
+    with pytest.raises(InputError) as raised:
+        load_team(path)
+    assert str(raised.value) == f"team.json ist beschädigt: {reason}"
