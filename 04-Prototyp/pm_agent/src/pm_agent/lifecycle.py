@@ -16,11 +16,12 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal, NamedTuple
 
-from pydantic import BaseModel, ConfigDict, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from pm_agent.agent import LOG_DIR, run_submission
 from pm_agent.diagram import sequence_mermaid
 from pm_agent.models import (
+    BacklogItem,
     Case,
     Cases,
     Charter,
@@ -75,6 +76,9 @@ class Lifecycle(BaseModel):
     design_ok: Approval | None = None
     cases: Cases | None = None
     cases_ok: Approval | None = None
+    # What the run before left open (closing.start_next_run); the requirements start
+    # from it.
+    backlog: list[BacklogItem] = Field(default_factory=list)
 
 
 class Check(NamedTuple):
@@ -854,6 +858,7 @@ def run_requirements(
     charter: Charter | None,
     log_dir: Path | None = LOG_DIR,
     on_round: Callable[[dict[str, Any]], None] | None = None,
+    backlog: list[BacklogItem] | None = None,
 ) -> Requirements:
     """Claude drafts the requirements from the charter (or from the idea alone, without
     one). Python rejects them until every success criterion is served. Raises AgentError."""
@@ -873,6 +878,11 @@ def run_requirements(
         {
             "projekt": project.model_dump(mode="json"),
             "projektauftrag": charter.model_dump(mode="json") if charter else None,
+            **(
+                {"offen_aus_dem_letzten_durchlauf": [b.model_dump(mode="json") for b in backlog]}
+                if backlog
+                else {}
+            ),
         },
         ensure_ascii=False,
         indent=2,

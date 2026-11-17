@@ -2094,3 +2094,31 @@ def test_the_operations_page_checks_the_handbook_and_records_incidents(tracked):
     (incident,) = tracking.load().incidents
     assert (incident.id, incident.component_id) == ("S1", "B1")
     assert at.text_input(key="incident_impact").value == ""
+
+
+def test_a_new_run_starts_from_the_backlog(site, monkeypatch, tmp_path):
+    from pm_agent import closing, workbench
+    from pm_agent.tracking import Signoff
+
+    monkeypatch.setattr(workbench, "DATA_DIR", tmp_path)
+    adopted = tracking.adopt(PROJECT, TEAM, PLAN, requirements=NEEDS.items)
+    tracking.save(
+        closing.record_signoff(
+            adopted, Signoff(requirement_id="R1", decision="zurückgestellt", reason="keine Zeit")
+        )
+    )
+    lifecycle.save(lifecycle.Lifecycle(project=PROJECT))
+    at = site.switch_page("views/iteration.py").run()
+    assert not at.exception
+    (backlog,) = [d.value for d in at.dataframe if "Herkunft" in d.value.columns]
+    assert list(backlog["Herkunft"]) == ["R1 zurückgestellt"]
+    assert button(at, "Neuen Durchlauf beginnen").disabled
+
+    at.checkbox(key="next_run_sure").check().run()
+    button(at, "Neuen Durchlauf beginnen").click()
+    at = at.run()
+    assert not at.exception and not at.error
+    assert tracking.load() is None
+    assert [b.origin for b in lifecycle.load().backlog] == ["R1 zurückgestellt"]
+    at = at.switch_page("views/anforderungen.py").run()
+    assert any("Offen aus dem letzten Durchlauf" in m.value for m in at.markdown)

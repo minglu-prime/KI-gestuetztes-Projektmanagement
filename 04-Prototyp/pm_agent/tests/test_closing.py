@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 
 import pytest
 from test_lifecycle import need, requirements
@@ -231,3 +231,69 @@ def test_an_incident_names_a_known_component_and_gets_a_number(project):
         closing.record_incident(
             project, incident.model_copy(update={"component_id": "B9"}), design()
         )
+
+
+def test_the_next_backlog_says_where_each_entry_comes_from(project):
+    from test_lifecycle import design
+
+    from pm_agent.tracking import Incident, Retro, record_retro
+
+    tracking = closing.record_signoff(
+        project, Signoff(requirement_id="R2", decision="zurückgestellt", reason="keine Zeit")
+    )
+    tracking = record_defect(
+        tracking, Defect(case_id="T1", severity="schwer", cause="Schema", task_id="A")
+    )
+    tracking = record_defect(
+        tracking, Defect(case_id="T1", severity="leicht", cause="alt", status="behoben")
+    )
+    tracking = record_retro(
+        tracking, Retro(monday=date(2026, 11, 16), shown="nein", measure="früher testen")
+    )
+    tracking = closing.record_incident(
+        tracking, Incident(on=DAY, component_id="B3", impact="Ausfall", cause="Speicher"), design()
+    )
+    assert [(i.text, i.origin) for i in closing.next_backlog(tracking)] == [
+        ("Anforderung R2 (Anforderung R2): keine Zeit", "R2 zurückgestellt"),
+        ("Fehler beheben: Schema", "F1 offen (schwer)"),
+        ("früher testen", "Maßnahme der Woche ab 16.11.2026"),
+        ("Störung beheben: Ausfall (Ursache: Speicher)", "S1 offen"),
+    ]
+
+
+def test_a_new_run_archives_the_old_files_and_keeps_the_backlog(project, tmp_path, monkeypatch):
+    from pm_agent import lifecycle, tracking
+
+    monkeypatch.setattr(lifecycle, "FILE", tmp_path / "vorhaben.json")
+    monkeypatch.setattr(tracking, "PROJECT_FILE", tmp_path / "projekt.json")
+    lifecycle.save(lifecycle.Lifecycle(project=PROJECT))
+    tracking.save(project)
+    signed = closing.record_signoff(
+        project, Signoff(requirement_id="R2", decision="zurückgestellt", reason="keine Zeit")
+    )
+    folder = closing.start_next_run(signed, datetime(2026, 12, 18, 16, 30), tmp_path / "archiv")
+    assert folder == tmp_path / "archiv" / "2026-12-18_1630"
+    assert sorted(p.name for p in folder.iterdir()) == ["projekt.json", "vorhaben.json"]
+    assert not tracking.PROJECT_FILE.exists()
+    fresh = lifecycle.load()
+    assert fresh.project is None and [i.origin for i in fresh.backlog] == ["R2 zurückgestellt"]
+    # The same minute again: a second folder, nothing overwritten.
+    lifecycle.save(lifecycle.Lifecycle(project=PROJECT))
+    again = closing.start_next_run(signed, datetime(2026, 12, 18, 16, 30), tmp_path / "archiv")
+    assert again.name == "2026-12-18_1630-2"
+
+
+def test_the_requirements_agent_hears_of_the_backlog(api, tmp_path):
+    import json
+
+    from test_agent_loop import reply
+    from test_lifecycle import call, charter
+
+    from pm_agent import lifecycle
+    from pm_agent.models import BacklogItem
+
+    replies, requests = api
+    replies += [reply([call("submit_anforderungen", requirements().model_dump(mode="json"), "c1")])]
+    backlog = [BacklogItem(text="Stornieren nachholen", origin="R2 zurückgestellt")]
+    lifecycle.run_requirements(PROJECT, charter(), log_dir=tmp_path, backlog=backlog)
+    assert "Stornieren nachholen" in json.dumps(requests[0], ensure_ascii=False)

@@ -6,7 +6,7 @@ Python suggests and checks; the project lead decides. No Streamlit in here.
 
 import json
 from collections.abc import Callable
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -14,7 +14,7 @@ from pydantic import ValidationError
 
 from pm_agent.agent import LOG_DIR, run_submission
 from pm_agent.lifecycle import Check
-from pm_agent.models import Cases, Design, Lesson, Lessons
+from pm_agent.models import BacklogItem, Cases, Design, Lesson, Lessons
 from pm_agent.tools import Submission
 from pm_agent.tracking import (
     Evaluation,
@@ -343,3 +343,61 @@ def record_incident(tracking: Tracking, incident: Incident, design: Design | Non
         incident = incident.model_copy(update={"id": f"S{max(numbers, default=0) + 1}"})
     others = [i for i in tracking.incidents if i.id != incident.id]
     return tracking.model_copy(update={"incidents": [*others, incident]})
+
+
+def next_backlog(tracking: Tracking) -> list[BacklogItem]:
+    """What the next run starts from: deferred requirements, open defects, open measures of
+    the retros and open incidents, each with its origin."""
+    from pm_agent.tracking import open_measures
+
+    titles = {n.id: n.title for n in tracking.requirements}
+    items = [
+        BacklogItem(
+            text=(
+                f"Anforderung {s.requirement_id} ({titles.get(s.requirement_id, '?')}): {s.reason}"
+            ),
+            origin=f"{s.requirement_id} zurückgestellt",
+        )
+        for s in tracking.signoffs
+        if s.decision == "zurückgestellt"
+    ]
+    items += [
+        BacklogItem(
+            text=f"Fehler beheben: {d.cause or d.case_id}", origin=f"{d.id} offen ({d.severity})"
+        )
+        for d in tracking.defects
+        if d.status == "offen"
+    ]
+    items += [
+        BacklogItem(text=r.measure, origin=f"Maßnahme der Woche ab {_date(r.monday)}")
+        for r in open_measures(tracking)
+    ]
+    items += [
+        BacklogItem(
+            text=f"Störung beheben: {i.impact}" + (f" (Ursache: {i.cause})" if i.cause else ""),
+            origin=f"{i.id} offen",
+        )
+        for i in tracking.incidents
+        if i.status == "offen"
+    ]
+    return items
+
+
+def start_next_run(tracking: Tracking, now: datetime, archive: Path) -> Path:
+    """Move the files of this run into a new folder of `archive` (nothing is deleted) and
+    begin a new Vorhaben that holds the next backlog. Returns the folder."""
+    import pm_agent.lifecycle as lifecycle_module
+    import pm_agent.tracking as tracking_module
+
+    backlog = next_backlog(tracking)
+    base = archive / now.strftime("%Y-%m-%d_%H%M")
+    folder, n = base, 1
+    while folder.exists():
+        n += 1
+        folder = base.with_name(f"{base.name}-{n}")
+    folder.mkdir(parents=True)
+    for path in [lifecycle_module.FILE, tracking_module.PROJECT_FILE]:  # read at call time
+        if path.exists():
+            path.rename(folder / path.name)
+    lifecycle_module.save(lifecycle_module.Lifecycle(backlog=backlog))
+    return folder
