@@ -1538,6 +1538,44 @@ def test_requirements_edited_in_the_table_are_checked_again(site):
     assert button(at, "Anforderungen freigeben").disabled
 
 
+def requirements_table(at):
+    (frame,) = [f for f in at.dataframe if f.key and f.key.startswith("requirements_editor_")]
+    return frame.value
+
+
+def test_unsaved_requirements_survive_a_visit_to_another_page(site):
+    lifecycle.save(with_charter().model_copy(update={"requirements": NEEDS}))
+    at = site.switch_page("views/anforderungen.py").run()
+    at = edit_table(at, "requirements_editor_", {0: {"Priorität": "Kann"}})
+
+    at = at.switch_page("views/auftrag.py").run()
+    at = at.switch_page("views/anforderungen.py").run()
+
+    assert not at.exception
+    assert requirements_table(at).iloc[0]["Priorität"] == "Kann"
+    assert any("nicht gespeichert" in c.value for c in at.caption)
+    assert lifecycle.load().requirements == NEEDS  # still not saved
+    button(at, "Änderungen speichern und prüfen").click()
+    at = at.run()
+    assert lifecycle.load().requirements.items[0].priority == "Kann"
+
+
+def test_unsaved_requirements_are_dropped_when_the_saved_ones_changed_meanwhile(site):
+    lifecycle.save(with_charter().model_copy(update={"requirements": NEEDS}))
+    at = site.switch_page("views/anforderungen.py").run()
+    at = edit_table(at, "requirements_editor_", {0: {"Priorität": "Kann"}})
+    at = at.switch_page("views/auftrag.py").run()
+    changed = NEEDS.model_copy(
+        update={"items": [NEEDS.items[0].model_copy(update={"priority": "Soll"})]}
+    )
+    lifecycle.save(lifecycle.load().model_copy(update={"requirements": changed}))
+
+    at = at.switch_page("views/anforderungen.py").run()
+
+    assert not at.exception
+    assert requirements_table(at).iloc[0]["Priorität"] == "Soll"
+
+
 def test_a_requirement_for_an_unknown_criterion_cannot_be_approved(site):
     lifecycle.save(with_charter().model_copy(update={"requirements": NEEDS}))
     at = site.switch_page("views/anforderungen.py").run()
