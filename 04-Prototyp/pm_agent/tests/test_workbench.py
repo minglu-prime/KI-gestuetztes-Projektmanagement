@@ -105,6 +105,19 @@ def test_team_file_round_trip_missing_file_and_damaged_file(tmp_path):
         load_team(path)
 
 
+def test_a_damaged_file_says_in_german_what_is_wrong(tmp_path):
+    # The page is German; pydantic's own text said "Input should be less than or equal to 5".
+    path = tmp_path / "team.json"
+    path.write_text(
+        '[{"name": "Anna", "skills": {"SQL": 9}, "hours_per_week": 10, "x": 1}]', encoding="utf-8"
+    )
+    with pytest.raises(InputError) as raised:
+        load_team(path)
+    assert str(raised.value) == (
+        "team.json ist beschädigt: skills.SQL: darf höchstens 5 sein; x: Feld ist nicht vorgesehen"
+    )
+
+
 def test_only_runs_with_plan_project_and_team_can_be_reopened(tmp_path):
     record = {
         "outcome": "plan",

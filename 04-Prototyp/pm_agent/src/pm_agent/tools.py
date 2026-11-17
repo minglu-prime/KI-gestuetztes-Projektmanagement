@@ -104,23 +104,27 @@ GERMAN = {
 }
 
 
+def german(e: Any) -> str:
+    """What is wrong in one pydantic error, in German where GERMAN knows the type."""
+    # Limits as written in German: 0 and 7,5, not 0.0 and 7.5.
+    limits = {
+        key: f"{value:g}".replace(".", ",") if isinstance(value, float) else value
+        for key, value in e.get("ctx", {}).items()
+    }
+    if isinstance(limits.get("expected"), str):  # "'Muss', 'Soll' or 'Kann'"
+        limits["expected"] = limits["expected"].replace("'", "").replace(" or ", " oder ")
+    if e["type"] == "value_error":  # our own validators speak German already
+        return e["msg"].removeprefix("Value error, ")
+    if e["type"] in GERMAN:
+        return GERMAN[e["type"]].format(**limits)
+    return e["msg"]
+
+
 def invalid_input(err: ValidationError) -> list[str]:
     messages = []
     for e in err.errors():
         where = ".".join(map(str, e["loc"]))
-        # Limits as written in German: 0 and 7,5, not 0.0 and 7.5.
-        limits = {
-            key: f"{value:g}".replace(".", ",") if isinstance(value, float) else value
-            for key, value in e.get("ctx", {}).items()
-        }
-        if isinstance(limits.get("expected"), str):  # "'Muss', 'Soll' or 'Kann'"
-            limits["expected"] = limits["expected"].replace("'", "").replace(" or ", " oder ")
-        if e["type"] == "value_error":  # our own validators speak German already
-            text = e["msg"].removeprefix("Value error, ")
-        elif e["type"] in GERMAN:
-            text = GERMAN[e["type"]].format(**limits)
-        else:
-            text = e["msg"]
+        text = german(e)
         messages.append(
             f"Ungültige Eingabe bei {where}: {text}" if where else f"Ungültige Eingabe: {text}"
         )

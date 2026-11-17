@@ -31,6 +31,7 @@ from pm_agent.models import (
     Task,
 )
 from pm_agent.planning import project_weeks, workday_shift, working_shift
+from pm_agent.tools import german
 
 DATA_DIR = LOG_DIR.parent / "data"
 TEAM_FILE = DATA_DIR / "team.json"
@@ -906,7 +907,7 @@ def _cell(value: Any) -> str:
 def _reason(err: Exception) -> str:
     if isinstance(err, ValidationError):
         return "; ".join(
-            f"{'.'.join(map(str, e['loc'])) or 'Eingabe'}: {e['msg']}" for e in err.errors()
+            f"{'.'.join(map(str, e['loc'])) or 'Eingabe'}: {german(e)}" for e in err.errors()
         )
     return str(err)
 
