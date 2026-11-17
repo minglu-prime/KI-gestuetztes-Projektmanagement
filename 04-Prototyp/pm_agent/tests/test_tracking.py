@@ -1112,3 +1112,24 @@ def test_retros_survive_adopting_the_rest_again(tmp_path):
     tracking = record_retro(demo_tracking(tmp_path), Retro(week=1, shown="ja"))
     again = adopt(PROJECT, TEAM, PLAN, path=tmp_path / "projekt.json", keep=tracking)
     assert again.retros == tracking.retros
+
+
+def test_the_control_document_has_the_demos_and_their_retros(tmp_path):
+    from pm_agent.tracking import Retro, control_document, record_retro
+
+    tracking = record_retro(
+        demo_tracking(tmp_path),
+        Retro(week=1, shown="nein", went_wrong="A | fehlte", cause="krank", measure="Vertretung"),
+    )
+    text = control_document(tracking, evaluate(tracking, date(2026, 11, 23)))
+    assert "## Wochen-Demos" in text
+    assert (
+        r"| 1 | 13.11.2026 | Modell zeigen | 0 von 1 | nein | A \| fehlte | krank | Vertretung |"
+        in text
+    )
+    assert "| 2 | 20.11.2026 | API zeigen | 0 von 2 | offen | – | – | – |" in text
+    # Without demos the section says so.
+    plain = adopt(PROJECT, TEAM, PLAN, path=tmp_path / "plain.json")
+    assert "Der Plan hat keine Wochen-Demos." in control_document(
+        plain, evaluate(plain, date(2026, 11, 23))
+    )

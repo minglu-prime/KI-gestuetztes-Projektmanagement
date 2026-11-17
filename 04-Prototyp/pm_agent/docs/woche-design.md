@@ -1,6 +1,6 @@
 # Design-Vorschlag: Wochen-Demo und Wochenrückblick (Batch 3 des Lebenszyklus)
 
-Stand 16.11.2026. **Vorschlag, nicht freigegeben.** Baut auf Batch 1 (PR #42) und Batch 2
+Stand 16.11.2026. **Umgesetzt auf dem Branch `feat/weekly-demos`, mit der Annahme zu Frage 1 unten: jedes ansehbare Ergebnis zählt, laufende Software ist bevorzugt.** Baut auf Batch 1 (PR #42) und Batch 2
 (`feat/lifecycle-design`) auf. Gesamtbild: `docs/lebenszyklus.md`, Phasen 4 und 6.
 
 ## Wozu

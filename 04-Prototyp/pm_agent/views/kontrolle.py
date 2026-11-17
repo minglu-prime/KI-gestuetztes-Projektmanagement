@@ -10,8 +10,11 @@ from pm_agent import followup, workbench
 from pm_agent.tracking import (
     NO_COST_INDEX,
     NO_SCHEDULE_INDEX,
+    Retro,
     agent_runs,
+    check_retros,
     control_document,
+    demo_status,
     earned_value,
     euro,
     evaluate,
@@ -21,9 +24,12 @@ from pm_agent.tracking import (
     hours_text,
     index_text,
     measure_effect,
+    open_measures,
     percent,
     planned_curve,
+    record_retro,
     requirement_progress,
+    save,
     signed_hours,
 )
 from pm_agent.ui import (
@@ -38,6 +44,7 @@ from pm_agent.ui import (
     roles,
     run_with_progress,
 )
+from pm_agent.workbench import InputError
 
 state = st.session_state
 
@@ -336,6 +343,87 @@ if tracking is not None:
                 "Stand je Anforderung. Gib sie auf der Seite Anforderungen frei und übernimm "
                 "den Plan erneut."
             )
+
+    with st.container(border=True, key="panel-retro"):
+        heading(
+            "slideshow",
+            "Wochen-Demos und Rückblick",
+            python="zählt, was fertig ist",
+            du="trägst ein, was gezeigt wurde",
+        )
+        if not tracking.plan.demos:
+            st.caption(
+                "Der Plan hat keine Wochen-Demos. Bitte Claude in der Planung darum, zum Beispiel "
+                "„Plane für jede Woche eine Demo“, und übernimm den Plan erneut."
+            )
+        else:
+            st.caption(
+                "Jede Woche ein Ergebnis, das sich vorführen lässt, und danach ein kurzer "
+                "Rückblick: Was wurde gezeigt, was ging schief, warum, und was ändern wir? "
+                "Fand eine Demo nicht oder nur teilweise statt, braucht der Rückblick eine "
+                "Maßnahme."
+            )
+            st.dataframe(pd.DataFrame(demo_status(tracking, date.today())), hide_index=True)
+            for warning in check_retros(tracking, date.today()).warnings:
+                st.warning(as_text(warning))
+            titles = {d.week: d.title for d in tracking.plan.demos}
+            earlier = {r.week: r for r in tracking.retros}
+            week = st.selectbox(
+                "Rückblick für",
+                sorted(titles),
+                format_func=lambda w: f"Woche {w} · {titles[w]}",
+                key="retro_week",
+            )
+            was = earlier.get(week)
+            shown = st.radio(
+                "Demo gezeigt?",
+                ["ja", "teilweise", "nein"],
+                index=["ja", "teilweise", "nein"].index(was.shown) if was else 0,
+                horizontal=True,
+                key=f"retro_shown_{week}",
+            )
+            wrong = st.text_input(
+                "Was ging schief?", value=was.went_wrong if was else "", key=f"retro_wrong_{week}"
+            )
+            cause = st.text_input(
+                "Vermutete Ursache", value=was.cause if was else "", key=f"retro_cause_{week}"
+            )
+            measure = st.text_input(
+                "Maßnahme", value=was.measure if was else "", key=f"retro_measure_{week}"
+            )
+            if st.button("Rückblick speichern", icon=":material/save:"):
+                retro = Retro(
+                    week=week,
+                    shown=shown,
+                    went_wrong=wrong,
+                    cause=cause,
+                    measure=measure,
+                    measure_done=was.measure_done if was and was.measure == measure else False,
+                )
+                try:
+                    updated = record_retro(tracking, retro)
+                    save(updated)
+                except InputError as err:
+                    st.error(as_text(str(err)))
+                except OSError as err:
+                    st.error(f"Der Rückblick konnte nicht gespeichert werden: {err}.")
+                else:
+                    st.rerun()
+        measures = open_measures(tracking)
+        if measures:
+            st.markdown("**Offene Maßnahmen**")
+            for retro in measures:
+                if st.checkbox(
+                    f"Woche {retro.week}: {as_text(retro.measure)}",
+                    key=f"measure_done_{retro.week}",
+                ):
+                    done = retro.model_copy(update={"measure_done": True})
+                    try:
+                        save(record_retro(tracking, done))
+                    except OSError as err:
+                        st.error(f"Die Maßnahme konnte nicht gespeichert werden: {err}.")
+                    else:
+                        st.rerun()
 
     with st.container(border=True, key="panel-cost"):
         heading("euro", "Kosten", du="setzt den Stundensatz", python="rechnet")

@@ -1115,7 +1115,27 @@ def control_document(
         ),
         frueher=_history_text(tracking),
         bewertung=judgement,
+        demos=_demos_text(tracking, today),
     )
+
+
+def _demos_text(tracking: Tracking, today: date) -> str:
+    """The demos of the plan with their retros, as a table for the control report."""
+    if not tracking.plan.demos:
+        return "Der Plan hat keine Wochen-Demos."
+    retros = {r.week: r for r in tracking.retros}
+    head = [
+        "| Woche | Bis | Demo | Fertig | Gezeigt | Was ging schief | Ursache | Maßnahme |",
+        "|---|---|---|---|---|---|---|---|",
+    ]
+    rows = []
+    for row in demo_status(tracking, today):
+        retro = retros.get(row["Woche"])
+        notes = [retro.went_wrong, retro.cause, retro.measure] if retro else ["", "", ""]
+        cells = [str(row["Woche"]), row["Bis"], row["Demo"], row["Fertig"], row["Gezeigt"]]
+        cells += [note or "–" for note in notes]
+        rows.append("| " + " | ".join(_md(cell) for cell in cells) + " |")
+    return "\n".join(head + rows)
 
 
 def work_packages(tracking: Tracking) -> str:
