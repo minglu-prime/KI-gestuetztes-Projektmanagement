@@ -442,3 +442,8 @@
     transition: none !important;
   }
 }
+
+/* Sequence diagrams of the Entwurf: wider than a phone, so they scroll on their own. */
+.diagram {
+  overflow-x: auto;
+}

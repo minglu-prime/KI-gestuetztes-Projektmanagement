@@ -8,6 +8,8 @@ from pm_agent.models import (
     Assignment,
     Charter,
     Criterion,
+    DataField,
+    ErrorCase,
     Member,
     Plan,
     Project,
@@ -148,3 +150,24 @@ def test_the_new_rules_are_explained_in_german():
     assert invalid_input(bad_priority.value) == [
         "Ungültige Eingabe bei priority: muss Muss, Soll oder Kann sein"
     ]
+
+
+@pytest.mark.parametrize(
+    "make",
+    [
+        lambda: DataField(name="1x", type="Text"),
+        lambda: DataField(name="a", type="dict[str, int]"),
+        lambda: DataField(name="a", type="Zeit: Ende"),
+        lambda: ErrorCase(code="409", meaning="belegt; gesperrt"),
+        lambda: ErrorCase(code="4 09", meaning="belegt"),
+    ],
+)
+def test_a_contract_rejects_bad_field_names_types_and_errors(make):
+    # The tables write fields as "name: Typ, …" and errors as "Code Bedeutung; …".
+    with pytest.raises(ValidationError):
+        make()
+
+
+def test_a_contract_field_is_required_unless_marked():
+    field = DataField(name="raum_id", type="Liste[Termin]")
+    assert field.required is True

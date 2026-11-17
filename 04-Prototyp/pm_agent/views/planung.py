@@ -302,6 +302,9 @@ except InputError:
 needs = lifecycle.approved_requirements(life)
 # Only with approved requirements does the plan get traced; without, all stays as before.
 trace = {"requirements": needs, "covered": state.covered} if needs is not None else {}
+# The agents also get the approved design, as context; the check does not use it.
+design = lifecycle.approved_design(life)
+context = {**trace, **({"design": design} if design is not None else {})}
 st.header("Planung")
 st.caption(
     "Claude schlägt einen Plan vor, Python prüft ihn deterministisch, die Projektleitung "
@@ -471,7 +474,7 @@ with tabs[2]:
                 started = time.monotonic()
                 failure = None
                 try:
-                    plan = run_planning(project, team, on_round=on_round, **trace)
+                    plan = run_planning(project, team, on_round=on_round, **context)
                 except PlanningError as err:
                     failure = str(err)
                 except APIError as err:
@@ -825,7 +828,7 @@ with tabs[4]:
                         failure = None
                         try:
                             changed_plan = run_replanning(
-                                project, team, state.plan, wish, on_round=on_change_round, **trace
+                                project, team, state.plan, wish, on_round=on_change_round, **context
                             )
                         except PlanningError as err:
                             failure = str(err)
@@ -1084,6 +1087,7 @@ with status:
             chip("Zustimmung", "on" if consent else ""),
             chip("Projekt", "on" if project is not None else ""),
             phase_chip("Anforderungen", lifecycle.requirements_state(life)),
+            phase_chip("Entwurf", lifecycle.design_state(life)),
             plan_chip,
         )
     )

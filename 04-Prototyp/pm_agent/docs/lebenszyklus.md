@@ -1,7 +1,7 @@
 # Lebenszyklus eines Softwareprojekts im PM-Agent
 
 Dieses Dokument beschreibt, wie der PM-Agent ein Softwareprojekt von der Idee bis zur nächsten
-Iteration begleiten soll. Umgesetzt sind bisher die Phasen 1, 2, 4, 5 und 6 (Stand
+Iteration begleiten soll. Umgesetzt sind bisher die Phasen 1 bis 6 (Stand
 16.11.2026). Die übrigen Phasen sind entworfen, aber noch nicht gebaut.
 
 ## Ein Prinzip für jede Phase
@@ -27,7 +27,7 @@ arbeitet ohne sie (zum Beispiel plant die Planung ohne Anforderungen wie bisher)
 |---|---|---|---|---|
 | 1 | Projektauftrag | Ziel, Nutzen, Umfang und Nicht-Umfang, Beteiligte als Rollen, Erfolgskriterien K1 …, Rahmenbedingungen | eindeutige IDs der Erfolgskriterien | umgesetzt |
 | 2 | Anforderungen (PRD) | Anforderungen R1 … mit User Story, Priorität Muss/Soll/Kann, Akzeptanzkriterien R1.1 …, zugehörigen Erfolgskriterien | jedes Erfolgskriterium abgedeckt; nur bekannte genannt; mindestens eine Muss-Anforderung | umgesetzt |
-| 3 | Entwurf | Komponenten, Schnittstellen (Anbieter, Nutzer, Eingabe, Ausgabe, Fehler), Abläufe als Schritte | jeder Beteiligte eines Ablaufs ist eine bekannte Komponente; jede Schnittstelle kommt in einem Ablauf vor; jede Muss-Anforderung hat einen Ablauf. Das Sequenzdiagramm zeichnet Python aus den Schritten, nicht Claude. | entworfen |
+| 3 | Entwurf | Komponenten, Schnittstellen (Anbieter, Nutzer, Eingabe, Ausgabe, Fehler), Abläufe als Schritte | jeder Beteiligte eines Ablaufs ist eine bekannte Komponente; jede Schnittstelle kommt in einem Ablauf vor; jede Muss-Anforderung hat einen Ablauf. Das Sequenzdiagramm zeichnet Python aus den Schritten, nicht Claude. | umgesetzt (Design: [entwurf-design.md](entwurf-design.md)) |
 | 4 | Planung | Aufgaben mit Aufwand, Zuweisung, Abhängigkeiten und den Anforderungen, denen sie dienen; je Projektwoche ein vorführbares Ergebnis | unbekannte Anforderung = Fehler; Anforderung ohne Aufgabe = Warnung; dazu Termine, Auslastung, Puffer. Wochen-Demos: entworfen | Rückverfolgung umgesetzt |
 | 5 | Durchführung | Status, Ist-Stunden, Rest je Aufgabe; Statusbericht | jede Aufgabe im Verzug hat einen nächsten Schritt | umgesetzt |
 | 6 | Kontrolle und Wochenrückblick | Plan/Ist, Prognose, Earned Value, Stand je Anforderung; Wochenrückblick: Demo gezeigt?, Ursache von Fehlern, Maßnahme | jede Aufgabe im Verzug hat eine Gegenmaßnahme; jede ausgefallene Demo eine Maßnahme | Stand je Anforderung umgesetzt, Wochenrückblick entworfen |
@@ -88,9 +88,10 @@ sequenceDiagram
 
 | Was | Wo |
 |---|---|
-| Datenformate | `src/pm_agent/models.py` (`Charter`, `Requirement`, `Task.requirement_ids`) |
-| Speichern, Freigabe, Prüfung, Dokumente der Phasen 1 und 2 | `src/pm_agent/lifecycle.py`, Vorlagen in `src/pm_agent/templates/` |
+| Datenformate | `src/pm_agent/models.py` (`Charter`, `Requirement`, `Design`, `Task.requirement_ids`) |
+| Speichern, Freigabe, Prüfung, Dokumente der Phasen 1 bis 3 | `src/pm_agent/lifecycle.py`, Vorlagen in `src/pm_agent/templates/` |
 | Agentenschleife mit einem Einreichen-Werkzeug | `agent.run_submission` |
 | Rückverfolgung im Plan | `planning.check_plan(..., requirements=, covered=)` |
 | Stand je Anforderung | `tracking.requirement_progress` |
-| Seiten | `views/auftrag.py`, `views/anforderungen.py`; Projektpfad in `ui.journey` |
+| Sequenzdiagramme (SVG und Mermaid) | `src/pm_agent/diagram.py` |
+| Seiten | `views/auftrag.py`, `views/anforderungen.py`, `views/entwurf.py`; Projektpfad in `ui.journey` |

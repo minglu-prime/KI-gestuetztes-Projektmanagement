@@ -19,7 +19,15 @@ from pm_agent.lifecycle import (
 )
 from pm_agent.models import Charter, Project
 from pm_agent.tools import invalid_input
-from pm_agent.ui import heading, phase_chip, run_with_progress, saved_lifecycle, store, strip
+from pm_agent.ui import (
+    as_text,
+    heading,
+    phase_chip,
+    run_with_progress,
+    saved_lifecycle,
+    store,
+    strip,
+)
 from pm_agent.workbench import InputError
 
 state = st.session_state
@@ -159,7 +167,7 @@ with st.container(border=True, key="panel-charter"):
         problem = "\n".join(invalid_input(err))
     unsaved = typed and edited != life.charter
     if problem and typed:
-        st.error(f"Bitte korrigieren:\n\n{problem}")
+        st.error(f"Bitte korrigieren:\n\n{as_text(problem)}")
     if unsaved:
         st.caption("Änderungen sind noch nicht gespeichert.")
     if st.button(
@@ -171,7 +179,7 @@ with st.container(border=True, key="panel-charter"):
             st.rerun()
     errors = check_charter(life.charter).errors if life.charter is not None else []
     for error in errors:
-        st.error(error)
+        st.error(as_text(error))
 
 # 4 · Freigabe ---------------------------------------------------------------------------
 with st.container(border=True, key="panel-approve"):

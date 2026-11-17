@@ -27,17 +27,18 @@ Das Menü links:
 | Startseite | Überblick, Stand des übernommenen Projekts und Prognose seines Endes |
 | Vorbereiten · Projektauftrag | Idee und Termine eintragen; Claude entwirft Ziel, Nutzen, Umfang, Beteiligte (als Rollen), Erfolgskriterien und Rahmenbedingungen; Python prüft; die Projektleitung ändert und gibt frei; als Markdown herunterladen |
 | Vorbereiten · Anforderungen | Claude entwirft User Stories mit Priorität (Muss, Soll, Kann) und Akzeptanzkriterien aus dem Projektauftrag; Python prüft, dass jedes Erfolgskriterium eine Anforderung hat; Bearbeiten in einer Tabelle, Freigabe, Markdown |
+| Vorbereiten · Entwurf | Claude entwirft Bausteine (Rollen, Komponenten, Fremdsysteme), Schnittstellen mit typisierten Feldern und Fehlercodes und die Abläufe zwischen ihnen; Python prüft jeden Schritt gegen seine Schnittstelle und dass jede Muss-Anforderung einen Ablauf hat, und zeichnet daraus die Sequenzdiagramme; vier Tabellen, Freigabe, Markdown mit Mermaid-Diagrammen |
 | Agenten · Planung | Plan mit Claude erstellen, prüfen, anpassen, exportieren, als Projekt übernehmen |
 | Agenten · Durchführung | Wer in den nächsten fünf Arbeitstagen womit beginnt (aus der Prognose); Status, Ist-Stunden und geschätzten Rest je Aufgabe erfassen, mit dem voraussichtlichen Ende je Aufgabe; Claude schlägt Zusammenfassung und nächste Schritte vor; Statusbericht und Arbeitspaketbeschreibungen aus Vorlagen (`src/pm_agent/templates`) |
 | Agenten · Kontrolle | Plan/Ist-Vergleich, Verzug, Prognose des Endes (restliche Arbeit ab heute, mit den Aufgaben, die auf verspätete warten) und von dort der Weg zurück in die Planung: „Rest mit Claude umplanen“ lädt die unfertigen Aufgaben als Plan ab heute; Earned Value nach der 0/100-Methode (Planwert, Fertigstellungswert, Ist-Stunden, SPI, CPI); Kosten bei gesetztem Stundensatz; Claude bewertet den Stand und schlägt Gegenmaßnahmen vor, und wo eine Maßnahme Aufgaben umverteilt, rechnet Python ihre Wirkung auf die Prognose nach; Zeit und Token aller Agentenläufe; alles zusammen als Kontrollbericht aus einer Vorlage |
 | KI-Lab | startet den Studienserver aus `../ki_lab` und zeigt ihn eingebettet |
 | Über uns, Impressum | Projektkontext; Impressumsangaben trägt das Team noch ein |
 
-Über jeder Seite einer Phase steht der Projektpfad Auftrag → Anforderungen → Planen →
-Ausführen → Prüfen: Was erledigt ist, trägt ein Häkchen, die aktuelle Seite ist umrandet. Eine
+Über jeder Seite einer Phase steht der Projektpfad Auftrag → Anforderungen → Entwurf →
+Planen → Ausführen → Prüfen: Was erledigt ist, trägt ein Häkchen, die aktuelle Seite ist umrandet. Eine
 Phase vor dem Plan, die nicht freigegeben ist (ein Entwurf, seit der Freigabe geändert, oder
 übersprungen, obwohl schon ein Projekt läuft), ist gestrichelt und sagt „nicht freigegeben“.
-Übersprungen werden darf sie: Die Planung arbeitet dann wie ohne Anforderungen. Mit einem übernommenen Projekt folgt eine
+Übersprungen werden darf sie: Die Planung arbeitet dann wie ohne Anforderungen bzw. ohne Entwurf. Mit einem übernommenen Projekt folgt eine
 Zeile „Jetzt dran“ mit einem Knopf zur passenden Seite. Jeder Abschnitt nennt, wer dort
 handelt: CLAUDE schlägt vor, PYTHON rechnet und prüft, DU trägst ein und entscheidest.
 
@@ -101,12 +102,15 @@ einer `AgentError` ab. Jeder Lauf wird in `logs/` protokolliert.
 | Kontrolle | `run_control_report(tracking, today)` in `followup.py` | `submit_control` | eine Gegenmaßnahme für jede Aufgabe im Verzug; bei Verzug nicht die Bewertung „im Plan“ |
 | Projektauftrag | `run_charter(project)` in `lifecycle.py` | `submit_auftrag` | eindeutige IDs der Erfolgskriterien |
 | Anforderungen | `run_requirements(project, charter)` in `lifecycle.py` | `submit_anforderungen` | jedes Erfolgskriterium abgedeckt, nur bekannte genannt, eindeutige IDs, mindestens eine Muss-Anforderung |
+| Entwurf | `run_design(project, charter, requirements)` in `lifecycle.py` | `submit_entwurf` | bekannte Bausteine und Schnittstellen, jeder Schritt passt zum Vertrag, jede Schnittstelle in einem Ablauf, jede Muss-Anforderung mit Ablauf, eindeutige IDs |
 
 Sind Anforderungen freigegeben, ordnet der Planungs-Agent jede Aufgabe ihnen zu
 (`requirement_ids`). `check_plan` meldet dann eine unbekannte Anforderung als Fehler und eine
 Anforderung ohne Aufgabe oder Aufgaben ohne Anforderung als Warnung. Wie das ganze
 Vorgehen von der Idee bis zur nächsten Iteration gedacht ist, beschreibt
-[docs/lebenszyklus.md](docs/lebenszyklus.md).
+[docs/lebenszyklus.md](docs/lebenszyklus.md). Ist ein Entwurf freigegeben, bekommt der
+Planungs-Agent dessen Bausteine und Schnittstellen als Grundlage; geprüft wird dagegen nicht.
+Die Sequenzdiagramme zeichnet `src/pm_agent/diagram.py`, nie Claude.
 
 Die Agenten für Durchführung und Kontrolle bekommen die fertig berechneten Kennzahlen und
 rechnen nicht selbst. Sie sind ein Gerüst: Weitere Werkzeuge (zum Beispiel eine
@@ -136,10 +140,10 @@ uv run --env-file .env pytest tests/test_agent_live.py
 
 ## Datenschutz
 
-Das Repository ist öffentlich. Teamdaten (`data/`, auch Projektauftrag und Anforderungen in
+Das Repository ist öffentlich. Teamdaten (`data/`, auch Projektauftrag, Anforderungen und Entwurf in
 `data/vorhaben.json`), Protokolle (`logs/`) und `.env` bleiben lokal und sind per `.gitignore`
-ausgeschlossen. Für Projektauftrag und Anforderungen gehen nur Idee, Termine und die Texte
-des Auftrags an die API, keine Angaben zum Team; Beteiligte stehen dort als Rollen.
+ausgeschlossen. Für Projektauftrag, Anforderungen und Entwurf gehen nur Idee, Termine und die
+Texte von Auftrag und Anforderungen an die API, keine Angaben zum Team; Beteiligte stehen dort als Rollen.
 
 Der Agent schickt Projektidee und Teamdaten (Namen, Skills, Wochenstunden, Notizen) an die
 Anthropic API. Teammitglieder müssen vorher zustimmen.

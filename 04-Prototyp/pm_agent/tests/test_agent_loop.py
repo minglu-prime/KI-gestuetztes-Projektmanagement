@@ -175,3 +175,25 @@ def test_planning_without_requirements_sends_and_logs_none(api, tmp_path):
     run_planning(PROJECT, TEAM, log_dir=tmp_path)
     assert "Anforderungen" not in json.dumps(requests[0]["messages"], ensure_ascii=False)
     assert "requirements" not in read_log(tmp_path)
+
+
+def test_an_approved_design_goes_to_the_planner_without_its_flows(api, tmp_path):
+    from test_lifecycle import design
+
+    replies, requests = api
+    replies += [reply([submit(plan_input(), "call_1")])] * 2
+    run_planning(PROJECT, TEAM, log_dir=tmp_path, design=design())
+    plan = Plan.model_validate(plan_input())
+    run_replanning(PROJECT, TEAM, plan, "Schneller.", log_dir=tmp_path, design=design())
+    for request in requests:
+        sent = json.dumps(request["messages"][0], ensure_ascii=False)
+        assert "Freigegebener Entwurf" in sent and "Buchung anlegen" in sent
+        # The flows name requirements the planner may not see.
+        assert "Raum buchen" not in sent and "A1" not in sent
+
+
+def test_without_a_design_the_planner_hears_nothing_of_it(api, tmp_path):
+    replies, requests = api
+    replies += [reply([submit(plan_input(), "call_1")])]
+    run_planning(PROJECT, TEAM, log_dir=tmp_path)
+    assert "Entwurf" not in json.dumps(requests[0]["messages"], ensure_ascii=False)
