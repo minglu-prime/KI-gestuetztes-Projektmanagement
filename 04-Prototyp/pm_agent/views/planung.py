@@ -313,7 +313,7 @@ st.caption(
     "entscheidet."
 )
 if rest_error:
-    st.error(f"Der Rest des Projekts konnte nicht geladen werden: {rest_error}")
+    st.error(f"Der Rest des Projekts konnte nicht geladen werden: {as_text(rest_error)}")
 status = st.container()  # filled at the end, when team, project and plan are known
 # on_change="rerun" makes the selection a value in the session state, so buttons can open a
 # step. Every step is still rendered on every run (see the module docstring).
@@ -329,7 +329,9 @@ with tabs[0]:
         "Arbeit eingeplant."
     )
     if state.team_file_error:
-        st.error(f"Gespeichertes Team konnte nicht geladen werden: {state.team_file_error}")
+        st.error(
+            f"Gespeichertes Team konnte nicht geladen werden: {as_text(state.team_file_error)}"
+        )
     edited_team = st.data_editor(
         state.team_df,
         key=f"team_editor_{state.team_version}",

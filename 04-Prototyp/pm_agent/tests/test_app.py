@@ -1370,6 +1370,23 @@ def test_an_error_quoting_a_cell_shows_no_link(app):
     assert not [text for text in errors if re.search(r"(?<!\\)\[", text)]
 
 
+REAL_LOAD_TEAM = workbench.load_team  # bound before the local fixture replaces it
+
+
+def test_a_damaged_team_file_shows_no_link(local, monkeypatch, tmp_path):
+    # The reason names the place of the error, and a skill name is a place.
+    path = tmp_path / "team.json"
+    path.write_text(
+        '[{"name": "Anna", "skills": {"[hier](https://evil.example)": 9}, "hours_per_week": 10}]',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(workbench, "load_team", lambda: REAL_LOAD_TEAM(path))
+    at = AppTest.from_file(str(SITE.parent / PLANUNG), default_timeout=30).run()
+    errors = [e.value for e in at.error]
+    assert any("evil.example" in text for text in errors)
+    assert not [text for text in errors if re.search(r"(?<!\\)\[", text)]
+
+
 def test_a_failing_agent_shows_the_reason_and_no_result(tracked, monkeypatch):
     def failing(adopted, today, on_round=None):
         raise AgentError("Kein Zugang zur Claude API: ANTHROPIC_API_KEY ist nicht gesetzt.")

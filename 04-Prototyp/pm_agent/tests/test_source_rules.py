@@ -26,6 +26,7 @@ def test_every_page_table_keeps_unsaved_edits_through_a_page_change():
 def test_error_messages_are_shown_as_written():
     # PR 44 and the commits before it: text in a message rendered as a link or an image.
     # An error can quote a cell, a file name or what Claude wrote; ui.as_text escapes it.
+    # The reason for a damaged team.json names the place: a skill name is one.
     found = []
     for source in SOURCES:
         tree = ast.parse(source.read_text(encoding="utf-8"))
@@ -40,10 +41,11 @@ def test_error_messages_are_shown_as_written():
             ):
                 continue
             for part in call.args[0].values:
-                if (
-                    isinstance(part, ast.FormattedValue)
-                    and isinstance(part.value, ast.Name)
-                    and part.value.id in caught
-                ):
+                if not isinstance(part, ast.FormattedValue):
+                    continue
+                value = part.value
+                name = getattr(value, "id", None) or getattr(value, "attr", "")
+                # A caught exception, or one kept for later as rest_error, state.x_error.
+                if name in caught or name.endswith("_error"):
                     found.append(f"{source.name}:{call.lineno}")
     assert found == []
