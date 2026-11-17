@@ -1675,7 +1675,9 @@ def test_the_auftrag_prefills_step_2(app):
 
 
 def test_the_rest_does_not_ask_for_requirements_that_are_done(site, monkeypatch):
-    second = NEEDS.items[0].model_copy(update={"id": "R2", "title": "Stornieren"})
+    first = NEEDS.items[0].model_dump()
+    first["criteria"] = [c["text"] for c in first["criteria"]]  # numbered for R2 anew
+    second = Requirement.model_validate({**first, "id": "R2", "title": "Stornieren"})
     needs = Requirements(items=[*NEEDS.items, second])
     approve_needs(needs)
     data = plan_input()

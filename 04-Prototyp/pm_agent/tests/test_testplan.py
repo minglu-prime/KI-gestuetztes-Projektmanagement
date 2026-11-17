@@ -248,3 +248,62 @@ def test_the_test_summary_counts_results_and_open_defects(adopted):
         "Bestanden": "1",
         "Offene Fehler": "1 (schwer: 1)",
     }
+
+
+def test_approvals_made_before_criteria_had_ids_still_hold():
+    import hashlib
+    import json
+
+    life = Lifecycle(project=PROJECT, charter=charter(), requirements=ONE, design=design())
+
+    def old_digest(*parts):
+        # How the approval was stamped when criteria were plain texts.
+        data = []
+        for part in parts:
+            dumped = part.model_dump(mode="json")
+            if "items" in dumped:
+                for item in dumped["items"]:
+                    item["criteria"] = [c["text"] for c in item["criteria"]]
+            data.append(dumped)
+        return hashlib.sha256(json.dumps(data, sort_keys=True).encode()).hexdigest()
+
+    stamp = lifecycle.Approval(
+        at=NOW, digest=old_digest(life.project, life.charter, life.requirements)
+    )
+    design_stamp = lifecycle.Approval(
+        at=NOW, digest=old_digest(life.project, life.charter, life.requirements, life.design)
+    )
+    old = life.model_copy(update={"requirements_ok": stamp, "design_ok": design_stamp})
+    assert lifecycle.requirements_state(old) == "freigegeben"
+    assert lifecycle.design_state(old) == "freigegeben"
+
+
+def test_a_number_in_use_elsewhere_is_not_given_again():
+    from pm_agent.lifecycle import requirement_rows, rows_to_requirements
+
+    two = need("R1")
+    two["criteria"] = ["a", "b"]
+    rows = requirement_rows(requirements(two))
+    rows[0]["Akzeptanzkriterien"] = "R1.1: a; c"  # R1.2 deleted, c added
+    # R1.2 was saved before, and a test case still points at it.
+    again = rows_to_requirements(rows, taken={"R1.1", "R1.2"})
+    assert [(c.id, c.text) for c in again.items[0].criteria] == [("R1.1", "a"), ("R1.3", "c")]
+
+
+def test_criteria_move_with_a_renamed_requirement():
+    from pm_agent.lifecycle import requirement_rows, rows_to_requirements
+
+    rows = requirement_rows(requirements(need("R1")))
+    rows[0]["ID"] = "R2"
+    moved = rows_to_requirements(rows).items[0].criteria
+    assert [(c.id, c.text) for c in moved] == [("R2.1", "Die Buchung steht in der Liste")]
+
+
+def test_a_criterion_id_names_its_requirement():
+    from pm_agent.lifecycle import check_requirements
+
+    odd = need("R1")
+    odd["criteria"] = [{"id": "AK1", "text": "a"}]
+    assert check_requirements(requirements(odd, need("R2", sources=["K2"])), charter()).errors == [
+        "Anforderung 'R1': das Akzeptanzkriterium 'AK1' muss 'R1.<Nummer>' heißen"
+    ]

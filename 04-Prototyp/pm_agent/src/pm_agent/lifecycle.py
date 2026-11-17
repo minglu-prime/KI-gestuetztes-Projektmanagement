@@ -10,7 +10,8 @@ No Streamlit in here. The file lives in data/ like the adopted project and is gi
 
 import hashlib
 import json
-from collections.abc import Callable
+import re
+from collections.abc import Callable, Iterable
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal, NamedTuple
@@ -104,9 +105,24 @@ def save(life: Lifecycle, path: Path | None = None) -> None:
     path.write_text(life.model_dump_json(indent=2), encoding="utf-8")
 
 
-def _digest(*parts: BaseModel | None) -> str:
-    data = [part.model_dump(mode="json") if part is not None else None for part in parts]
+def _digest(*parts: BaseModel | None, legacy: bool = False) -> str:
+    data = [_dump(part, legacy) if part is not None else None for part in parts]
     return hashlib.sha256(json.dumps(data, sort_keys=True).encode()).hexdigest()
+
+
+def _dump(part: BaseModel, legacy: bool) -> Any:
+    """`legacy`: as before acceptance criteria had IDs, when they were plain texts."""
+    data = part.model_dump(mode="json")
+    if legacy and isinstance(part, Requirements):
+        for item in data["items"]:
+            item["criteria"] = [c["text"] for c in item["criteria"]]
+    return data
+
+
+def _digests(*parts: BaseModel | None) -> set[str]:
+    """The digests an approval of these parts may carry: the current one, and the one
+    stamped before acceptance criteria had IDs, so an upgrade keeps the approvals."""
+    return {_digest(*parts), _digest(*parts, legacy=True)}
 
 
 def _charter_digest(life: Lifecycle) -> str:
@@ -125,30 +141,38 @@ def _cases_digest(life: Lifecycle) -> str:
     return _digest(life.project, life.charter, life.requirements, life.design, life.cases)
 
 
-def _state(artefact: Any, approval: Approval | None, digest: str) -> State:
+def _state(artefact: Any, approval: Approval | None, digests: set[str]) -> State:
     if artefact is None:
         return "offen"
     if approval is None:
         return "entwurf"
-    return "freigegeben" if approval.digest == digest else "geändert"
+    return "freigegeben" if approval.digest in digests else "geändert"
 
 
 def charter_state(life: Lifecycle | None) -> State:
     if life is None:
         return "offen"
-    return _state(life.charter, life.charter_ok, _charter_digest(life))
+    return _state(life.charter, life.charter_ok, _digests(life.project, life.charter))
 
 
 def requirements_state(life: Lifecycle | None) -> State:
     if life is None:
         return "offen"
-    return _state(life.requirements, life.requirements_ok, _requirements_digest(life))
+    return _state(
+        life.requirements,
+        life.requirements_ok,
+        _digests(life.project, life.charter, life.requirements),
+    )
 
 
 def design_state(life: Lifecycle | None) -> State:
     if life is None:
         return "offen"
-    return _state(life.design, life.design_ok, _design_digest(life))
+    return _state(
+        life.design,
+        life.design_ok,
+        _digests(life.project, life.charter, life.requirements, life.design),
+    )
 
 
 def approved_design(life: Lifecycle | None) -> Design | None:
@@ -162,7 +186,11 @@ def approved_design(life: Lifecycle | None) -> Design | None:
 def cases_state(life: Lifecycle | None) -> State:
     if life is None:
         return "offen"
-    return _state(life.cases, life.cases_ok, _cases_digest(life))
+    return _state(
+        life.cases,
+        life.cases_ok,
+        _digests(life.project, life.charter, life.requirements, life.design, life.cases),
+    )
 
 
 def approved_cases(life: Lifecycle | None) -> Cases | None:
@@ -301,6 +329,11 @@ def check_requirements(requirements: Requirements, charter: Charter | None) -> C
         if ids.count(rid) > 1
     ]
     for r in items:
+        errors += [
+            f"Anforderung '{r.id}': das Akzeptanzkriterium '{c.id}' muss '{r.id}.<Nummer>' heißen"
+            for c in r.criteria
+            if not re.fullmatch(rf"{re.escape(r.id)}\.\d+", c.id)
+        ]
         errors += [
             f"Anforderung '{r.id}': das Akzeptanzkriterium '{cid}' ist mehrfach vergeben"
             for cid in dict.fromkeys(c.id for c in r.criteria)
@@ -469,7 +502,7 @@ def requirement_rows(requirements: Requirements) -> list[dict[str, Any]]:
     ]
 
 
-def rows_to_requirements(rows: list[dict[str, Any]]) -> Requirements:
+def rows_to_requirements(rows: list[dict[str, Any]], taken: Iterable[str] = ()) -> Requirements:
     """The edited table as requirements. Raises InputError naming each unreadable row."""
     items, errors = [], []
     for number, row in enumerate(rows, start=1):
@@ -483,7 +516,7 @@ def rows_to_requirements(rows: list[dict[str, Any]]) -> Requirements:
                     title=_cell(row.get("Titel")),
                     story=_cell(row.get("User Story")),
                     priority=_cell(row.get("Priorität")),
-                    criteria=_criteria(rid, row.get("Akzeptanzkriterien")),
+                    criteria=_criteria(rid, row.get("Akzeptanzkriterien"), taken),
                     sources=_split(row.get("Erfolgskriterien"), ","),
                 )
             )
@@ -676,19 +709,29 @@ def rows_to_design(rows: dict[str, list[dict[str, Any]]]) -> Design:
         raise InputError(f"Entwurf: {_reason(err)}") from err
 
 
-def _criteria(rid: str, cell: Any) -> list[Any]:
-    """The acceptance criteria of a table cell: "R1.1: text" keeps its ID, a plain text
-    gets the next number. Only "<requirement ID>.<n>:" reads as an ID; any other colon is
-    part of the text."""
-    criteria = []
+def _criteria(rid: str, cell: Any, taken: Iterable[str] = ()) -> list[Any]:
+    """The acceptance criteria of a table cell. "R1.1: text" keeps its number, also when the
+    requirement was renamed (it becomes "R2.1"); a plain text gets the next number. Numbers
+    in `taken` (the saved criteria, those test cases point at) are not given again. Only
+    "<ID>.<n>:" reads as an ID; any other colon is part of the text."""
+    found = []
     for part in _split(cell, ";"):
-        cid, colon, text = part.partition(":")
-        cid = cid.strip()
-        number = cid.removeprefix(f"{rid}.")
-        if colon and cid.startswith(f"{rid}.") and number.isdigit():
-            criteria.append({"id": cid, "text": text.strip()})
-        else:
-            criteria.append(part)
+        head, colon, text = part.partition(":")
+        match = re.fullmatch(r"([A-Za-z0-9._-]+)\.(\d+)", head.strip()) if colon else None
+        found.append((int(match.group(2)), text.strip()) if match else (None, part))
+    used = [n for n, _ in found if n is not None]
+    used += [
+        int(t[len(rid) + 1 :])
+        for t in taken
+        if t.startswith(f"{rid}.") and t[len(rid) + 1 :].isdigit()
+    ]
+    following = max(used, default=0)
+    criteria = []
+    for number, text in found:
+        if number is None:
+            following += 1
+            number = following
+        criteria.append({"id": f"{rid}.{number}", "text": text})
     return criteria
 
 
