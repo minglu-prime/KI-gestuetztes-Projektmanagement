@@ -303,8 +303,9 @@ def test_runs_csv_takes_every_line_of_exports_at_the_same_time(tmp_path):
     # two at once could write over each other, and the page said nothing.
     path = tmp_path / "runs.csv"
 
+    # 25 each: without the lock this lost lines in 5 of 5 runs; 150 took 17 s on Windows.
     def export(session):
-        for number in range(150):
+        for number in range(25):
             append_run({"quelle": f"sitzung-{session}", "runden": number}, path)
 
     threads = [threading.Thread(target=export, args=(session,)) for session in range(8)]
@@ -314,7 +315,7 @@ def test_runs_csv_takes_every_line_of_exports_at_the_same_time(tmp_path):
         thread.join()
     lines = list(csv.DictReader(io.StringIO(path.read_text(encoding="utf-8"))))
     assert sorted((line["quelle"], int(line["runden"])) for line in lines) == sorted(
-        (f"sitzung-{session}", number) for session in range(8) for number in range(150)
+        (f"sitzung-{session}", number) for session in range(8) for number in range(25)
     )
 
 
