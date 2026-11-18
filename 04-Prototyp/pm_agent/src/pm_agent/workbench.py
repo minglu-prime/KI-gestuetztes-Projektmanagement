@@ -25,13 +25,14 @@ from pm_agent.models import (
     Assignment,
     CheckResult,
     Member,
+    MemberAbsence,
     Plan,
     Project,
     Requirement,
     Task,
 )
 from pm_agent.planning import project_weeks, workday_shift, working_shift
-from pm_agent.tools import german
+from pm_agent.tools import german, with_absences
 
 DATA_DIR = LOG_DIR.parent / "data"
 TEAM_FILE = DATA_DIR / "team.json"
@@ -223,9 +224,10 @@ def saved_runs(log_dir: Path = LOG_DIR) -> list[Path]:
 def load_run(path: Path) -> tuple[Project, list[Member], Plan, dict[str, Any]]:
     record = json.loads(path.read_text(encoding="utf-8"))
     team = [Member.model_validate(m) for m in record["team"]]
+    absences = [MemberAbsence.model_validate(a) for a in record.get("absences", [])]
     return (
         Project.model_validate(record["project"]),
-        team,
+        with_absences(team, absences),
         Plan.model_validate(record["plan"]),
         record,
     )
