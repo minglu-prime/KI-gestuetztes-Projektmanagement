@@ -1,7 +1,7 @@
 """The whole agent loop offline: the real SDK tool runner talks to a scripted fake API."""
 
 import json
-from datetime import datetime
+from datetime import date, datetime
 
 import pytest
 from test_tools import PROJECT, TEAM, plan_input
@@ -9,6 +9,8 @@ from test_tools import PROJECT, TEAM, plan_input
 from pm_agent import agent
 from pm_agent.agent import PlanningError, run_planning, run_replanning
 from pm_agent.models import Plan
+from pm_agent.planning import check_plan
+from pm_agent.workbench import load_run
 
 
 def reply(content, stop_reason="tool_use"):
@@ -218,6 +220,13 @@ def test_replanning_can_set_the_absence_a_wish_names_and_logs_it(api, tmp_path):
     assert result.absences == [MemberAbsence.model_validate(away)]
     assert "set_absence" in [tool["name"] for tool in requests[0]["tools"]]
     assert read_log(tmp_path)["absences"] == [away]
+
+    (path,) = tmp_path.glob("run-*.json")
+    project, team, plan, _record = load_run(path)
+    assert [a.model_dump(mode="json") for a in team[0].absences] == [
+        {"first": away["first"], "last": away["last"]}
+    ]
+    assert check_plan(plan, team, project).end_date == date(2026, 11, 13)
 
 
 def test_a_new_plan_gets_no_tool_for_absences(api, tmp_path):
