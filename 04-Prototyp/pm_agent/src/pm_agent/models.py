@@ -37,6 +37,13 @@ class Absence(_Model):
         return self
 
 
+class MemberAbsence(Absence):
+    """An absence of one member that Claude read from a wish. The project lead takes it into
+    the team with the changed plan, or drops both."""
+
+    member: NonEmpty
+
+
 class Member(_Model):
     name: NonEmpty
     skills: dict[NonEmpty, SkillLevel] = Field(default_factory=dict)

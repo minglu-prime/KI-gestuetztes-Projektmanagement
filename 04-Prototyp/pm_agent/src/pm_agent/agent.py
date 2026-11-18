@@ -13,7 +13,7 @@ from typing import Any, NamedTuple, TypeVar
 
 from anthropic import Anthropic
 
-from pm_agent.models import Design, Member, Plan, Project, Requirement
+from pm_agent.models import Design, Member, MemberAbsence, Plan, Project, Requirement
 from pm_agent.tools import PlanningTools, Submission
 
 DEFAULT_MODEL = "claude-opus-5-5"
@@ -70,7 +70,15 @@ def run_planning(
         f"{_inputs(project, team, trace)}\n\n"
         "Erstelle den Plan, prüfe ihn mit check_plan und reiche ihn mit submit_plan ein."
     )
-    return _plan_run(SYSTEM_PROMPT, request, project, team, {}, log_dir, on_round, trace)
+    return _plan_run(SYSTEM_PROMPT, request, project, team, {}, log_dir, on_round, trace).plan
+
+
+class Replan(NamedTuple):
+    """A changed plan, and the absences the wish named that Claude set for it. The plan was
+    checked with them; the project lead takes both into plan and team, or neither."""
+
+    plan: Plan
+    absences: list[MemberAbsence]
 
 
 def run_replanning(
@@ -84,9 +92,10 @@ def run_replanning(
     requirements: list[Requirement] | None = None,
     covered: frozenset[str] = frozenset(),
     design: Design | None = None,
-) -> Plan:
+) -> "Replan":
     """Let Claude change `plan` the way the project lead asks in `wish`. Same tools, same
-    check and same kind of log as run_planning; the log also keeps the wish."""
+    check and same kind of log as run_planning; the log also keeps the wish. Claude may also
+    set absences the wish names (set_absence); they come back with the plan and are logged."""
     wish = wish.strip()
     if not wish:
         raise AgentError("Beschreibe, was sich ändern soll.")
@@ -98,7 +107,15 @@ def run_replanning(
         "Passe den Plan an, prüfe ihn mit check_plan und reiche ihn mit submit_plan ein."
     )
     return _plan_run(
-        REPLANNING_PROMPT, request, project, team, {"wish": wish}, log_dir, on_round, trace
+        REPLANNING_PROMPT,
+        request,
+        project,
+        team,
+        {"wish": wish},
+        log_dir,
+        on_round,
+        trace,
+        absences=True,
     )
 
 
@@ -111,16 +128,17 @@ def _plan_run(
     log_dir: Path | None,
     on_round: Callable[[dict[str, Any]], None] | None,
     trace: "Trace",
-) -> Plan:
-    tools = PlanningTools(project, team, trace.requirements, trace.covered)
+    absences: bool = False,
+) -> Replan:
+    tools = PlanningTools(project, team, trace.requirements, trace.covered, absences=absences)
     if trace.requirements is not None:  # what the plan was traced to, for the record
         extra = {**extra, "requirements": [r.model_dump(mode="json") for r in trace.requirements]}
-    return run_agent(
+    plan = run_agent(
         log_prefix="run",
         noun="Plan",
         system=system,
         request=request,
-        tools=[tools.check_plan, tools.submit_plan],
+        tools=[tools.check_plan, tools.submit_plan, *filter(None, [tools.set_absence])],
         result=lambda: tools.plan,
         # Project and team are kept so that a run can be reopened in the UI.
         record=lambda plan: {
@@ -128,10 +146,16 @@ def _plan_run(
             "team": [member.model_dump(mode="json") for member in team],
             "plan": plan.model_dump(mode="json") if plan is not None else None,
             **extra,
+            **(
+                {"absences": [a.model_dump(mode="json") for a in tools.absences]}
+                if absences
+                else {}
+            ),
         },
         log_dir=log_dir,
         on_round=on_round,
     )
+    return Replan(plan, tools.absences)
 
 
 def run_submission(

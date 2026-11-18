@@ -21,6 +21,7 @@ from pm_agent import lifecycle
 from pm_agent.agent import PlanningError, run_planning, run_replanning
 from pm_agent.models import Project
 from pm_agent.planning import check_plan
+from pm_agent.tools import with_absences
 from pm_agent.tracking import (
     PROJECT_WRITE_LOCK,
     adopt,
@@ -241,6 +242,12 @@ def decide(accept: bool) -> None:
     state.chat.append(
         {"wish": proposal["wish"], "changes": proposal["changes"], "accepted": accept}
     )
+    if accept and proposal.get("absences"):
+        # The absences the wish named go into the team table, as if typed there.
+        team = with_absences(proposal["team"], proposal["absences"])
+        state.team_df = pd.DataFrame(team_rows(team), columns=TEAM_COLUMNS)
+        state.team_current = None
+        state.team_version += 1
     if accept:
         # What the export record says about the plan as a whole goes on: the agent's time
         # and rounds add up, a hand edit stays a hand edit, the review began when it began.
@@ -829,6 +836,13 @@ with tabs[4]:
                     "Der Plan wurde seit dem Vorschlag von Hand geändert. Der Vorschlag passt "
                     "nicht mehr dazu und ist verworfen."
                 )
+            # Its absences were set for the team as it was then.
+            if proposal is not None and proposal.get("absences") and proposal["team"] != team:
+                state.proposal = proposal = None
+                st.info(
+                    "Das Team wurde seit dem Vorschlag geändert. Der Vorschlag rechnete mit dem "
+                    "alten Team und ist verworfen."
+                )
             blocked = [
                 text
                 for ok, text in [
@@ -859,7 +873,7 @@ with tabs[4]:
                         started = time.monotonic()
                         failure = None
                         try:
-                            changed_plan = run_replanning(
+                            replanned = run_replanning(
                                 project, team, state.plan, wish, on_round=on_change_round, **context
                             )
                         except PlanningError as err:
@@ -870,7 +884,10 @@ with tabs[4]:
                             state.proposal = proposal = {
                                 "wish": wish,
                                 "basis": state.plan,
-                                "plan": changed_plan,
+                                "plan": replanned.plan,
+                                # Set by Claude from the wish; the plan was checked with them.
+                                "absences": replanned.absences,
+                                "team": team,
                                 "rounds": change_rounds,
                                 "seconds": round(time.monotonic() - started, 1),
                             }
@@ -890,11 +907,23 @@ with tabs[4]:
                     st.rerun()
 
             if proposal is not None:
-                proposed = check_plan(proposal["plan"], team, project, **trace) if result else None
+                proposed = (
+                    check_plan(
+                        proposal["plan"],
+                        with_absences(team, proposal.get("absences", [])),
+                        project,
+                        **trace,
+                    )
+                    if result
+                    else None
+                )
                 with st.chat_message("assistant"):
                     st.markdown("**Vorschlag von Claude, von Python geprüft**")
                     st.text(proposal["wish"])
-                    proposal["changes"] = plan_changes(state.plan, proposal["plan"])
+                    proposal["changes"] = [
+                        f"Abwesenheit neu: {a.member} {free_days_text([a])}"
+                        for a in proposal.get("absences", [])
+                    ] + plan_changes(state.plan, proposal["plan"])
                     if proposed is not None:
                         proposal["changes"] += check_changes(
                             result, proposed, pair_tasks(state.plan, proposal["plan"]), project

@@ -16,7 +16,7 @@ from streamlit.testing.v1 import AppTest
 from test_tools import PROJECT, TEAM, plan_input
 
 from pm_agent import agent, followup, lab_server, lifecycle, tracking, ui, workbench
-from pm_agent.agent import AgentError, PlanningError
+from pm_agent.agent import AgentError, PlanningError, Replan
 from pm_agent.models import (
     Absence,
     Charter,
@@ -196,7 +196,7 @@ def with_plan(app, monkeypatch):
                 "tool_results": [accepted],
             }
         )
-        return Plan.model_validate(plan_input(hours=16))
+        return Replan(Plan.model_validate(plan_input(hours=16)), [])
 
     monkeypatch.setattr(agent, "run_replanning", replanned)
     return at
@@ -268,7 +268,7 @@ def test_a_suggested_wish_is_asked_with_one_click(with_plan, monkeypatch):
 
     def replanned(project, team, plan, wish, on_round=None):
         asked.append(wish)
-        return Plan.model_validate(plan_input(hours=16))
+        return Replan(Plan.model_validate(plan_input(hours=16)), [])
 
     monkeypatch.setattr(agent, "run_replanning", replanned)
     suggestion = "Was, wenn B (API) doppelt so lange dauert?"
@@ -344,7 +344,9 @@ def test_checking_an_untouched_table_keeps_an_open_proposal(app, monkeypatch):
     doubled = Plan.model_validate(plan_input(hours=16))
     monkeypatch.setattr(agent, "run_planning", lambda project, team, on_round=None: shuffled)
     monkeypatch.setattr(
-        agent, "run_replanning", lambda project, team, plan, wish, on_round=None: doubled
+        agent,
+        "run_replanning",
+        lambda project, team, plan, wish, on_round=None: Replan(doubled, []),
     )
     at = fill_project(app)
     button(at, "Plan mit Claude erstellen").click()
@@ -407,6 +409,44 @@ def test_taking_a_change_keeps_what_the_export_record_needs(with_plan):
     assert at.session_state["round_count"] == 4
     assert at.session_state["hand_edited"] is True
     assert at.session_state["shown_at"] == shown_at
+
+
+def away_on_monday_and_tuesday(monkeypatch):
+    from pm_agent.models import MemberAbsence
+
+    away = MemberAbsence(member="Anna", first=date(2026, 11, 9), last=date(2026, 11, 10))
+    monkeypatch.setattr(
+        agent,
+        "run_replanning",
+        lambda project, team, plan, wish, on_round=None: Replan(PLAN, [away]),
+    )
+
+
+def test_an_absence_from_a_wish_is_shown_and_goes_into_the_team_with_the_plan(
+    with_plan, monkeypatch
+):
+    # The wish names an absence. Claude sets it, the check counts it, the lead takes both.
+    away_on_monday_and_tuesday(monkeypatch)
+    at = with_plan.chat_input(key="wish").set_value("Anna fehlt am 9. und 10.11.").run()
+    shown = " ".join(m.value for m in at.markdown)
+    assert "Abwesenheit neu: Anna 09.11.2026–10.11.2026" in shown
+    assert not button(at, "Übernehmen").disabled  # an absence alone is a change
+    button(at, "Übernehmen").click()
+    at = at.run()
+
+    assert not at.exception
+    assert list(at.session_state["team_df"]["Abwesend"]) == ["09.11.2026–10.11.2026"]
+    assert {m.label: m.value for m in at.metric}["Planende"] == "13.11.2026"
+
+
+def test_a_dropped_absence_stays_out_of_the_team(with_plan, monkeypatch):
+    away_on_monday_and_tuesday(monkeypatch)
+    at = with_plan.chat_input(key="wish").set_value("Anna fehlt am 9. und 10.11.").run()
+    button(at, "Verwerfen").click()
+    at = at.run()
+
+    assert list(at.session_state["team_df"]["Abwesend"]) == [""]
+    assert {m.label: m.value for m in at.metric}["Planende"] == "11.11.2026"
 
 
 def test_a_dropped_proposal_leaves_the_plan_as_it_was(with_plan):
