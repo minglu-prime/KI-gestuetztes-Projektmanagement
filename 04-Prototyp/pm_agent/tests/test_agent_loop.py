@@ -131,11 +131,11 @@ def test_replanning_sends_the_current_plan_and_the_wish_and_logs_both(api, tmp_p
     replies += [reply([submit(longer, "call_1")])]
     current = Plan.model_validate(plan_input())
 
-    plan = run_replanning(
+    plan, absences = run_replanning(
         PROJECT, TEAM, current, "Das Datenmodell braucht doppelt so lange.", log_dir=tmp_path
     )
 
-    assert plan == Plan.model_validate(longer)
+    assert (plan, absences) == (Plan.model_validate(longer), [])
     (request,) = requests
     asked = request["messages"][0]["content"]
     assert "Das Datenmodell braucht doppelt so lange." in asked
@@ -197,3 +197,32 @@ def test_without_a_design_the_planner_hears_nothing_of_it(api, tmp_path):
     replies += [reply([submit(plan_input(), "call_1")])]
     run_planning(PROJECT, TEAM, log_dir=tmp_path)
     assert "Entwurf" not in json.dumps(requests[0]["messages"], ensure_ascii=False)
+
+
+def test_replanning_can_set_the_absence_a_wish_names_and_logs_it(api, tmp_path):
+    from pm_agent.models import MemberAbsence
+
+    replies, requests = api
+    away = {"member": "Anna", "first": "2026-11-09", "last": "2026-11-10"}
+    replies += [
+        reply([{"type": "tool_use", "id": "call_1", "name": "set_absence", "input": away}]),
+        reply([submit(plan_input(), "call_2")]),
+    ]
+    result = run_replanning(
+        PROJECT,
+        TEAM,
+        Plan.model_validate(plan_input()),
+        "Anna fehlt am 9. und 10.11.",
+        log_dir=tmp_path,
+    )
+    assert result.absences == [MemberAbsence.model_validate(away)]
+    assert "set_absence" in [tool["name"] for tool in requests[0]["tools"]]
+    assert read_log(tmp_path)["absences"] == [away]
+
+
+def test_a_new_plan_gets_no_tool_for_absences(api, tmp_path):
+    replies, requests = api
+    replies += [reply([submit(plan_input(), "call_1")])]
+    run_planning(PROJECT, TEAM, log_dir=tmp_path)
+    assert "set_absence" not in [tool["name"] for tool in requests[0]["tools"]]
+    assert "absences" not in read_log(tmp_path)

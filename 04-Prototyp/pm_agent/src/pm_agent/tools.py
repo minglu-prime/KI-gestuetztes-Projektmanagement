@@ -11,7 +11,15 @@ from anthropic import beta_tool
 from anthropic.lib.tools import ToolError
 from pydantic import BaseModel, ValidationError
 
-from pm_agent.models import CheckResult, Member, Plan, Project, Requirement
+from pm_agent.models import (
+    Absence,
+    CheckResult,
+    Member,
+    MemberAbsence,
+    Plan,
+    Project,
+    Requirement,
+)
 from pm_agent.planning import check_plan
 
 T = TypeVar("T", bound=BaseModel)
@@ -20,8 +28,23 @@ T = TypeVar("T", bound=BaseModel)
 REPORTED = {"errors", "warnings", "end_date", "critical_path", "load"}
 
 
+def with_absences(team: list[Member], absences: list[MemberAbsence]) -> list[Member]:
+    """The team with the absences added to their members (one they have stays once)."""
+    changed = []
+    for member in team:
+        days = list(member.absences)
+        for a in absences:
+            away = Absence(first=a.first, last=a.last)
+            if a.member == member.name and away not in days:
+                days.append(away)
+        changed.append(member.model_copy(update={"absences": days}))
+    return changed
+
+
 class PlanningTools:
-    """The tools of one planning run. `plan` is set when submit_plan accepts a plan."""
+    """The tools of one planning run. `plan` is set when submit_plan accepts a plan.
+    `absences`: the run changes a plan on a wish, and Claude may set the absences the wish
+    names (set_absence); every check after that counts them."""
 
     def __init__(
         self,
@@ -29,9 +52,26 @@ class PlanningTools:
         team: list[Member],
         requirements: list[Requirement] | None = None,
         covered: frozenset[str] = frozenset(),
+        absences: bool = False,
     ) -> None:
         self.project = project
         self.team = team
+        self.absences: list[MemberAbsence] = []
+        self.set_absence = (
+            beta_tool(
+                self._set_absence,
+                name="set_absence",
+                description=(
+                    "Trägt eine Abwesenheit ein, die der Wunsch der Projektleitung nennt: Person "
+                    "aus dem Team, erster und letzter Tag (beide eingeschlossen). check_plan und "
+                    "submit_plan rechnen danach mit ihr. Die Projektleitung sieht sie und "
+                    "übernimmt sie mit dem Plan ins Team oder verwirft beides."
+                ),
+                input_schema=MemberAbsence,
+            )
+            if absences
+            else None
+        )
         # The approved requirements: with them the check traces each task (check_plan).
         self.requirements = requirements
         self.covered = covered
@@ -56,6 +96,26 @@ class PlanningTools:
             input_schema=Plan,
         )
 
+    def _set_absence(self, /, **data: Any) -> str:
+        try:
+            absence = MemberAbsence.model_validate(data)
+        except ValidationError as err:
+            raise ToolError("\n".join(invalid_input(err))) from None
+        names = [m.name for m in self.team]
+        if absence.member not in names:
+            raise ToolError(f"Unbekannte Person '{absence.member}'. Im Team: {', '.join(names)}")
+        if absence.last < self.project.start_date or absence.first > self.project.deadline:
+            raise ToolError(
+                "Die Abwesenheit liegt außerhalb des Projekts "
+                f"({self.project.start_date:%d.%m.%Y} bis {self.project.deadline:%d.%m.%Y})."
+            )
+        if absence not in self.absences:
+            self.absences.append(absence)
+        return (
+            f"Eingetragen: {absence.member} ist vom {absence.first:%d.%m.%Y} bis zum "
+            f"{absence.last:%d.%m.%Y} abwesend."
+        )
+
     def _check(self, /, **plan: Any) -> str:
         return self._review(plan)[1].model_dump_json(include=REPORTED)
 
@@ -74,8 +134,9 @@ class PlanningTools:
             plan = Plan.model_validate(data)
         except ValidationError as err:
             return None, CheckResult(errors=invalid_input(err))
+        team = with_absences(self.team, self.absences)
         return plan, check_plan(
-            plan, self.team, self.project, requirements=self.requirements, covered=self.covered
+            plan, team, self.project, requirements=self.requirements, covered=self.covered
         )
 
 

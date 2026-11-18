@@ -4,7 +4,7 @@ from datetime import date
 import pytest
 from anthropic.lib.tools import ToolError
 
-from pm_agent.models import Member, Plan, Project, Requirement
+from pm_agent.models import Member, MemberAbsence, Plan, Project, Requirement
 from pm_agent.tools import PlanningTools
 
 PROJECT = Project(
@@ -140,3 +140,25 @@ def test_submit_plan_rejects_an_unknown_requirement():
     with pytest.raises(ToolError, match="Task 'A' dient der unbekannten Anforderung 'R9'"):
         tools.submit_plan.call(traced)
     assert tools.plan is None
+
+
+def test_a_change_can_set_an_absence_and_the_check_counts_it():
+    # The wish "Anna is away on Monday and Tuesday" belongs to the team. Claude sets it, Python
+    # checks it, and every check after it plans around it.
+    tools = PlanningTools(PROJECT, TEAM, absences=True)
+    with pytest.raises(ToolError, match="Unbekannte Person 'Bea'. Im Team: Anna"):
+        tools.set_absence.call({"member": "Bea", "first": "2026-11-09", "last": "2026-11-10"})
+    with pytest.raises(ToolError, match="liegt außerhalb des Projekts"):
+        tools.set_absence.call({"member": "Anna", "first": "2027-01-04", "last": "2027-01-05"})
+    assert tools.absences == []
+    away = {"member": "Anna", "first": "2026-11-09", "last": "2026-11-10"}
+    tools.set_absence.call(away)
+    tools.set_absence.call(away)  # twice is once
+    assert tools.absences == [MemberAbsence.model_validate(away)]
+    report = json.loads(tools.check_plan.call(plan_input()))
+    assert report["end_date"] == "2026-11-13"  # two workdays later than without
+
+
+def test_a_new_plan_cannot_set_an_absence():
+    # A new plan starts from the team table; only a wish can name an absence.
+    assert PlanningTools(PROJECT, TEAM).set_absence is None
