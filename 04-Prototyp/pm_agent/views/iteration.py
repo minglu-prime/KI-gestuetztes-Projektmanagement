@@ -8,9 +8,10 @@ from datetime import datetime
 import pandas as pd
 import streamlit as st
 
-from pm_agent import closing
+from pm_agent import closing, lifecycle
+from pm_agent.tracking import PROJECT_WRITE_LOCK, require_current
 from pm_agent.ui import adopted_project, as_text, heading
-from pm_agent.workbench import DATA_DIR
+from pm_agent.workbench import DATA_DIR, InputError
 
 st.header("Iteration")
 st.caption(
@@ -43,10 +44,27 @@ with st.container(border=True, key="panel-next-run"):
         "und beginnt ein neues Vorhaben mit dem Backlog. Projektauftrag, Anforderungen und Plan "
         "entstehen dann neu."
     )
+    # Test evidence can add closing warnings. Only closing errors prevent archiving.
+    errors = closing.check_closing(tracking, None).errors
+    for error in errors:
+        st.error(as_text(error))
+    if errors:
+        st.page_link("views/abschluss.py", label="Zum Abschluss", icon=":material/flag_circle:")
+    state = st.session_state
+    if state.get("next_run_basis") != tracking:
+        state.next_run_basis = tracking
+        state.next_run_sure = False
     sure = st.checkbox("Diesen Durchlauf abschließen und ins Archiv legen.", key="next_run_sure")
-    if st.button("Neuen Durchlauf beginnen", icon=":material/restart_alt:", disabled=not sure):
+    start = st.button(
+        "Neuen Durchlauf beginnen", icon=":material/restart_alt:", disabled=not sure or bool(errors)
+    )
+    if start and sure and not errors:
         try:
-            folder = closing.start_next_run(tracking, datetime.now(), DATA_DIR / "archiv")
+            with lifecycle.WRITE_LOCK, PROJECT_WRITE_LOCK:
+                require_current(tracking)
+                folder = closing.start_next_run(tracking, datetime.now(), DATA_DIR / "archiv")
+        except InputError as err:
+            st.error(as_text(str(err)))
         except OSError as err:
             st.error(
                 f"Der neue Durchlauf konnte nicht beginnen: {as_text(str(err))}. Ist eine "

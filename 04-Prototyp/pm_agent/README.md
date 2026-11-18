@@ -16,9 +16,10 @@ cd 04-Prototyp/pm_agent
 uv run --env-file .env streamlit run app.py
 ```
 
-Die Oberfläche ist nur auf diesem Rechner erreichbar (`http://localhost:8501`), siehe
-`.streamlit/config.toml`. Sonst könnte jeder im selben Netz Planungen auf Kosten des
-API-Schlüssels starten. Deshalb im Ordner `04-Prototyp/pm_agent` starten.
+Streamlit lädt die lokale Bindung aus `.streamlit/config.toml` neben `app.py`. Die
+Oberfläche ist damit unter `http://localhost:8501` erreichbar, auch wenn `streamlit run`
+die Skriptdatei aus einem anderen Verzeichnis aufruft. Der obige Befehl verwendet den
+Projektordner für `uv` und die relative Datei `.env`.
 
 Das Menü links:
 

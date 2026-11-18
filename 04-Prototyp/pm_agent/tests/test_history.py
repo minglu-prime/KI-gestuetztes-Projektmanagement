@@ -299,6 +299,44 @@ def test_adopting_again_without_requirements_keeps_the_snapshot(traced_again, pa
     assert again.requirements == NEEDS
 
 
+def test_readoption_preserves_credits_and_signoffs_only_for_unchanged_requirements(
+    traced_again, path
+):
+    from pm_agent import closing
+    from pm_agent.tracking import Signoff
+
+    done = apply_rows(traced_again, [{"ID": "B", "Status": "fertig"}])
+    for need in NEEDS:
+        done = closing.record_signoff(done, Signoff(requirement_id=need.id, decision="abgenommen"))
+    changed = [NEEDS[0].model_copy(update={"title": "Räume exportieren"}), NEEDS[1]]
+    assert covered_requirements(done, changed) == {"R2"}
+    more = Plan.model_validate(
+        {
+            "tasks": [{"id": "C", "title": "Tests", "estimate_hours": 6}],
+            "assignments": [{"task_id": "C", "member": "Anna", "reason": "kennt Python"}],
+        }
+    )
+    for requirements in (changed, changed, NEEDS):
+        adopt(PROJECT, TEAM, more, path=path, keep=done, requirements=requirements)
+        done = load(path)
+        assert covered_requirements(done) == {"R2"}
+        progress = requirement_progress(done)
+        assert [(row["Aufgaben"], row["Fertig"]) for row in progress] == [
+            ("keine", "0 von 0"),
+            ("B", "1 von 1"),
+        ]
+        assert [r["Entscheidung"] for r in closing.signoff_rows(done, None)] == [
+            "offen",
+            "abgenommen",
+        ]
+        assert [(e.id, e.requirement_ids) for e in done.history if e.finished] == [
+            ("A", ["R1"]),
+            ("B", ["R1", "R2"]),
+        ]
+        report = control_document(done, evaluate(done, THURSDAY))
+        assert f"| R1 | {requirements[0].title} | Muss | keine | 0 von 0 |" in report
+
+
 def test_both_reports_show_the_progress_per_requirement(traced_again):
     result = evaluate(traced_again, THURSDAY)
     for report in (status_report(traced_again, result), control_document(traced_again, result)):

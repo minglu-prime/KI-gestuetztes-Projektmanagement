@@ -22,10 +22,12 @@ from pm_agent.agent import PlanningError, run_planning, run_replanning
 from pm_agent.models import Project
 from pm_agent.planning import check_plan
 from pm_agent.tracking import (
+    PROJECT_WRITE_LOCK,
     adopt,
     covered_requirements,
     finished_again,
     has_progress,
+    require_current,
     rest_project,
 )
 from pm_agent.tracking import load as load_tracking
@@ -104,8 +106,7 @@ def init() -> None:
         chat=[],
         proposal=None,
         rounds_start=None,
-        # Requirements served by finished work outside the current plan (its rest).
-        covered=frozenset(),
+        planning_rest=False,
     )
 
 
@@ -192,14 +193,6 @@ def take_dates(project: Project) -> None:
     state.update(idea=project.idea, start=project.start_date, deadline=project.deadline)
 
 
-def lifecycle_requirements():
-    """The approved requirements, read again: callbacks run before the page sets `needs`."""
-    try:
-        return lifecycle.approved_requirements(lifecycle.load())
-    except InputError:
-        return None  # the project path above the page says why
-
-
 def open_run(path) -> None:
     """Callback: runs before the widgets, so it may fill their keys."""
     project, team, plan, record = load_run(path)
@@ -207,7 +200,7 @@ def open_run(path) -> None:
     state.team_current = None
     state.team_version += 1
     fill_project(project)
-    state.covered = frozenset()  # a whole plan: nothing done outside it
+    state.planning_rest = False  # a whole plan: nothing done outside it
     show_plan(plan, record["rounds"], f"Protokoll {path.name}", record.get("seconds"))
     forget_conversation()
     state.step = STEPS[3]  # straight to the result
@@ -227,8 +220,7 @@ def load_rest() -> None:
     fill_project(project)
     show_plan(plan, [], "Rest des übernommenen Projekts", None)
     forget_conversation()
-    # What finished tasks served needs no new task in the rest.
-    state.covered = covered_requirements(adopted, lifecycle_requirements())
+    state.planning_rest = True
     state.step = STEPS[4]  # straight to the step with the conversation
 
 
@@ -303,6 +295,14 @@ except InputError:
     life = None  # the project path above the page says why
 needs = lifecycle.approved_requirements(life)
 # Only with approved requirements does the plan get traced; without, all stays as before.
+state.covered = frozenset()
+if state.get("planning_rest") and needs is not None:
+    try:
+        baseline = load_tracking()
+    except InputError:
+        baseline = None  # the project path above the page says why
+    if baseline is not None:
+        state.covered = covered_requirements(baseline, needs)
 trace = {"requirements": needs, "covered": state.covered} if needs is not None else {}
 # The agents also get the approved design, as context; the check does not use it.
 design = lifecycle.approved_design(life)
@@ -1024,10 +1024,12 @@ with tabs[5]:
             heading("flag", "Als Projekt übernehmen", du="gibst den Plan frei")
             st.caption("Der Plan wird zur Grundlage für die Seiten Durchführung und Kontrolle.")
             overwrite, keep = True, None
+            replace_unreadable = False
             try:
                 adopted = load_tracking()
             except InputError as err:
                 adopted = None
+                replace_unreadable = True
                 st.error(
                     f"Das übernommene Projekt konnte nicht gelesen werden: {as_text(str(err))}"
                 )
@@ -1036,11 +1038,13 @@ with tabs[5]:
                     "Die beschädigte Datei durch diesen Plan ersetzen. Ihr Inhalt geht verloren.",
                     key="adopt_replace_damaged",
                 )
-            if adopted is not None and has_progress(adopted):
+            if adopted is not None and (
+                has_progress(adopted) or adopted.results or adopted.signoffs
+            ):
                 # No choice made in advance: keeping fits only the rest of this project.
                 choice = st.radio(
                     f"Das am {adopted.adopted:%d.%m.%Y} übernommene Projekt hat schon erfassten "
-                    "Fortschritt.",
+                    "Fortschritt, Testergebnisse oder Abnahmen.",
                     [KEEP, DROP],
                     index=None,
                     key="adopt_progress",
@@ -1075,7 +1079,9 @@ with tabs[5]:
                 disabled=bool(result.errors) or not overwrite,
             ):
                 try:
-                    adopt(project, team, state.plan, keep=keep, requirements=needs)
+                    with PROJECT_WRITE_LOCK:
+                        require_current(adopted, replace_unreadable=replace_unreadable)
+                        adopt(project, team, state.plan, keep=keep, requirements=needs)
                 except InputError as err:  # the checks above already keep the button off
                     st.error(f"Nicht übernommen: {as_text(str(err))}.")
                 except OSError as err:

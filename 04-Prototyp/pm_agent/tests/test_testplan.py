@@ -34,6 +34,10 @@ def cases(*items):
     return Cases.model_validate({"cases": list(items) or [ACCEPT, INTEGRATE, CONFLICT]})
 
 
+def evidence(*items):
+    return lifecycle.case_plan(Lifecycle(cases=cases(*items)))
+
+
 def test_complete_cases_pass():
     assert check_cases(cases(), ONE, design()) == ([], [])
 
@@ -170,17 +174,20 @@ def test_results_and_defects_are_checked_against_the_cases(adopted):
     from pm_agent.tracking import CaseResult, Defect, check_results, record_defect, record_result
 
     day = date(2026, 11, 20)
-    tracking = record_result(adopted, CaseResult(case_id="T2", result="fehlgeschlagen", on=day))
-    result = check_results(tracking, cases())
+    plan = evidence()
+    tracking = record_result(
+        adopted, CaseResult(case_id="T2", result="fehlgeschlagen", on=day), plan
+    )
+    result = check_results(tracking, plan)
     assert result.errors == ["Testfall 'T2' ist fehlgeschlagen, aber es gibt keinen Fehlereintrag"]
     assert result.warnings == ["2 Testfälle ohne Ergebnis: T1, T3"]
 
     tracking = record_defect(
         tracking, Defect(case_id="T2", severity="schwer", cause="Schema", task_id="B")
     )
-    assert tracking.defects[0].id == "F1" and check_results(tracking, cases()).errors == []
+    assert tracking.defects[0].id == "F1" and check_results(tracking, plan).errors == []
     # A later result replaces the earlier one of the same case.
-    again = record_result(tracking, CaseResult(case_id="T2", result="bestanden", on=day))
+    again = record_result(tracking, CaseResult(case_id="T2", result="bestanden", on=day), plan)
     assert [(r.case_id, r.result) for r in again.results] == [("T2", "bestanden")]
 
 
@@ -207,7 +214,7 @@ def test_a_defect_reopens_its_task_and_an_open_defect_on_a_finished_task_is_a_wa
     tracking = record_defect(done, Defect(case_id="T2", severity="mittel", cause="x", task_id="B"))
     assert (
         "Fehler F1 ist offen, seine Aufgabe 'B' ist aber fertig"
-        in check_results(tracking, cases()).warnings
+        in check_results(tracking, evidence()).warnings
     )
     reopened = reopen(tracking, "F1")
     assert reopened.progress["B"].status == "in Arbeit"
@@ -221,7 +228,7 @@ def test_results_and_defects_survive_adopting_the_rest_again(adopted, tmp_path):
     from pm_agent.tracking import CaseResult, adopt, record_result
 
     tracking = record_result(
-        adopted, CaseResult(case_id="T1", result="bestanden", on=date(2026, 11, 20))
+        adopted, CaseResult(case_id="T1", result="bestanden", on=date(2026, 11, 20)), evidence()
     )
     again = adopt(
         tracking.project, tracking.team, tracking.plan, path=tmp_path / "q.json", keep=tracking
@@ -235,19 +242,91 @@ def test_the_test_summary_counts_results_and_open_defects(adopted):
     from pm_agent.tracking import CaseResult, Defect, quality_summary, record_defect, record_result
 
     day = date(2026, 11, 20)
-    tracking = record_result(adopted, CaseResult(case_id="T1", result="bestanden", on=day))
-    tracking = record_result(tracking, CaseResult(case_id="T2", result="fehlgeschlagen", on=day))
+    plan = evidence()
+    tracking = record_result(adopted, CaseResult(case_id="T1", result="bestanden", on=day), plan)
+    tracking = record_result(
+        tracking, CaseResult(case_id="T2", result="fehlgeschlagen", on=day), plan
+    )
     tracking = record_defect(
         tracking, Defect(case_id="T2", severity="schwer", cause="x", task_id="B")
     )
     tracking = record_defect(
         tracking, Defect(case_id="T2", severity="leicht", cause="y", status="behoben")
     )
-    assert quality_summary(tracking, cases()) == {
+    assert quality_summary(tracking, plan) == {
         "Mit Ergebnis": "2 von 3",
         "Bestanden": "1",
         "Offene Fehler": "1 (schwer: 1)",
     }
+
+
+@pytest.mark.parametrize(
+    "edit",
+    [
+        {"steps": ["Andere Schritte"]},
+        {"expected": "Anderes Ergebnis"},
+        {"criteria": ["R1.2"]},
+    ],
+)
+def test_an_edited_case_cannot_reuse_its_previous_result(adopted, edit):
+    from datetime import date
+
+    from pm_agent.tracking import CaseResult, case_status, quality_summary, record_result
+
+    initial = evidence(ACCEPT)
+    passed = CaseResult(case_id="T1", result="bestanden", on=date(2026, 11, 20))
+    tracked = record_result(adopted, passed, initial)
+    assert quality_summary(tracked, initial)["Bestanden"] == "1"
+    updated = evidence({**ACCEPT, **edit})
+    assert case_status(tracked, updated)[0]["Ergebnis"] == "offen"
+    assert quality_summary(tracked, updated)["Bestanden"] == "0"
+    retested = record_result(tracked, passed, updated)
+    assert quality_summary(retested, updated)["Bestanden"] == "1"
+
+
+def test_a_legacy_result_is_readable_but_does_not_count_as_current(adopted, tmp_path):
+    import json
+
+    from pm_agent.tracking import case_status, load
+
+    raw = adopted.model_dump(mode="json")
+    raw["results"] = [{"case_id": "T1", "result": "bestanden", "on": "2026-11-20"}]
+    project_file = tmp_path / "legacy.json"
+    project_file.write_text(json.dumps(raw), encoding="utf-8")
+    loaded = load(project_file)
+    assert loaded.results[0].result == "bestanden"
+    row = case_status(loaded, evidence(ACCEPT))[0]
+    assert row["Ergebnis"] == "offen"
+    assert row["Früheres Ergebnis"] == "bestanden (20.11.2026)"
+
+
+def test_only_cases_of_the_changed_upstream_contract_lose_their_result(adopted):
+    from datetime import date
+
+    from pm_agent.tracking import CaseResult, case_status, record_result
+
+    life = Lifecycle(requirements=ONE, design=design(), cases=cases(ACCEPT, INTEGRATE))
+    initial = lifecycle.case_plan(life)
+    tracked = adopted
+    for cid in ("T1", "T2"):
+        passed = CaseResult(case_id=cid, result="bestanden", on=date(2026, 11, 20))
+        tracked = record_result(tracked, passed, initial)
+
+    updated_need = need("R1")
+    updated_need["criteria"] = ["Die Liste zeigt auch den Zeitraum"]
+    changed = life.model_copy(update={"requirements": requirements(updated_need)})
+    assert [r["Ergebnis"] for r in case_status(tracked, lifecycle.case_plan(changed))] == [
+        "offen",
+        "bestanden",
+    ]
+
+    new_design = design()
+    new_design.interfaces[0].output[0].type = "UUID"
+    changed = life.model_copy(update={"design": new_design})
+    assert [r["Ergebnis"] for r in case_status(tracked, lifecycle.case_plan(changed))] == [
+        "bestanden",
+        "offen",
+    ]
 
 
 def test_approvals_made_before_criteria_had_ids_still_hold():
@@ -328,12 +407,13 @@ def test_a_case_that_fails_again_after_its_fix_needs_a_new_defect(adopted):
     from pm_agent.tracking import CaseResult, Defect, check_results, record_defect, record_result
 
     failed = CaseResult(case_id="T1", result="fehlgeschlagen", on=date(2026, 11, 20))
-    tracking = record_result(adopted, failed)
+    plan = evidence()
+    tracking = record_result(adopted, failed, plan)
     tracking = record_defect(
         tracking, Defect(case_id="T1", severity="leicht", cause="x", status="behoben")
     )
     assert "Testfall 'T1' ist fehlgeschlagen, aber es gibt keinen Fehlereintrag" in (
-        check_results(tracking, cases()).errors
+        check_results(tracking, plan).errors
     )
 
 

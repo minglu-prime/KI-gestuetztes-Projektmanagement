@@ -24,6 +24,24 @@ def test_every_page_table_keeps_unsaved_edits_through_a_page_change():
             assert "st.data_editor(" not in source.read_text(encoding="utf-8"), source.name
 
 
+def test_current_test_results_and_signoffs_use_evidence_helpers():
+    found = []
+    # Tracking and closing also manage historical records. Planung checks whether
+    # there are records to preserve when offering the re-adoption choice.
+    for source in SOURCES:
+        if source.name in {"tracking.py", "closing.py", "planung.py"}:
+            continue
+        found += [
+            f"{source.name}:{node.lineno}"
+            for node in ast.walk(ast.parse(source.read_text(encoding="utf-8")))
+            if isinstance(node, ast.Attribute)
+            and node.attr in {"results", "signoffs"}
+            and isinstance(node.value, ast.Name)
+            and node.value.id == "tracking"
+        ]
+    assert found == []
+
+
 def test_error_messages_are_shown_as_written():
     # PR 44 and the commits before it: text in a message rendered as a link or an image.
     # An error can quote a cell, a file name or what Claude wrote; ui.as_text escapes it.

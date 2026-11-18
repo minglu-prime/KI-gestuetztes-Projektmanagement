@@ -15,7 +15,15 @@ from pm_agent import closing, lifecycle
 from pm_agent.agent import AgentError
 from pm_agent.lifecycle import Lifecycle
 from pm_agent.models import Plan
-from pm_agent.tracking import PART, Tracking, has_progress, history_rows, load, next_step
+from pm_agent.tracking import (
+    PART,
+    Tracking,
+    current_results,
+    has_progress,
+    history_rows,
+    load,
+    next_step,
+)
 from pm_agent.workbench import InputError, describe_round, round_summary
 
 T = TypeVar("T")
@@ -79,12 +87,12 @@ FIELD_PREFIXES = ("auftrag_", "charter_", "requirements_", "design_", "cases_")
 
 
 def store(old: Lifecycle | None, new: Lifecycle) -> Lifecycle | None:
-    """Save the Vorhaben. Gives what is saved now: `new`, or `old` if writing failed."""
+    """Save the Vorhaben and return the saved version. A failed write returns None."""
     try:
-        lifecycle.save(new)
-    except OSError as err:
-        st.error(f"vorhaben.json konnte nicht gespeichert werden: {as_text(str(err))}.")
-        return old
+        lifecycle.save_if_current(old, new)
+    except (InputError, OSError) as err:
+        st.error(f"vorhaben.json konnte nicht gespeichert werden: {as_text(str(err))}")
+        return None
     return new
 
 
@@ -207,11 +215,12 @@ def journey(page: str) -> None:
         **{slug: phase == "freigegeben" for slug, phase in phases.items()},
         "planung": tracking is not None,
         "durchfuehrung": tracking is not None and has_progress(tracking),
-        "testlauf": tracking is not None and bool(tracking.results),
+        "testlauf": tracking is not None
+        and bool(current_results(tracking, lifecycle.case_plan(life))),
         "kontrolle": False,  # checking never ends while the project runs
         # Closed: decisions taken, and nothing severe left open.
         "abschluss": tracking is not None
-        and bool(tracking.signoffs)
+        and bool(closing.current_signoffs(tracking))
         and not closing.check_closing(tracking, None).errors,
         "betrieb": tracking is not None
         and bool(tracking.operations)
@@ -266,8 +275,8 @@ def kept_editor(
     data: pd.DataFrame,
     columns: list[str] | None = None,
     **options: Any,
-) -> Any:
-    """`st.data_editor` whose unsaved edits survive a visit to another page.
+) -> tuple[pd.DataFrame, bool]:
+    """Keep edits across pages and flag a draft discarded after its saved basis changed.
 
     Streamlit drops an editor's edits when another page is shown. On the return the edited
     table comes back as the editor's input, unless `basis` (what `data` was built from)
@@ -279,10 +288,21 @@ def kept_editor(
     state = st.session_state
     restores = f"{name}restores"
     kept = state.get(f"{name}current")
-    if state.get("page_changed") and kept is not None and kept[0] == basis:
+    current_version = state.get(version, 0)
+    original = data
+    conflict = False
+    if kept is not None and kept[0] != basis:
         state[restores] = state.get(restores, 0) + 1
-        state[f"{name}restored"] = (state.get(version, 0), state[restores], basis, kept[1])
-    counts = (state.get(version, 0), state.get(restores, 0))
+        conflict = state.get(f"{name}dirty_version") == current_version
+        if conflict:
+            st.warning(
+                "Der gespeicherte Stand wurde inzwischen geändert. "
+                "Prüfe die aktuelle Tabelle und trage deine Änderungen erneut ein."
+            )
+    elif state.get("page_changed") and kept is not None:
+        state[restores] = state.get(restores, 0) + 1
+        state[f"{name}restored"] = (current_version, state[restores], basis, kept[1])
+    counts = (current_version, state.get(restores, 0))
     restored = state.get(f"{name}restored")
     if restored is not None:
         if restored[:2] == counts and restored[2] == basis:
@@ -297,7 +317,8 @@ def kept_editor(
             del state[f"{name}restored"]
     edited = st.data_editor(data, key=f"{name}{counts[0]}_{counts[1]}", **options)
     state[f"{name}current"] = (basis, edited)
-    return edited
+    state[f"{name}dirty_version"] = None if edited.equals(original) else current_version
+    return edited, conflict
 
 
 def history_table(tracking: Tracking) -> None:

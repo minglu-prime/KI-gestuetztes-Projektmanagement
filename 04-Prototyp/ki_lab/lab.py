@@ -16,6 +16,7 @@ ROOT = Path(__file__).resolve().parent
 SEQUENCES = {1: [('A', 'manual'), ('B', 'ai')], 2: [('B', 'ai'), ('A', 'manual')],
              3: [('B', 'manual'), ('A', 'ai')], 4: [('A', 'ai'), ('B', 'manual')]}
 LIMIT = 25 * 60
+_LEGACY_LIMIT = 25 * 60  # Historical limit for sessions saved without limit_seconds.
 
 
 class Problem(Exception):
@@ -26,6 +27,13 @@ class Problem(Exception):
 
 def canonical(value):
     return json.dumps(value, ensure_ascii=False, sort_keys=True)
+
+
+def _round_deadline(state, round_):
+    limit = state['config'].get('limit_seconds', _LEGACY_LIMIT)
+    if type(limit) is not int or limit <= 0:
+        raise Problem('Gespeichertes Zeitlimit der Sitzung ist ungültig.', 500)
+    return round_['started_at'] + limit
 
 
 def call_model(api_key, model, messages):
@@ -126,9 +134,13 @@ class Lab:
             raise Problem('Sitzung nicht gefunden. Einladungslink prüfen.', 404)
         state = json.loads(row[0])
         for r in state['rounds']:
-            if r['status'] == 'active' and self.clock() >= r['started_at'] + LIMIT:
-                r.update(status='timed_out', ended_at=r['started_at'] + LIMIT, final=copy.deepcopy(r['draft']))
-                state['events'].append({'at': self.clock(), 'type': 'deadline', 'case_id': r['case_id']})
+            if r['status'] != 'active':
+                continue
+            deadline = _round_deadline(state, r)
+            now = self.clock()
+            if now >= deadline:
+                r.update(status='timed_out', ended_at=deadline, final=copy.deepcopy(r['draft']))
+                state['events'].append({'at': now, 'type': 'deadline', 'case_id': r['case_id']})
                 self._put(token, state)
         return state
 
@@ -145,7 +157,9 @@ class Lab:
             result = {k: copy.deepcopy(v) for k, v in state.items() if k not in ('materials', 'prompt')}
             result['case'] = self.visible_case(state, active) if active else None
             result['practice'] = state['materials']['practice']
-            result['remaining_seconds'] = max(0, int(active['started_at'] + LIMIT - self.clock())) if active else 0
+            result['remaining_seconds'] = (
+                max(0, int(_round_deadline(state, active) - self.clock())) if active else 0
+            )
             result['server_time'] = self.clock()
             result['ai_configured'] = bool(self.api_key and self.model)
             return result

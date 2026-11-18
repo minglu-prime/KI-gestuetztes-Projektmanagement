@@ -19,7 +19,7 @@ from pm_agent.tracking import (
     forecast,
     percent,
     progress_rows,
-    save,
+    save_if_current,
     status_report,
     week_ahead,
     work_packages,
@@ -101,7 +101,7 @@ with st.container(border=True, key="panel-progress"):
         st.success("Fortschritt gespeichert (lokal in data/projekt.json, nicht im Repository).")
     # Unsaved edits survive a visit to another page; the forecast columns are computed anew.
     # Saving raises the version: the editor starts again from the saved state.
-    edited = kept_editor(
+    edited, conflict = kept_editor(
         "progress_editor_",
         "progress_version",
         tracking,
@@ -132,20 +132,16 @@ with st.container(border=True, key="panel-progress"):
         "fertig wird."
     )
     history_table(tracking)
-    if st.button("Fortschritt speichern", type="primary", icon=":material/save:"):
+    if st.button("Fortschritt speichern", type="primary", icon=":material/save:") and not conflict:
         try:
             updated = apply_rows(tracking, edited.to_dict("records"))
         except InputError as err:
             st.error(f"Bitte korrigieren:\n\n{as_text(str(err))}")
         else:
             try:
-                save(updated)
-            except OSError as err:
-                st.error(
-                    f"Der Fortschritt konnte nicht gespeichert werden: {as_text(str(err))}. "
-                    "Die Tabelle bleibt, wie sie ist; die gespeicherte Datei auch. "
-                    "Ist data/projekt.json in einem anderen Programm geöffnet?"
-                )
+                save_if_current(tracking, updated)
+            except (InputError, OSError) as err:
+                st.error(f"Der Fortschritt konnte nicht gespeichert werden: {as_text(str(err))}")
             else:
                 state.progress_saved = True
                 state.progress_version = state.get("progress_version", 0) + 1

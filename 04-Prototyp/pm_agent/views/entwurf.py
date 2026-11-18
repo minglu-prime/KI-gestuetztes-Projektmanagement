@@ -24,6 +24,7 @@ from pm_agent.lifecycle import (
 )
 from pm_agent.ui import (
     as_text,
+    consent,
     heading,
     kept_editor,
     phase_chip,
@@ -82,6 +83,7 @@ with st.container(border=True, key="panel-draft"):
         "zum Team. Python gibt den Entwurf zurück, bis jede Muss-Anforderung einen Ablauf hat "
         "und jeder Schritt zu seiner Schnittstelle passt."
     )
+    allowed = consent("design_consent", "Projektidee, Termine, Projektauftrag und Anforderungen")
     replace = True
     if life.design is not None:
         replace = st.checkbox(
@@ -91,7 +93,7 @@ with st.container(border=True, key="panel-draft"):
         "Entwurf mit Claude entwerfen",
         icon=":material/play_arrow:",
         type="primary" if life.design is None else "secondary",
-        disabled=life.project is None or not replace,
+        disabled=life.project is None or not replace or not allowed,
     ):
         drafted = run_with_progress(
             "Claude entwirft das System …",
@@ -100,9 +102,10 @@ with st.container(border=True, key="panel-draft"):
             ),
         )
         if drafted is not None:
-            life = store(life, life.model_copy(update={"design": drafted}))
-            # New editors: the old ones would keep their own edits over the draft.
-            state.design_version = state.get("design_version", 0) + 1
+            saved = store(life, life.model_copy(update={"design": drafted}))
+            if saved is not None:
+                life = saved
+                state.design_version = state.get("design_version", 0) + 1
 
 # 3 · Bausteine, Schnittstellen, Abläufe --------------------------------------------------
 TABLES = [
@@ -134,10 +137,11 @@ with st.container(border=True, key="panel-design"):
         design_rows(life.design) if life.design is not None else {key: [] for key, _, _ in TABLES}
     )
     edited_rows = {}
+    conflict = False
     for (key, _title, columns), tab in zip(TABLES, st.tabs([t for _, t, _ in TABLES]), strict=True):
         with tab:
             st.caption(HELP[key])
-            edited_rows[key] = kept_editor(
+            frame, table_conflict = kept_editor(
                 f"design_{key}_",
                 "design_version",
                 life.design,
@@ -145,7 +149,9 @@ with st.container(border=True, key="panel-design"):
                 num_rows="dynamic",
                 width="stretch",
                 column_config=CONFIG.get(key),
-            ).to_dict("records")
+            )
+            edited_rows[key] = frame.to_dict("records")
+            conflict |= table_conflict
     # A design emptied of its saved rows is an edit too.
     typed = life.design is not None or any(
         str(value).strip()
@@ -165,10 +171,14 @@ with st.container(border=True, key="panel-design"):
         st.error(f"Bitte korrigieren:\n\n{as_text(problem)}")
     if unsaved:
         st.caption("Änderungen sind noch nicht gespeichert.")
-    if st.button(
-        "Änderungen speichern und prüfen",
-        icon=":material/fact_check:",
-        disabled=edited is None or not unsaved,
+    can_save = edited is not None and unsaved and not conflict
+    if (
+        st.button(
+            "Änderungen speichern und prüfen",
+            icon=":material/fact_check:",
+            disabled=not can_save,
+        )
+        and can_save
     ):
         if store(life, life.model_copy(update={"design": edited})) is not None:
             st.rerun()

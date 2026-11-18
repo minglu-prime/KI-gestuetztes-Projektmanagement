@@ -14,10 +14,11 @@ from pydantic import ValidationError
 
 from pm_agent.agent import LOG_DIR, run_submission
 from pm_agent.lifecycle import Check
-from pm_agent.models import BacklogItem, Cases, Charter, Design, Lesson, Lessons
+from pm_agent.models import BacklogItem, Charter, Design, Lesson, Lessons
 from pm_agent.planning import working_shift
 from pm_agent.tools import Submission
 from pm_agent.tracking import (
+    CasePlan,
     Evaluation,
     Incident,
     Operation,
@@ -25,6 +26,7 @@ from pm_agent.tracking import (
     Tracking,
     _demos_text,
     _fill,
+    current_results,
     hours_text,
     percent,
 )
@@ -33,11 +35,12 @@ from pm_agent.workbench import InputError, _cell, _date, _md, _reason
 DASH = "–"  # an empty cell
 
 
-def suggestions(tracking: Tracking, cases: Cases | None) -> dict[str, str]:
+def suggestions(tracking: Tracking, plan: CasePlan | None) -> dict[str, str]:
     """Requirement ID -> "abnehmbar", or why not yet: a case without a result or not passed,
     an open defect of one of its cases, or no case at all."""
-    latest = {r.case_id: r.result for r in tracking.results}
-    items = cases.cases if cases else []
+    latest = current_results(tracking, plan)
+    items = plan.cases if plan else []
+    historical = {r.case_id for r in tracking.results} - latest.keys()
     verdicts = {}
     for need in tracking.requirements:
         prefix = f"{need.id}."
@@ -45,13 +48,13 @@ def suggestions(tracking: Tracking, cases: Cases | None) -> dict[str, str]:
         if not mine:
             verdicts[need.id] = "kein Testfall"
             continue
-        reasons = [
-            f"Testfall {c.id} ohne Ergebnis"
-            if c.id not in latest
-            else f"Testfall {c.id} nicht bestanden"
-            for c in mine
-            if latest.get(c.id) != "bestanden"
-        ]
+        reasons = []
+        for c in mine:
+            if c.id not in latest:
+                reference = " für die aktuelle Version" if c.id in historical else ""
+                reasons.append(f"Testfall {c.id} ohne Ergebnis{reference}")
+            elif latest[c.id].result != "bestanden":
+                reasons.append(f"Testfall {c.id} nicht bestanden")
         reasons += [
             f"Fehler {d.id} offen"
             for d in tracking.defects
@@ -68,11 +71,13 @@ def record_signoff(tracking: Tracking, signoff: Signoff) -> Tracking:
         raise InputError(f"Die Abnahme nennt die unbekannte Anforderung '{signoff.requirement_id}'")
     if signoff.decision == "zurückgestellt" and not signoff.reason:
         raise InputError("Eine zurückgestellte Anforderung braucht einen Grund")
-    others = [s for s in tracking.signoffs if s.requirement_id != signoff.requirement_id]
+    others = [
+        s for s in tracking.signoffs if s.superseded or s.requirement_id != signoff.requirement_id
+    ]
     return tracking.model_copy(update={"signoffs": [*others, signoff]})
 
 
-def check_closing(tracking: Tracking, cases: Cases | None) -> Check:
+def check_closing(tracking: Tracking, plan: CasePlan | None) -> Check:
     """Errors: an open severe defect, a Muss requirement neither accepted nor deferred with a
     reason. Warnings: a requirement accepted against the suggestion, a Soll or Kann one not
     decided."""
@@ -85,8 +90,8 @@ def check_closing(tracking: Tracking, cases: Cases | None) -> Check:
         return Check(
             errors, ["Der Plan wurde ohne Anforderungen übernommen: Es gibt nichts abzunehmen"]
         )
-    decided = {s.requirement_id: s for s in tracking.signoffs}
-    advice = suggestions(tracking, cases)
+    decided = {s.requirement_id: s for s in current_signoffs(tracking)}
+    advice = suggestions(tracking, plan)
     warnings = []
     for need in tracking.requirements:
         signoff = decided.get(need.id)
@@ -114,11 +119,16 @@ def _week_ref(ref: str) -> str:
         return ref
 
 
-def _current_signoffs(tracking: Tracking) -> list[Signoff]:
-    """Sign-offs of the requirements adopted now: a plan adopted again with other
-    requirements keeps the old ones in the file."""
+def current_signoffs(tracking: Tracking) -> list[Signoff]:
+    """Decisions still applying to the requirements adopted now."""
     known = {n.id for n in tracking.requirements}
-    return [s for s in tracking.signoffs if s.requirement_id in known]
+    return [
+        s
+        for s in tracking.signoffs
+        if not s.superseded
+        and s.requirement_id in known
+        and (s.decision != "zurückgestellt" or s.reason)
+    ]
 
 
 def check_lessons(lessons: Lessons, tracking: Tracking) -> list[str]:
@@ -170,7 +180,7 @@ def run_lessons(
             "fehler": [d.model_dump(mode="json") for d in tracking.defects],
             "abnahme": [
                 {**s.model_dump(mode="json"), "titel": titles.get(s.requirement_id, "")}
-                for s in _current_signoffs(tracking)
+                for s in current_signoffs(tracking)
             ],
         },
         ensure_ascii=False,
@@ -271,14 +281,14 @@ def late_tasks(tracking: Tracking, evaluation: Evaluation) -> str:
 
 def closing_document(
     tracking: Tracking,
-    cases: Cases | None,
+    plan: CasePlan | None,
     evaluation: Evaluation,
     charter: Charter | None = None,
 ) -> str:
     """The closing report: sign-offs with Python's suggestion, figures, demos, defects,
     lessons, and what the check still finds open."""
-    advice = suggestions(tracking, cases)
-    decided = {s.requirement_id: s for s in tracking.signoffs}
+    advice = suggestions(tracking, plan)
+    decided = {s.requirement_id: s for s in current_signoffs(tracking)}
     rows = []
     for need in tracking.requirements:
         signoff = decided.get(need.id)
@@ -300,7 +310,7 @@ def closing_document(
         + (f" (Bezug: {_md(', '.join(lesson.refs))})" if lesson.refs else "")
         for lesson in tracking.lessons
     )
-    errors, warnings = check_closing(tracking, cases)
+    errors, warnings = check_closing(tracking, plan)
     project = tracking.project
     return _fill(
         "abschluss.md",
@@ -360,10 +370,10 @@ def rows_to_lessons(rows: list[dict[str, Any]]) -> list[Lesson]:
     return items
 
 
-def signoff_rows(tracking: Tracking, cases: Cases | None) -> list[dict[str, Any]]:
+def signoff_rows(tracking: Tracking, plan: CasePlan | None) -> list[dict[str, Any]]:
     """One row per requirement: Python's suggestion and the lead's decision."""
-    advice = suggestions(tracking, cases)
-    decided = {s.requirement_id: s for s in tracking.signoffs}
+    advice = suggestions(tracking, plan)
+    decided = {s.requirement_id: s for s in current_signoffs(tracking)}
     return [
         {
             "ID": need.id,
@@ -468,7 +478,7 @@ def next_backlog(tracking: Tracking) -> list[BacklogItem]:
             ),
             origin=f"{s.requirement_id} zurückgestellt",
         )
-        for s in _current_signoffs(tracking)
+        for s in current_signoffs(tracking)
         if s.decision == "zurückgestellt"
     ]
     items += [
