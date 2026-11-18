@@ -21,6 +21,7 @@ from pm_agent.lifecycle import (
 )
 from pm_agent.ui import (
     as_text,
+    consent,
     heading,
     kept_editor,
     phase_chip,
@@ -76,6 +77,9 @@ with st.container(border=True, key="panel-draft"):
         "zum Team. Python gibt den Entwurf zurück, bis jedes Akzeptanzkriterium einer "
         "Muss-Anforderung einen Testfall hat."
     )
+    allowed = consent(
+        "cases_consent", "Projektidee, Termine, Anforderungen und Schnittstellen des Systementwurfs"
+    )
     replace = True
     if life.cases is not None:
         replace = st.checkbox(
@@ -85,7 +89,7 @@ with st.container(border=True, key="panel-draft"):
         "Testfälle mit Claude entwerfen",
         icon=":material/play_arrow:",
         type="primary" if life.cases is None else "secondary",
-        disabled=life.project is None or not replace,
+        disabled=life.project is None or not replace or not allowed,
     ):
         drafted = run_with_progress(
             "Claude entwirft die Testfälle …",
@@ -94,9 +98,10 @@ with st.container(border=True, key="panel-draft"):
             ),
         )
         if drafted is not None:
-            life = store(life, life.model_copy(update={"cases": drafted}))
-            # A new editor: the old one would keep its own edits over the draft.
-            state.cases_version = state.get("cases_version", 0) + 1
+            saved = store(life, life.model_copy(update={"cases": drafted}))
+            if saved is not None:
+                life = saved
+                state.cases_version = state.get("cases_version", 0) + 1
 
 # 3 · Testfälle --------------------------------------------------------------------------
 with st.container(border=True, key="panel-cases"):
@@ -109,7 +114,7 @@ with st.container(border=True, key="panel-cases"):
         "auslösen soll, dessen Code."
     )
     rows = case_rows(life.cases) if life.cases is not None else []
-    edited_rows = kept_editor(
+    edited_rows, conflict = kept_editor(
         "cases_editor_",
         "cases_version",
         life.cases,
@@ -139,10 +144,14 @@ with st.container(border=True, key="panel-cases"):
         st.error(f"Bitte korrigieren:\n\n{as_text(problem)}")
     if unsaved:
         st.caption("Änderungen sind noch nicht gespeichert.")
-    if st.button(
-        "Änderungen speichern und prüfen",
-        icon=":material/fact_check:",
-        disabled=edited is None or not unsaved,
+    can_save = edited is not None and unsaved and not conflict
+    if (
+        st.button(
+            "Änderungen speichern und prüfen",
+            icon=":material/fact_check:",
+            disabled=not can_save,
+        )
+        and can_save
     ):
         if store(life, life.model_copy(update={"cases": edited})) is not None:
             st.rerun()

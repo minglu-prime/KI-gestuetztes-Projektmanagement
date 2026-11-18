@@ -20,6 +20,7 @@ from pm_agent.lifecycle import (
 )
 from pm_agent.ui import (
     as_text,
+    consent,
     heading,
     kept_editor,
     phase_chip,
@@ -74,8 +75,12 @@ with st.container(border=True, key="panel-draft"):
         python="prüft die Abdeckung",
     )
     st.caption(
-        "An Claude gehen Projektidee, Termine und Projektauftrag, keine Angaben zum Team. "
-        "Python gibt den Entwurf zurück, bis jedes Erfolgskriterium eine Anforderung hat."
+        "An Claude gehen Projektidee, Termine, Projektauftrag und gegebenenfalls die offenen "
+        "Punkte des letzten Durchlaufs. Python prüft die Abdeckung der Erfolgskriterien."
+    )
+    allowed = consent(
+        "requirements_consent",
+        "Projektidee, Termine, Projektauftrag und die offenen Punkte aus dem letzten Durchlauf",
     )
     replace = True
     if life.requirements is not None:
@@ -87,7 +92,7 @@ with st.container(border=True, key="panel-draft"):
         "Anforderungen mit Claude entwerfen",
         icon=":material/play_arrow:",
         type="primary" if life.requirements is None else "secondary",
-        disabled=life.project is None or not replace,
+        disabled=life.project is None or not replace or not allowed,
     ):
         drafted = run_with_progress(
             "Claude entwirft die Anforderungen …",
@@ -99,9 +104,10 @@ with st.container(border=True, key="panel-draft"):
             ),
         )
         if drafted is not None:
-            life = store(life, life.model_copy(update={"requirements": drafted}))
-            # A new editor: the old one would keep its own edits over the draft.
-            state.requirements_version = state.get("requirements_version", 0) + 1
+            saved = store(life, life.model_copy(update={"requirements": drafted}))
+            if saved is not None:
+                life = saved
+                state.requirements_version = state.get("requirements_version", 0) + 1
 
 # 3 · Anforderungen ----------------------------------------------------------------------
 with st.container(border=True, key="panel-requirements"):
@@ -116,7 +122,7 @@ with st.container(border=True, key="panel-requirements"):
         "Erfolgskriterien des Projektauftrags (K1 …) durch Komma."
     )
     rows = requirement_rows(life.requirements) if life.requirements is not None else []
-    edited_rows = kept_editor(
+    edited_rows, conflict = kept_editor(
         "requirements_editor_",
         "requirements_version",
         life.requirements,
@@ -162,10 +168,14 @@ with st.container(border=True, key="panel-requirements"):
         st.error(f"Bitte korrigieren:\n\n{as_text(problem)}")
     if unsaved:
         st.caption("Änderungen sind noch nicht gespeichert.")
-    if st.button(
-        "Änderungen speichern und prüfen",
-        icon=":material/fact_check:",
-        disabled=edited is None or not unsaved,
+    can_save = edited is not None and unsaved and not conflict
+    if (
+        st.button(
+            "Änderungen speichern und prüfen",
+            icon=":material/fact_check:",
+            disabled=not can_save,
+        )
+        and can_save
     ):
         if store(life, life.model_copy(update={"requirements": edited})) is not None:
             st.rerun()

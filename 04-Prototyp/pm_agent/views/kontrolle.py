@@ -31,7 +31,7 @@ from pm_agent.tracking import (
     quality_summary,
     record_retro,
     requirement_progress,
-    save,
+    save_if_current,
     signed_hours,
 )
 from pm_agent.ui import (
@@ -349,7 +349,7 @@ if tracking is not None:
     with st.container(border=True, key="panel-quality"):
         heading("bug_report", "Test und Fehler", python="zählt")
         try:
-            plan_of_tests = (lifecycle.load() or lifecycle.Lifecycle()).cases
+            plan_of_tests = lifecycle.case_plan(lifecycle.load())
         except InputError as err:
             plan_of_tests = None
             st.caption(f"Der Testplan ist nicht lesbar: {as_text(str(err))}")
@@ -420,7 +420,7 @@ if tracking is not None:
                 )
                 try:
                     updated = record_retro(tracking, retro)
-                    save(updated)
+                    save_if_current(tracking, updated)
                 except InputError as err:
                     st.error(as_text(str(err)))
                 except OSError as err:
@@ -437,8 +437,8 @@ if tracking is not None:
                 ):
                     done = retro.model_copy(update={"measure_done": True})
                     try:
-                        save(record_retro(tracking, done))
-                    except OSError as err:
+                        save_if_current(tracking, record_retro(tracking, done))
+                    except (InputError, OSError) as err:
                         st.error(
                             f"Die Maßnahme konnte nicht gespeichert werden: {as_text(str(err))}."
                         )

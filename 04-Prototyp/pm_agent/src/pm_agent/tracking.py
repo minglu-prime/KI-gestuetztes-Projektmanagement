@@ -12,13 +12,14 @@ from datetime import date, datetime, timedelta
 from itertools import islice
 from pathlib import Path
 from string import Template
+from threading import RLock
 from typing import Any, Literal, NamedTuple, get_args
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from pm_agent.agent import LOG_DIR
 from pm_agent.models import (
-    Cases,
+    Case,
     ControlReport,
     Lesson,
     Member,
@@ -48,6 +49,7 @@ from pm_agent.workbench import (
 )
 
 PROJECT_FILE = DATA_DIR / "projekt.json"
+PROJECT_WRITE_LOCK = RLock()
 TEMPLATES = Path(__file__).parent / "templates"
 
 Status = Literal["offen", "in Arbeit", "fertig"]
@@ -110,6 +112,7 @@ class Earlier(BaseModel):
     note: str = ""
     until: date  # the day the next plan was adopted
     requirement_ids: list[str] = Field(default_factory=list)  # what the task served
+    superseded_requirement_ids: list[str] = Field(default_factory=list)
     finished_on: date | None = None  # a finished task: the day, if it was recorded
     planned_end: date | None = None  # where its plan had it; None in files saved before
 
@@ -139,6 +142,12 @@ class CaseResult(BaseModel):
     result: Literal["bestanden", "fehlgeschlagen", "blockiert"]
     on: date
     note: str = ""
+    version: str | None = None  # historical results may lack the version they tested
+
+
+class CasePlan(NamedTuple):
+    cases: list[Case]
+    versions: dict[str, str]
 
 
 class Defect(BaseModel):
@@ -163,6 +172,7 @@ class Signoff(BaseModel):
     requirement_id: str
     decision: Literal["abgenommen", "zurückgestellt"]
     reason: str = ""
+    superseded: bool = False  # the requirement changed or left the adopted plan
 
 
 class Operation(BaseModel):
@@ -283,8 +293,26 @@ def adopt(
     adopted = datetime.now().astimezone().replace(microsecond=0)
     progress = {t.id: Progress() for t in plan.tasks}
     history: list[Earlier] = []
+    signoffs: list[Signoff] = []
+    # Without a new approved snapshot, the rest keeps the requirements it was traced to.
+    if requirements is None:
+        requirements = keep.requirements if keep is not None else []
     if keep is not None:
-        history = [*keep.history, *_closed(keep, adopted.date())]
+        previous = {need.id: need for need in keep.requirements}
+        unchanged = {need.id for need in requirements if previous.get(need.id) == need}
+        for entry in [*keep.history, *_closed(keep, adopted.date())]:
+            obsolete = [
+                rid
+                for rid in entry.requirement_ids
+                if rid in entry.superseded_requirement_ids or rid not in unchanged
+            ]
+            history.append(entry.model_copy(update={"superseded_requirement_ids": obsolete}))
+        signoffs = [
+            decision.model_copy(update={"superseded": True})
+            if decision.requirement_id not in unchanged
+            else decision
+            for decision in keep.signoffs
+        ]
         for task_id, done in keep.progress.items():
             if task_id in progress and done.status == "in Arbeit":
                 progress[task_id] = Progress(status="in Arbeit", note=done.note)
@@ -295,19 +323,11 @@ def adopt(
         plan=plan,
         progress=progress,
         history=history,
-        # Adopted again without approved requirements: the rest keeps what it was
-        # traced to, so the progress per requirement goes on.
-        requirements=(
-            requirements
-            if requirements is not None
-            else keep.requirements
-            if keep is not None
-            else []
-        ),
+        requirements=requirements,
         retros=keep.retros if keep is not None else [],
         results=keep.results if keep is not None else [],
         defects=keep.defects if keep is not None else [],
-        signoffs=keep.signoffs if keep is not None else [],
+        signoffs=signoffs,
         lessons=keep.lessons if keep is not None else [],
         operations=keep.operations if keep is not None else [],
         incidents=keep.incidents if keep is not None else [],
@@ -333,16 +353,7 @@ def covered_requirements(
     of the project needs no new task for them. With `current` (the requirements approved
     now), only those that still read as they did when the plan was adopted: an ID used again
     for something else is not covered by the old work."""
-    finished: dict[str, bool] = {}
-    for e in tracking.history:
-        if e.finished:
-            for rid in e.requirement_ids:
-                finished.setdefault(rid, True)
-    for task in tracking.plan.tasks:
-        for rid in task.requirement_ids:
-            done = tracking.progress[task.id].status == "fertig"
-            finished[rid] = finished.get(rid, True) and done
-    covered = {rid for rid, done in finished.items() if done}
+    covered = {rid for rid, tasks in _requirement_tasks(tracking).items() if all(tasks.values())}
     if current is not None:
         then = {need.id: need for need in tracking.requirements}
         covered = {need.id for need in current if need.id in covered and then.get(need.id) == need}
@@ -352,14 +363,12 @@ def covered_requirements(
 def requirement_progress(tracking: Tracking) -> list[dict[str, Any]]:
     """Per requirement adopted with the plan: its tasks, of this plan and finished ones of
     plans before it, and how many of them are finished. Empty without requirements."""
+    if not tracking.requirements:
+        return []
     rows = []
+    by_requirement = _requirement_tasks(tracking)
     for need in tracking.requirements:
-        tasks = {
-            e.id: True for e in tracking.history if e.finished and need.id in e.requirement_ids
-        }
-        for task in tracking.plan.tasks:
-            if need.id in task.requirement_ids:
-                tasks[task.id] = tracking.progress[task.id].status == "fertig"
+        tasks = by_requirement.get(need.id, {})
         rows.append(
             {
                 "ID": need.id,
@@ -370,6 +379,22 @@ def requirement_progress(tracking: Tracking) -> list[dict[str, Any]]:
             }
         )
     return rows
+
+
+def _requirement_tasks(tracking: Tracking) -> dict[str, dict[str, bool]]:
+    by_requirement: dict[str, dict[str, bool]] = {}
+    for entry in tracking.history:
+        if entry.finished:
+            for rid in entry.requirement_ids:
+                if rid not in entry.superseded_requirement_ids:
+                    by_requirement.setdefault(rid, {})[entry.id] = True
+    for task in tracking.plan.tasks:
+        if not task.requirement_ids:
+            continue
+        done = tracking.progress[task.id].status == "fertig"
+        for rid in task.requirement_ids:
+            by_requirement.setdefault(rid, {})[task.id] = done
+    return by_requirement
 
 
 def _closed(tracking: Tracking, day: date) -> list[Earlier]:
@@ -513,10 +538,25 @@ def demo_this_week(tracking: Tracking, today: date) -> str | None:
     return None
 
 
-def record_result(tracking: Tracking, result: CaseResult) -> Tracking:
+def record_result(tracking: Tracking, result: CaseResult, plan: CasePlan) -> Tracking:
     """The result of a test case, replacing an earlier one of the same case."""
+    version = plan.versions.get(result.case_id)
+    if version is None:
+        raise InputError(f"Testfall '{result.case_id}' ist nicht eindeutig im Testplan")
+    result = result.model_copy(update={"version": version})
     others = [r for r in tracking.results if r.case_id != result.case_id]
     return tracking.model_copy(update={"results": [*others, result]})
+
+
+def current_results(tracking: Tracking, plan: CasePlan | None) -> dict[str, CaseResult]:
+    """Only results recorded for the case and the contract in this plan."""
+    if plan is None:
+        return {}
+    return {
+        r.case_id: r
+        for r in tracking.results
+        if r.version is not None and r.version == plan.versions.get(r.case_id)
+    }
 
 
 def record_defect(tracking: Tracking, defect: Defect) -> Tracking:
@@ -554,18 +594,18 @@ def reopen(tracking: Tracking, defect_id: str) -> Tracking:
     return tracking.model_copy(update={"progress": progress})
 
 
-def check_results(tracking: Tracking, cases: Cases) -> RetroCheck:
+def check_results(tracking: Tracking, plan: CasePlan) -> RetroCheck:
     """Errors: a failed case without a defect. Warnings: cases without a result, open
     defects whose task is finished."""
-    latest = {r.case_id: r for r in tracking.results}
+    latest = current_results(tracking, plan)
     found = {d.case_id for d in tracking.defects if d.status == "offen"}
     errors = [
         f"Testfall '{c.id}' ist fehlgeschlagen, aber es gibt keinen Fehlereintrag"
-        for c in cases.cases
+        for c in plan.cases
         if c.id in latest and latest[c.id].result == "fehlgeschlagen" and c.id not in found
     ]
     warnings = []
-    missing = [c.id for c in cases.cases if c.id not in latest]
+    missing = [c.id for c in plan.cases if c.id not in latest]
     if missing:
         subject = "1 Testfall" if len(missing) == 1 else f"{len(missing)} Testfälle"
         warnings.append(f"{subject} ohne Ergebnis: {', '.join(missing)}")
@@ -579,25 +619,24 @@ def check_results(tracking: Tracking, cases: Cases) -> RetroCheck:
     return RetroCheck(errors, warnings)
 
 
-def quality_summary(tracking: Tracking, cases: Cases) -> dict[str, str]:
+def quality_summary(tracking: Tracking, plan: CasePlan) -> dict[str, str]:
     """How far testing is: cases with a result, passed ones, open defects by severity.
     Not "test_…": pytest would take a function of that name for a test."""
-    latest = {r.case_id: r for r in tracking.results}
-    known = [c.id for c in cases.cases]
-    done = [cid for cid in known if cid in latest]
-    passed = [cid for cid in done if latest[cid].result == "bestanden"]
+    latest = current_results(tracking, plan)
+    passed = sum(r.result == "bestanden" for r in latest.values())
     open_ = [d for d in tracking.defects if d.status == "offen"]
     severe = sum(d.severity == "schwer" for d in open_)
     return {
-        "Mit Ergebnis": f"{len(done)} von {len(known)}",
-        "Bestanden": str(len(passed)),
+        "Mit Ergebnis": f"{len(latest)} von {len(plan.cases)}",
+        "Bestanden": str(passed),
         "Offene Fehler": f"{len(open_)} (schwer: {severe})" if open_ else "0",
     }
 
 
-def case_status(tracking: Tracking, cases: Cases) -> list[dict[str, Any]]:
-    """One row per test case: its latest result and the defects it found."""
-    latest = {r.case_id: r for r in tracking.results}
+def case_status(tracking: Tracking, plan: CasePlan) -> list[dict[str, Any]]:
+    """One row per test case: its current result, a historical result, and defects."""
+    latest = current_results(tracking, plan)
+    previous = {r.case_id: r for r in tracking.results if r.case_id not in latest}
     return [
         {
             "ID": c.id,
@@ -605,9 +644,12 @@ def case_status(tracking: Tracking, cases: Cases) -> list[dict[str, Any]]:
             "Art": c.kind,
             "Ergebnis": latest[c.id].result if c.id in latest else "offen",
             "Am": _date(latest[c.id].on) if c.id in latest else "",
+            "Früheres Ergebnis": (
+                f"{previous[c.id].result} ({_date(previous[c.id].on)})" if c.id in previous else ""
+            ),
             "Fehler": ", ".join(d.id for d in tracking.defects if d.case_id == c.id),
         }
-        for c in cases.cases
+        for c in plan.cases
     ]
 
 
@@ -630,8 +672,27 @@ def load(path: Path | None = None) -> Tracking | None:
 
 def save(tracking: Tracking, path: Path | None = None) -> None:
     path = path or PROJECT_FILE  # read at call time: tests point it to a temporary folder
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(tracking.model_dump_json(indent=2), encoding="utf-8")
+    with PROJECT_WRITE_LOCK:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(tracking.model_dump_json(indent=2), encoding="utf-8")
+
+
+def require_current(expected: Tracking | None, *, replace_unreadable: bool = False) -> None:
+    """Check the on-disk project while the caller holds PROJECT_WRITE_LOCK."""
+    try:
+        current = load()
+    except InputError:
+        if replace_unreadable:
+            return
+        raise
+    if replace_unreadable or current != expected:
+        raise InputError("Das Projekt wurde inzwischen geändert. Prüfe den aktuellen Stand.")
+
+
+def save_if_current(old: Tracking, new: Tracking) -> None:
+    with PROJECT_WRITE_LOCK:
+        require_current(old)
+        save(new)
 
 
 def percent(share: float) -> str:

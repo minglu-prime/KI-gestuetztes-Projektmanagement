@@ -20,8 +20,8 @@ from pm_agent.closing import (
     rows_to_lessons,
     signoff_rows,
 )
-from pm_agent.models import Lessons
-from pm_agent.tracking import Signoff, evaluate, load, save
+from pm_agent.models import Lesson, Lessons, Requirement
+from pm_agent.tracking import Signoff, Tracking, evaluate, load, save_if_current
 from pm_agent.ui import (
     adopted_project,
     as_text,
@@ -40,7 +40,7 @@ def change(make) -> bool:
         current = load()
         if current is None:
             raise InputError("Es ist kein Projekt übernommen")
-        save(make(current))
+        save_if_current(current, make(current))
     except InputError as err:
         state.closing_error = str(err)
         return False
@@ -50,13 +50,29 @@ def change(make) -> bool:
     return True
 
 
-def on_signoff() -> None:
+def save_lessons(basis: Tracking, items: list[Lesson]) -> bool:
+    try:
+        save_if_current(basis, basis.model_copy(update={"lessons": items}))
+    except (InputError, OSError) as err:
+        st.error(f"Die Lessons Learned konnten nicht gespeichert werden: {as_text(str(err))}")
+        return False
+    return True
+
+
+def on_signoff(requirements: dict[str, Requirement]) -> None:
     signoff = Signoff(
         requirement_id=state.signoff_req,
         decision=state.signoff_decision,
         reason=state.signoff_reason,
     )
-    if change(lambda t: closing.record_signoff(t, signoff)):
+
+    def record(t: Tracking) -> Tracking:
+        current = next((need for need in t.requirements if need.id == signoff.requirement_id), None)
+        if current != requirements.get(signoff.requirement_id):
+            raise InputError("Die Anforderung wurde inzwischen geändert. Prüfe sie erneut.")
+        return closing.record_signoff(t, signoff)
+
+    if change(record):
         state.signoff_reason = ""
 
 
@@ -74,16 +90,16 @@ try:
 except InputError as err:
     st.error(f"Der Testplan konnte nicht gelesen werden: {as_text(str(err))}")
     life = None
-cases = life.cases if life is not None else None
+plan = lifecycle.case_plan(life)
 today = date.today()
 if "closing_error" in state:
     st.error(as_text(state.pop("closing_error")))
 
 with st.container(border=True, key="panel-signoff"):
     heading("verified", "Abnahme je Anforderung", python="schlägt vor", du="entscheidest")
-    errors, warnings = check_closing(tracking, cases)
+    errors, warnings = check_closing(tracking, plan)
     if tracking.requirements:
-        st.dataframe(pd.DataFrame(signoff_rows(tracking, cases)), hide_index=True)
+        st.dataframe(pd.DataFrame(signoff_rows(tracking, plan)), hide_index=True)
         titles = {n.id: n.title for n in tracking.requirements}
         st.selectbox(
             "Anforderung",
@@ -98,7 +114,12 @@ with st.container(border=True, key="panel-signoff"):
             key="signoff_decision",
         )
         st.text_input("Grund (bei zurückgestellt nötig)", key="signoff_reason")
-        st.button("Entscheidung speichern", icon=":material/save:", on_click=on_signoff)
+        st.button(
+            "Entscheidung speichern",
+            icon=":material/save:",
+            on_click=on_signoff,
+            args=({need.id: need for need in tracking.requirements},),
+        )
     for error in errors:
         st.error(as_text(error))
     for warning in warnings:
@@ -130,12 +151,10 @@ with st.container(border=True, key="panel-lessons"):
             "Claude entwirft die Lessons Learned …",
             lambda on_round: closing.run_lessons(tracking, today, on_round=on_round),
         )
-        if drafted is not None and change(
-            lambda t: t.model_copy(update={"lessons": drafted.items})
-        ):
+        if drafted is not None and save_lessons(tracking, drafted.items):
             state.lessons_version = state.get("lessons_version", 0) + 1
             st.rerun()
-    edited = kept_editor(
+    edited, conflict = kept_editor(
         "lessons_editor_",
         "lessons_version",
         tracking.lessons,
@@ -143,13 +162,13 @@ with st.container(border=True, key="panel-lessons"):
         num_rows="dynamic",
         width="stretch",
     )
-    if st.button("Lessons Learned speichern", icon=":material/save:"):
+    if st.button("Lessons Learned speichern", icon=":material/save:") and not conflict:
         try:
             items = rows_to_lessons(edited.to_dict("records"))
         except InputError as err:
             st.error(f"Bitte korrigieren:\n\n{as_text(str(err))}")
         else:
-            if change(lambda t: t.model_copy(update={"lessons": items})):
+            if save_lessons(tracking, items):
                 st.rerun()
     if tracking.lessons:
         for problem in check_lessons(Lessons(items=tracking.lessons), tracking):
@@ -158,7 +177,7 @@ with st.container(border=True, key="panel-lessons"):
 with st.container(border=True, key="panel-document"):
     heading("description", "Abschlussbericht", python="füllt die Vorlage aus")
     charter = life.charter if life is not None else None
-    document = closing_document(tracking, cases, evaluate(tracking, today), charter)
+    document = closing_document(tracking, plan, evaluate(tracking, today), charter)
     st.download_button(
         "Abschlussbericht als Markdown herunterladen",
         document,

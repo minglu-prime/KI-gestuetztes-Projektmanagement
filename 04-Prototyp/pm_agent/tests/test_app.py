@@ -1438,6 +1438,7 @@ def test_a_charter_from_claude_is_saved_as_draft_and_approved_by_the_lead(site, 
 
     monkeypatch.setattr(lifecycle, "run_charter", drafted)
     at = enter_project(site.switch_page("views/auftrag.py").run())
+    at.checkbox(key="charter_consent").check().run()
     button(at, "Projektauftrag mit Claude entwerfen").click()
     at = at.run()
     assert not at.exception and not at.error
@@ -1497,6 +1498,7 @@ def test_an_agent_error_on_the_auftrag_is_shown(site, monkeypatch):
 
     monkeypatch.setattr(lifecycle, "run_charter", failing)
     at = enter_project(site.switch_page("views/auftrag.py").run())
+    at.checkbox(key="charter_consent").check().run()
     button(at, "Projektauftrag mit Claude entwerfen").click()
     at = at.run()
     assert not at.exception
@@ -1547,6 +1549,7 @@ def test_requirements_from_claude_are_checked_against_the_charter(site, monkeypa
     monkeypatch.setattr(lifecycle, "run_requirements", drafted)
     lifecycle.save(with_charter())
     at = site.switch_page("views/anforderungen.py").run()
+    at.checkbox(key="requirements_consent").check().run()
     button(at, "Anforderungen mit Claude entwerfen").click()
     at = at.run()
     assert not at.exception and not at.error
@@ -1651,6 +1654,7 @@ def test_without_an_approved_charter_the_requirements_say_so(site, monkeypatch):
     lifecycle.save(with_charter(approved=False))
     at = site.switch_page("views/anforderungen.py").run()
     assert any("nicht freigegeben" in w.value for w in at.warning)
+    at.checkbox(key="requirements_consent").check().run()
     button(at, "Anforderungen mit Claude entwerfen").click()
     at = at.run()
     # Claude works from the charter as it stands, approved or not.
@@ -1878,6 +1882,7 @@ def test_without_requirements_the_design_page_leads_to_them(site):
     lifecycle.save(with_charter())
     at = site.switch_page("views/entwurf.py").run()
     assert any("Noch keine Anforderungen" in i.value for i in at.info)
+    at.checkbox(key="design_consent").check().run()
     assert not button(at, "Entwurf mit Claude entwerfen").disabled
 
 
@@ -1891,6 +1896,7 @@ def test_a_design_from_claude_is_drawn_checked_and_approved(site, monkeypatch):
     monkeypatch.setattr(lifecycle, "run_design", drafted)
     approve_needs()
     at = site.switch_page("views/entwurf.py").run()
+    at.checkbox(key="design_consent").check().run()
     button(at, "Entwurf mit Claude entwerfen").click()
     at = at.run()
     assert not at.exception and not at.error
@@ -2057,6 +2063,7 @@ def test_test_cases_from_claude_are_checked_and_approved(site, monkeypatch):
     approve_needs()
     lifecycle.save(lifecycle.load().model_copy(update={"design": design()}))
     at = site.switch_page("views/testplan.py").run()
+    at.checkbox(key="cases_consent").check().run()
     button(at, "Testfälle mit Claude entwerfen").click()
     at = at.run()
     assert not at.exception and not at.error
@@ -2314,3 +2321,199 @@ def test_the_startseite_leads_to_the_test_page_for_open_defects(tracked):
     at = tracked.switch_page("views/startseite.py").run()
     assert not at.exception
     assert button(at, "Fehler beheben").proto.type == "primary"
+
+
+@pytest.mark.parametrize(
+    ("page", "label", "key"),
+    [
+        ("auftrag", "Projektauftrag mit Claude entwerfen", "charter_consent"),
+        ("anforderungen", "Anforderungen mit Claude entwerfen", "requirements_consent"),
+        ("entwurf", "Entwurf mit Claude entwerfen", "design_consent"),
+        ("testplan", "Testfälle mit Claude entwerfen", "cases_consent"),
+    ],
+)
+def test_lifecycle_drafting_requires_transfer_confirmation(site, page, label, key):
+    lifecycle.save(lifecycle.Lifecycle(project=PROJECT))
+    at = site.switch_page(f"views/{page}.py").run()
+    assert button(at, label).disabled
+    at.checkbox(key=key).check().run()
+    assert not button(at, label).disabled
+
+
+def test_draft_cannot_overwrite_a_project_changed_during_the_call(site, monkeypatch):
+    before = with_charter()
+    newer = before.model_copy(update={"project": PROJECT.model_copy(update={"idea": "Neu"})})
+    lifecycle.save(before)
+
+    def draft(project, charter, on_round=None):
+        lifecycle.save(newer)
+        return NEEDS
+
+    monkeypatch.setattr(lifecycle, "run_requirements", draft)
+    at = site.switch_page("views/anforderungen.py").run()
+    at.checkbox(key="requirements_consent").check().run()
+    button(at, "Anforderungen mit Claude entwerfen").click()
+    at = at.run()
+    assert not at.exception
+    assert lifecycle.load() == newer
+    assert any("inzwischen geändert" in error.value for error in at.error)
+
+
+def test_a_failed_lifecycle_write_leaves_the_error_and_edit_visible(site, monkeypatch):
+    approve_needs()
+    at = site.switch_page("views/anforderungen.py").run()
+    at = edit_table(at, "requirements_editor_", {0: {"Titel": "Neuer Titel"}})
+
+    def blocked(_life):
+        raise PermissionError("Datei gesperrt")
+
+    monkeypatch.setattr(lifecycle, "save", blocked)
+    button(at, "Änderungen speichern und prüfen").click()
+    at = at.run()
+    assert not at.exception
+    assert lifecycle.load().requirements == NEEDS
+    assert any("Datei gesperrt" in error.value for error in at.error)
+    assert not button(at, "Änderungen speichern und prüfen").disabled
+
+
+@pytest.mark.parametrize("severe", [False, True])
+def test_iteration_cannot_archive_a_project_with_blocking_closing_errors(
+    site, monkeypatch, tmp_path, severe
+):
+    from pm_agent import closing
+
+    monkeypatch.setattr(workbench, "DATA_DIR", tmp_path)
+    adopted = tracking.adopt(PROJECT, TEAM, PLAN, requirements=NEEDS.items)
+    if severe:
+        adopted = closing.record_signoff(
+            adopted, tracking.Signoff(requirement_id="R1", decision="abgenommen")
+        )
+        adopted = tracking.record_defect(
+            adopted, tracking.Defect(case_id="T1", severity="schwer", cause="offen", task_id="A")
+        )
+        tracking.save(adopted)
+    at = site.switch_page("views/iteration.py").run()
+    assert not at.exception
+    at.checkbox(key="next_run_sure").check().run()
+    assert button(at, "Neuen Durchlauf beginnen").disabled
+    assert tracking.load() == adopted
+    assert not (tmp_path / "archiv").exists()
+
+
+def test_revised_test_case_requires_new_evidence_across_pages(site):
+    from test_lifecycle import design
+    from test_testplan import cases
+
+    approve_needs()
+    life = lifecycle.load().model_copy(update={"design": design(), "cases": cases()})
+    lifecycle.save(lifecycle.approve_cases(life, APPROVED_AT))
+    tracking.adopt(PROJECT, TEAM, PLAN, requirements=NEEDS.items)
+
+    test = site.switch_page("views/testlauf.py").run()
+    button(test, "Ergebnis speichern").click().run()
+    test.selectbox(key="test_case").set_value("T2").run()
+    button(test, "Ergebnis speichern").click().run()
+    control = test.switch_page("views/kontrolle.py").run()
+    assert next(m.value for m in control.metric if m.label == "Bestanden") == "2"
+
+    plan = control.switch_page("views/testplan.py").run()
+    plan = edit_table(plan, "cases_editor_", {0: {"Erwartet": "Neue verbindliche Erwartung"}})
+    button(plan, "Änderungen speichern und prüfen").click().run()
+    button(plan, "Testplan freigeben").click().run()
+    assert lifecycle.cases_state(lifecycle.load()) == "freigegeben"
+
+    test = plan.switch_page("views/testlauf.py").run()
+    results = next(f.value for f in test.dataframe if "Ergebnis" in f.value.columns)
+    assert results.set_index("ID").loc["T1", "Ergebnis"] != "bestanden"
+    assert results.set_index("ID").loc["T2", "Ergebnis"] == "bestanden"
+    control = test.switch_page("views/kontrolle.py").run()
+    assert next(m.value for m in control.metric if m.label == "Bestanden") == "1"
+    end = control.switch_page("views/abschluss.py").run()
+    signoff = next(f.value for f in end.dataframe if "Vorschlag" in f.value.columns)
+    assert signoff.iloc[0]["Vorschlag"] != "abnehmbar"
+
+
+def test_another_tabs_archive_does_not_recreate_old_project_details(site, tmp_path):
+    from pm_agent import closing
+
+    lifecycle.save(with_charter())
+    active = tracking.adopt(PROJECT, TEAM, PLAN)
+    at = site.switch_page("views/auftrag.py").run()
+    assert at.text_area(key="auftrag_idea").value == PROJECT.idea
+
+    closing.start_next_run(active, APPROVED_AT, tmp_path / "archiv")
+    at.checkbox(key="charter_consent").check().run()
+    assert not at.exception
+    assert lifecycle.load().project is None
+    assert not at.text_area(key="auftrag_idea").value
+
+
+def test_progress_save_after_archiving_cannot_recreate_the_project(site, tmp_path, monkeypatch):
+    from pm_agent import closing
+
+    active = tracking.adopt(PROJECT, TEAM, PLAN)
+    lifecycle.save(with_charter())
+    apply = tracking.apply_rows
+
+    def save_after_archiving(old, rows):
+        closing.start_next_run(active, APPROVED_AT, tmp_path / "archiv")
+        return apply(old, rows)
+
+    monkeypatch.setattr(tracking, "apply_rows", save_after_archiving)
+    at = site.switch_page("views/durchfuehrung.py").run()
+    button(at, "Fortschritt speichern").click().run()
+    assert not at.exception
+    assert tracking.load() is None
+    assert any("inzwischen geändert" in error.value for error in at.error)
+
+
+def test_slow_lessons_draft_preserves_newer_manual_notes(site, monkeypatch):
+    from pm_agent import closing
+    from pm_agent.models import Lesson, Lessons
+
+    tracking.adopt(PROJECT, TEAM, PLAN)
+    newer = Lesson(observation="Neu gespeichert", advice="Behalten")
+    drafted = Lessons(items=[Lesson(observation="Alter Entwurf", advice="Ersetzen")])
+
+    def propose(old, today, on_round=None):
+        tracking.save(old.model_copy(update={"lessons": [newer]}))
+        return drafted
+
+    monkeypatch.setattr(closing, "run_lessons", propose)
+    at = site.switch_page("views/abschluss.py").run()
+    at.checkbox(key="consent_abschluss").check().run()
+    button(at, "Lessons Learned mit Claude entwerfen").click().run()
+    assert not at.exception
+    assert tracking.load().lessons == [newer]
+    assert any("inzwischen geändert" in error.value for error in at.error)
+
+
+def test_progress_edit_does_not_move_to_another_task_after_reordering(site):
+    tracking.adopt(PROJECT, TEAM, PLAN)
+    at = site.switch_page("views/durchfuehrung.py").run()
+    at = edit_progress(at, {0: {"Status": "in Arbeit", "Ist (h)": 1, "Notiz": "Aufgabe A"}})
+    reordered = PLAN.model_copy(update={"tasks": list(reversed(PLAN.tasks))})
+    current = tracking.adopt(PROJECT, TEAM, reordered)
+
+    button(at, "Fortschritt speichern").click().run()
+    assert not at.exception
+    assert tracking.load() == current
+    assert progress_editor(at).iloc[0]["ID"] == "B"
+    assert any("inzwischen geändert" in warning.value for warning in at.warning)
+    assert not any("Fortschritt gespeichert" in message.value for message in at.success)
+
+
+def test_iteration_confirmation_cannot_archive_a_replacement_project(site, tmp_path, monkeypatch):
+    monkeypatch.setattr(workbench, "DATA_DIR", tmp_path)
+    lifecycle.save(with_charter())
+    tracking.adopt(PROJECT, TEAM, PLAN)
+    at = site.switch_page("views/iteration.py").run()
+    at.checkbox(key="next_run_sure").check().run()
+    assert not button(at, "Neuen Durchlauf beginnen").disabled
+    current = tracking.adopt(PROJECT.model_copy(update={"idea": "Neues Vorhaben"}), TEAM, PLAN)
+
+    button(at, "Neuen Durchlauf beginnen").click().run()
+    assert not at.exception
+    assert tracking.load() == current
+    assert not (tmp_path / "archiv").exists()
+    assert not at.checkbox(key="next_run_sure").value

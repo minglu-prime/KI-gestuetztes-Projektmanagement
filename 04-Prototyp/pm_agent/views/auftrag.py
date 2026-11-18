@@ -21,6 +21,7 @@ from pm_agent.models import Charter, Project
 from pm_agent.tools import invalid_input
 from pm_agent.ui import (
     as_text,
+    consent,
     heading,
     phase_chip,
     run_with_progress,
@@ -71,8 +72,9 @@ status = st.container()  # filled at the end, when the charter of this run is kn
 # 1 · Eckdaten ----------------------------------------------------------------------------
 with st.container(border=True, key="panel-eckdaten"):
     heading("event", "Eckdaten", du="trägst Idee und Termine ein")
-    if "auftrag_idea" not in state:  # first visit: from the file
-        saved = life.project
+    saved = life.project
+    if "auftrag_idea" not in state or state.get("auftrag_basis") != saved:
+        state.auftrag_basis = saved
         state.auftrag_idea = saved.idea if saved else ""
         state.auftrag_start = saved.start_date if saved else None
         state.auftrag_deadline = saved.deadline if saved else None
@@ -99,7 +101,9 @@ with st.container(border=True, key="panel-eckdaten"):
             st.error("; ".join(e["msg"].removeprefix("Value error, ") for e in err.errors()))
     if project is not None and project != life.project:
         # Saved right away: an approval made for other dates is then shown as changed.
-        life = store(life, life.model_copy(update={"project": project}))
+        if (updated := store(life, life.model_copy(update={"project": project}))) is not None:
+            life = updated
+            state.auftrag_basis = updated.project
     st.caption("Freie Tage für alle trägst du in der Planung ein (Schritt Projekt).")
 
 # 2 · Entwurf von Claude ------------------------------------------------------------------
@@ -114,6 +118,7 @@ with st.container(border=True, key="panel-draft"):
         "An Claude gehen nur Projektidee, Start und Deadline, keine Angaben zum Team. Ist der "
         "Entwurf fehlerhaft, gibt Python ihn mit den Gründen zurück, bis er stimmt."
     )
+    allowed = consent("charter_consent", "Projektidee und Projekttermine")
     replace = True
     if life.charter is not None:
         replace = st.checkbox(
@@ -124,15 +129,16 @@ with st.container(border=True, key="panel-draft"):
         "Projektauftrag mit Claude entwerfen",
         icon=":material/play_arrow:",
         type="primary" if life.charter is None else "secondary",
-        disabled=project is None or not replace,
+        disabled=project is None or project != life.project or not replace or not allowed,
     ):
         drafted = run_with_progress(
             "Claude entwirft den Projektauftrag …",
             lambda on_round: lifecycle.run_charter(project, on_round=on_round),
         )
         if drafted is not None:
-            life = store(life, life.model_copy(update={"charter": drafted}))
-            if life.charter == drafted:
+            saved = store(life, life.model_copy(update={"charter": drafted}))
+            if saved is not None:
+                life = saved
                 show(drafted)
 
 # 3 · Projektauftrag ---------------------------------------------------------------------

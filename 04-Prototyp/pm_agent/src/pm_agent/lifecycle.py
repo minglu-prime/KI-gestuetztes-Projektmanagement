@@ -14,6 +14,7 @@ import re
 from collections.abc import Callable, Iterable
 from datetime import datetime
 from pathlib import Path
+from threading import Lock
 from typing import Any, Literal, NamedTuple
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
@@ -38,10 +39,11 @@ from pm_agent.models import (
     Step,
 )
 from pm_agent.tools import Submission
-from pm_agent.tracking import _fill
+from pm_agent.tracking import CasePlan, _fill
 from pm_agent.workbench import DATA_DIR, InputError, _cell, _date, _md, _reason
 
 FILE = DATA_DIR / "vorhaben.json"
+WRITE_LOCK = Lock()
 
 State = Literal["offen", "entwurf", "geändert", "freigegeben"]
 REQUIREMENT_COLUMNS = [
@@ -107,6 +109,23 @@ def save(life: Lifecycle, path: Path | None = None) -> None:
     path = path or FILE
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(life.model_dump_json(indent=2), encoding="utf-8")
+
+
+def save_if_current(old: Lifecycle | None, new: Lifecycle) -> None:
+    """Compare and save within one Streamlit process. None permits replacing an unreadable file."""
+    with WRITE_LOCK:
+        try:
+            current = load()
+        except InputError:
+            if old is not None:
+                raise
+        else:
+            if old is None or (current or Lifecycle()) != old:
+                raise InputError(
+                    "Das Vorhaben wurde inzwischen geändert. Lade die Seite neu "
+                    "und prüfe den aktuellen Stand."
+                )
+        save(new)
 
 
 def _digest(*parts: BaseModel | None, legacy: bool = False) -> str:
@@ -201,6 +220,26 @@ def approved_cases(life: Lifecycle | None) -> Cases | None:
     if life is None or cases_state(life) != "freigegeben":
         return None
     return life.cases
+
+
+def case_plan(life: Lifecycle | None) -> CasePlan | None:
+    """Current test cases and versions, including the criteria and interface each tests."""
+    if life is None or life.cases is None:
+        return None
+    criteria = {
+        criterion.id: criterion
+        for need in (life.requirements.items if life.requirements else [])
+        for criterion in need.criteria
+    }
+    interfaces = {i.id: i for i in (life.design.interfaces if life.design else [])}
+    cases = life.cases.cases
+    duplicates = _twice([c.id for c in cases], "{}")
+    versions = {
+        c.id: _digest(c, *(criteria.get(cid) for cid in c.criteria), interfaces.get(c.interface))
+        for c in cases
+        if c.id not in duplicates
+    }
+    return CasePlan(cases, versions)
 
 
 def approve_cases(life: Lifecycle, now: datetime) -> Lifecycle:

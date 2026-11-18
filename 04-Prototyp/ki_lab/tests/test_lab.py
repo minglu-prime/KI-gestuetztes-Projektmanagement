@@ -72,6 +72,66 @@ class LabTests(unittest.TestCase):
         self.assertEqual(row['final']['plan'], 'Rechtzeitig')
         self.assertEqual(row['ended_at'], 2500)
 
+    def test_active_formal_round_keeps_its_frozen_limit_after_restart(self):
+        self.lab.api_key = 'test-only'
+        self.lab.model = 'test-2026-01-01'
+        with patch('lab.LIMIT', 40):
+            self.lab.freeze('TEST ONLY: controlled configuration attestation')
+            token = self.lab.create(group=1, pilot=False, participant='P001')['token']
+            self.start(token)
+            self.lab.save(token, {'plan': 'Rechtzeitig', 'risks': ''})
+        self.lab.close()
+
+        self.now = 1030
+        with patch('lab.LIMIT', 200):
+            reopened = Lab(Path(self.tmp.name) / 'lab.db', clock=lambda: self.now,
+                           model='test-2026-01-01', api_key='test-only')
+            self.addCleanup(reopened.close)
+            self.assertEqual(reopened.view(token)['remaining_seconds'], 10)
+            with self.assertRaises(Problem):
+                reopened.create(group=1, pilot=False, participant='P002')
+
+            self.now = 1044
+            with self.assertRaises(Problem):
+                reopened.save(token, {'plan': 'Zu spät', 'risks': ''})
+            row = reopened.raw()[0]['rounds'][0]
+            self.assertEqual(row['status'], 'timed_out')
+            self.assertEqual(row['ended_at'], 1040)
+            self.assertEqual(row['final'], {'plan': 'Rechtzeitig', 'risks': ''})
+            self.assertEqual(reopened.view(token)['remaining_seconds'], 0)
+
+    def test_legacy_round_without_stored_limit_keeps_25_minutes(self):
+        token = self.create()
+        self.start(token)
+        legacy = self.lab.raw()[0]
+        del legacy['config']['limit_seconds']
+        self.lab._put(token, legacy)
+
+        with patch('lab.LIMIT', 40):
+            self.now = 2499
+            self.assertEqual(self.lab.view(token)['remaining_seconds'], 1)
+            self.now = 2500
+            row = self.lab.raw()[0]['rounds'][0]
+            self.assertEqual(row['status'], 'timed_out')
+            self.assertEqual(row['ended_at'], 2500)
+
+    def test_invalid_stored_limit_does_not_finalize_the_saved_round(self):
+        token = self.create()
+        self.start(token)
+        damaged = self.lab.raw()[0]
+        damaged['config']['limit_seconds'] = 0
+        self.lab._put(token, damaged)
+        before = self.lab.db.execute('SELECT body FROM sessions WHERE token=?', (token,)).fetchone()
+
+        self.now = 2501
+        with self.assertRaises(Problem) as caught:
+            self.lab.view(token)
+        self.assertEqual(caught.exception.status, 500)
+        self.assertEqual(
+            self.lab.db.execute('SELECT body FROM sessions WHERE token=?', (token,)).fetchone(),
+            before,
+        )
+
     def test_submission_is_immutable_and_second_round_needs_explicit_start(self):
         token = self.create()
         self.start(token)

@@ -21,7 +21,7 @@ from pm_agent.tracking import (
     record_defect,
     record_result,
     reopen,
-    save,
+    save_if_current,
 )
 from pm_agent.ui import adopted_project, as_text, heading
 from pm_agent.workbench import InputError
@@ -36,7 +36,7 @@ def change(make) -> bool:
         current = load()
         if current is None:
             raise InputError("Es ist kein Projekt übernommen")
-        save(make(current))
+        save_if_current(current, make(current))
     except InputError as err:
         state.test_page_error = str(err)
         return False
@@ -46,11 +46,18 @@ def change(make) -> bool:
     return True
 
 
-def on_result() -> None:
+def on_result(versions: dict[str, str]) -> None:
     result = CaseResult(
         case_id=state.test_case, result=state.test_result, on=date.today(), note=state.test_note
     )
-    if change(lambda t: record_result(t, result)):
+
+    def record(t: Tracking) -> Tracking:
+        current = lifecycle.case_plan(lifecycle.load())
+        if current is None or current.versions.get(result.case_id) != versions.get(result.case_id):
+            raise InputError("Der Testfall wurde inzwischen geändert. Prüfe ihn erneut.")
+        return record_result(t, result, current)
+
+    if change(record):
         state.test_note = ""
 
 
@@ -92,8 +99,10 @@ try:
 except InputError as err:
     st.error(f"Der Testplan konnte nicht gelesen werden: {as_text(str(err))}")
     st.stop()
-cases = life.cases if life is not None else None
-if cases is None:
+plan = lifecycle.case_plan(life)
+if "test_page_error" in state:
+    st.error(as_text(state.pop("test_page_error")))
+if plan is None:
     st.info("Noch kein Testplan. Lege die Testfälle auf der Seite Testplan an.")
     st.page_link("views/testplan.py", label="Zum Testplan", icon=":material/arrow_forward:")
     st.stop()
@@ -102,13 +111,11 @@ if lifecycle.cases_state(life) != "freigegeben":
         "Der Testplan ist nicht freigegeben. Ergebnisse lassen sich trotzdem eintragen; "
         "geprüft wird gegen die Testfälle, wie sie gerade stehen."
     )
-if "test_page_error" in state:
-    st.error(as_text(state.pop("test_page_error")))
-titles = {c.id: c.title for c in cases.cases}
+titles = {c.id: c.title for c in plan.cases}
 
 with st.container(border=True, key="panel-results"):
     heading("rule", "Ergebnisse", du="trägst ein", python="prüft")
-    st.dataframe(pd.DataFrame(case_status(tracking, cases)), hide_index=True)
+    st.dataframe(pd.DataFrame(case_status(tracking, plan)), hide_index=True)
     st.selectbox(
         "Testfall", list(titles), format_func=lambda c: f"{c} · {titles[c]}", key="test_case"
     )
@@ -116,11 +123,13 @@ with st.container(border=True, key="panel-results"):
         "Ergebnis", ["bestanden", "fehlgeschlagen", "blockiert"], horizontal=True, key="test_result"
     )
     st.text_input("Notiz", key="test_note")
-    st.button("Ergebnis speichern", icon=":material/save:", on_click=on_result)
+    st.button(
+        "Ergebnis speichern", icon=":material/save:", on_click=on_result, args=(plan.versions,)
+    )
 
 with st.container(border=True, key="panel-defects"):
     heading("bug_report", "Fehler", du="erfasst und entscheidest", python="prüft")
-    errors, warnings = check_results(tracking, cases)
+    errors, warnings = check_results(tracking, plan)
     for error in errors:
         st.error(as_text(error))
     for warning in warnings:

@@ -8,7 +8,7 @@ import streamlit as st
 
 from pm_agent import closing, lifecycle
 from pm_agent.closing import OPERATION_COLUMNS, check_operations, operation_rows, rows_to_operations
-from pm_agent.tracking import Incident, load, save
+from pm_agent.tracking import Incident, load, save_if_current
 from pm_agent.ui import adopted_project, as_text, heading, kept_editor
 from pm_agent.workbench import InputError
 
@@ -20,7 +20,7 @@ def change(make) -> bool:
         current = load()
         if current is None:
             raise InputError("Es ist kein Projekt übernommen")
-        save(make(current))
+        save_if_current(current, make(current))
     except InputError as err:
         state.operations_error = str(err)
         return False
@@ -79,7 +79,7 @@ with st.container(border=True, key="panel-handbook"):
         st.info("Noch kein Entwurf: Ohne Bausteine gibt es kein Betriebshandbuch.")
         st.page_link("views/entwurf.py", label="Zum Entwurf", icon=":material/arrow_forward:")
     else:
-        edited = kept_editor(
+        edited, conflict = kept_editor(
             "operations_editor_",
             "operations_version",
             (design, tracking.operations),
@@ -87,7 +87,7 @@ with st.container(border=True, key="panel-handbook"):
             disabled=["Baustein", "Name"],
             width="stretch",
         )
-        if st.button("Betriebshandbuch speichern", icon=":material/save:"):
+        if st.button("Betriebshandbuch speichern", icon=":material/save:") and not conflict:
             items = rows_to_operations(edited.to_dict("records"))
             if change(lambda t: t.model_copy(update={"operations": items})):
                 st.rerun()

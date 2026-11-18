@@ -1,4 +1,4 @@
-# Read by `streamlit run` started in this folder.
+# Streamlit 1.67 loads this file beside app.py before it starts the server.
 [server]
 # Only this computer can open the app. With the API key loaded, anyone who reaches the port
 # could start planning runs on the key owner's account.

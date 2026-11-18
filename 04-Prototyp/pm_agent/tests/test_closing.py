@@ -2,7 +2,7 @@ from datetime import date, datetime
 
 import pytest
 from test_lifecycle import need, requirements
-from test_testplan import ACCEPT, CONFLICT, INTEGRATE, cases
+from test_testplan import ACCEPT, CONFLICT, INTEGRATE, evidence
 from test_tools import PROJECT, TEAM, plan_input
 
 from pm_agent import closing
@@ -34,18 +34,23 @@ def project(tmp_path):
 
 
 def passed(tracking, *ids):
+    plan = evidence()
     for cid in ids:
-        tracking = record_result(tracking, CaseResult(case_id=cid, result="bestanden", on=DAY))
+        tracking = record_result(
+            tracking, CaseResult(case_id=cid, result="bestanden", on=DAY), plan
+        )
     return tracking
 
 
 def test_python_suggests_what_can_be_accepted(project):
-    the_cases = cases(ACCEPT, INTEGRATE, CONFLICT)
+    the_cases = evidence(ACCEPT, INTEGRATE, CONFLICT)
     assert closing.suggestions(project, the_cases) == {
         "R1": "Testfall T1 ohne Ergebnis",
         "R2": "kein Testfall",
     }
-    failed = record_result(project, CaseResult(case_id="T1", result="fehlgeschlagen", on=DAY))
+    failed = record_result(
+        project, CaseResult(case_id="T1", result="fehlgeschlagen", on=DAY), the_cases
+    )
     assert closing.suggestions(failed, the_cases)["R1"] == "Testfall T1 nicht bestanden"
     with_defect = record_defect(
         passed(project, "T1"), Defect(case_id="T1", severity="leicht", cause="x")
@@ -65,7 +70,7 @@ def test_a_signoff_names_a_known_requirement_and_a_deferral_a_reason(project):
 
 
 def test_closing_needs_every_muss_decided_and_no_open_severe_defect(project):
-    the_cases = cases(ACCEPT)
+    the_cases = evidence(ACCEPT)
     severe = record_defect(project, Defect(case_id="T1", severity="schwer", cause="x", task_id="A"))
     result = closing.check_closing(severe, the_cases)
     assert result.errors == [
@@ -88,6 +93,20 @@ def test_without_requirements_there_is_nothing_to_accept(tmp_path):
     plain = adopt(PROJECT, TEAM, Plan.model_validate(plan_input()), path=tmp_path / "q.json")
     assert closing.check_closing(plain, None).warnings == [
         "Der Plan wurde ohne Anforderungen übernommen: Es gibt nichts abzunehmen"
+    ]
+
+
+def test_a_saved_unjustified_muss_deferral_does_not_allow_closing(project, tmp_path):
+    from pm_agent.tracking import load, save
+
+    saved = project.model_copy(
+        update={"signoffs": [Signoff(requirement_id="R1", decision="zurückgestellt")]}
+    )
+    path = tmp_path / "alter-abschluss.json"
+    save(saved, path)
+    result = closing.check_closing(load(path), None)
+    assert result.errors == [
+        "Muss-Anforderung 'R1' (Anforderung R1) ist weder abgenommen noch begründet zurückgestellt"
     ]
 
 
@@ -154,7 +173,7 @@ def test_the_closing_report_has_signoffs_defects_and_lessons(project):
     tracking = tracking.model_copy(
         update={"lessons": lessons({"observation": "a | b", "advice": "c", "refs": ["F1"]}).items}
     )
-    text = closing.closing_document(tracking, cases(ACCEPT), evaluate(tracking, DAY))
+    text = closing.closing_document(tracking, evidence(ACCEPT), evaluate(tracking, DAY))
     assert text.startswith("# Abschlussbericht")
     assert "| R1 | Anforderung R1 | Muss | abnehmbar | abgenommen | – |" in text
     assert "| R2 | Anforderung R2 | Soll | kein Testfall | offen | – |" in text
@@ -178,7 +197,7 @@ def test_signoff_rows_show_suggestion_and_decision(project):
     signed = closing.record_signoff(
         project, Signoff(requirement_id="R2", decision="zurückgestellt", reason="keine Zeit")
     )
-    assert closing.signoff_rows(signed, cases(ACCEPT)) == [
+    assert closing.signoff_rows(signed, evidence(ACCEPT)) == [
         {
             "ID": "R1",
             "Anforderung": "Anforderung R1",
@@ -328,11 +347,29 @@ def test_a_new_run_that_fails_halfway_leaves_everything_in_place(project, tmp_pa
 
 def test_suggestions_count_cases_of_criteria_added_after_adopting(project):
     later = {**ACCEPT, "id": "T9", "criteria": ["R1.2"]}
+    plan = evidence(ACCEPT, later)
     tracking = passed(project, "T1")
-    tracking = record_result(tracking, CaseResult(case_id="T9", result="fehlgeschlagen", on=DAY))
-    assert (
-        closing.suggestions(tracking, cases(ACCEPT, later))["R1"] == "Testfall T9 nicht bestanden"
+    tracking = record_result(
+        tracking, CaseResult(case_id="T9", result="fehlgeschlagen", on=DAY), plan
     )
+    assert closing.suggestions(tracking, plan)["R1"] == "Testfall T9 nicht bestanden"
+
+
+def test_an_old_result_is_no_longer_evidence_in_the_closing_report(project):
+    from pm_agent.tracking import evaluate
+
+    changed = evidence({**ACCEPT, "steps": ["Anderer Testablauf"]})
+    signed = closing.record_signoff(
+        passed(project, "T1"), Signoff(requirement_id="R1", decision="abgenommen")
+    )
+    result = closing.check_closing(signed, changed)
+    assert result.errors == []
+    assert (
+        "Anforderung 'R1' ist abgenommen, obwohl: "
+        "Testfall T1 ohne Ergebnis für die aktuelle Version" in result.warnings
+    )
+    report = closing.closing_document(signed, changed, evaluate(signed, DAY))
+    assert "| Testfall T1 ohne Ergebnis für die aktuelle Version | abgenommen |" in report
 
 
 def test_signoffs_of_requirements_no_longer_adopted_leave_the_backlog(project):
