@@ -113,7 +113,9 @@ with st.container(border=True, key="panel-draft"):
 # 3 · Anforderungen ----------------------------------------------------------------------
 with st.container(border=True, key="panel-requirements"):
     heading("checklist", "Anforderungen", du="änderst und ergänzt", python="prüft")
-    if life.requirements is None:
+    if (
+        life.requirements is None and life.project is not None
+    ):  # without it, the top says what is missing
         st.info(
             "Noch keine Anforderungen. Lass sie von Claude entwerfen oder trag sie in der "
             "Tabelle selbst ein."

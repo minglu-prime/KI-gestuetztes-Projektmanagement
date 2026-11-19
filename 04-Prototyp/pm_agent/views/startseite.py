@@ -59,7 +59,6 @@ with st.container(key="project"):
         else:
             result = evaluate(tracking, date.today())
             st.markdown(f"**{as_text(tracking.project.idea)}**")
-            st.progress(result.progress, text=f"{percent(result.progress)} der Planstunden fertig")
             a, b, c = st.columns(3)
             a.metric("Aufgaben", len(result.tasks))
             b.metric("Fortschritt", percent(result.progress))

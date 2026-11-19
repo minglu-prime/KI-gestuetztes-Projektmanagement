@@ -595,7 +595,7 @@ def test_every_menu_entry_opens_and_explains_its_empty_state(site):
         "views/kontrolle.py": ("Kontrolle", "Noch kein Projekt übernommen."),
         "views/ki_lab.py": ("KI-Lab", "Das KI-Lab läuft noch nicht."),
         "views/auftrag.py": ("Projektauftrag", "Noch kein Projektauftrag."),
-        "views/anforderungen.py": ("Anforderungen", "Noch keine Anforderungen."),
+        "views/anforderungen.py": ("Anforderungen", "Noch keine Projektidee mit Terminen."),
     }
     for path, (header, info) in expected.items():
         at = site.switch_page(path).run()
@@ -1716,7 +1716,8 @@ def test_without_project_data_the_requirements_lead_to_the_auftrag(site):
     at = site.switch_page("views/anforderungen.py").run()
     assert not at.exception
     assert button(at, "Anforderungen mit Claude entwerfen").disabled
-    assert any("Noch keine Anforderungen." in i.value for i in at.info)
+    # The top says what is missing: the idea. No box below offers the switched-off draft.
+    assert any("Noch keine Projektidee" in i.value for i in at.info)
 
 
 def steps(at):
@@ -2577,3 +2578,21 @@ def test_the_report_previews_are_folded_like_on_the_other_pages(tracked):
         assert not at.exception
         previews = [e for e in at.expander if e.label == "Vorschau"]
         assert any(title in m.value for e in previews for m in e.markdown), page
+
+
+def test_the_startseite_shows_the_progress_once(tracked):
+    # A bar beside the metric "Fortschritt" said the same number twice.
+    at = tracked.switch_page("views/startseite.py").run()
+    assert not at.exception
+    assert any(m.label == "Fortschritt" for m in at.metric)
+    assert not at.get("progress")
+
+
+def test_without_a_project_idea_no_page_offers_the_claude_draft(site):
+    # Its button is off without the idea: the page says once, at the top, what is missing.
+    for page in ("anforderungen", "entwurf", "testplan"):
+        at = site.switch_page(f"views/{page}.py").run()
+        assert not at.exception
+        infos = [i.value for i in at.info]
+        assert any("Noch keine Projektidee" in i for i in infos), page
+        assert not any("von Claude entwerfen" in i for i in infos), page

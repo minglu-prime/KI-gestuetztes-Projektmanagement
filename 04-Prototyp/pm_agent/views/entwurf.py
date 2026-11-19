@@ -132,7 +132,7 @@ CONFIG = {
 }
 with st.container(border=True, key="panel-design"):
     heading("account_tree", "Bausteine und Abläufe", du="änderst und ergänzt", python="prüft")
-    if life.design is None:
+    if life.design is None and life.project is not None:  # without it, the top says what is missing
         st.info("Noch kein Entwurf. Lass ihn von Claude entwerfen oder trag ihn selbst ein.")
     rows = (
         design_rows(life.design) if life.design is not None else {key: [] for key, _, _ in TABLES}

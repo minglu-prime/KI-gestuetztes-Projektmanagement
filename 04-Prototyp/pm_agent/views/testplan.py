@@ -107,7 +107,7 @@ with st.container(border=True, key="panel-draft"):
 # 3 · Testfälle --------------------------------------------------------------------------
 with st.container(border=True, key="panel-cases"):
     heading("rule", "Testfälle", du="änderst und ergänzt", python="prüft")
-    if life.cases is None:
+    if life.cases is None and life.project is not None:  # without it, the top says what is missing
         st.info("Noch keine Testfälle. Lass sie von Claude entwerfen oder trag sie selbst ein.")
     st.caption(
         "Eine Zeile pro Testfall. Kriterien (R1.1 …) durch Komma, Schritte durch Semikolon "

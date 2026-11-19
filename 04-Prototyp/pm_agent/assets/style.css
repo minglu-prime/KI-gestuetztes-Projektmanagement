@@ -341,7 +341,9 @@
 }
 .path { font-size: 13px; }
 .path strong { margin-right: 4px; }
-/* Long lines of small grey text are hard to follow. */
+/* Long lines of small grey text are hard to follow. Streamlit greys it by 60 % opacity of
+   the ink: 3.7 to 1 on the page, below 4.5 for text this small. --muted reaches 5.2. */
+[data-testid="stCaptionContainer"] { opacity: 1; color: var(--muted); }
 [data-testid="stMain"] [data-testid="stCaptionContainer"] { max-width: 78ch; }
 .chip {
   border: 1px solid var(--line);
