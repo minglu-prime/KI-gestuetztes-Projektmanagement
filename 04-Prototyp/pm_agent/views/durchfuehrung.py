@@ -117,6 +117,7 @@ with st.container(border=True, key="panel-progress"):
             "Status": st.column_config.SelectboxColumn(options=STATUSES, required=True),
             "Fertig am": st.column_config.DateColumn(
                 format="DD.MM.YYYY",
+                width=95,  # a date; left empty it took twice that and pushed out "Notiz"
                 help="Wird beim Speichern auf heute gesetzt, wenn die Aufgabe fertig wird. "
                 "Nachtragen, wenn sie früher fertig war.",
             ),
