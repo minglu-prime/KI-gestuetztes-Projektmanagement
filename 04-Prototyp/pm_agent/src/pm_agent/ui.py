@@ -246,17 +246,16 @@ def journey(page: str) -> None:
         classes = " ".join(["step", *marks, *(["here"] if here else [])])
         current = ' aria-current="step"' if here else ""
         cue = " <em>als Nächstes</em>" if slug == where else ""
+        # Seen: the dashed edge. Read out: the words. Who acts is for screen readers only:
+        # eleven lines of it took four rows above every page.
         if slug in skipped:
-            cue += " <em>nicht freigegeben</em>"
+            cue += ' <span class="sr">nicht freigegeben</span>'
         steps.append(
             f'<span class="{classes}"{current}>'
-            f"<b>{'✓' if done[slug] else number}</b> {name}{cue} <small>{who}</small></span>"
+            f"<b>{'✓' if done[slug] else number}</b> {name}{cue}"
+            f' <span class="sr">{who}</span></span>'
         )
-    arrow = '<span class="arrow" aria-hidden="true">→</span>'
-    st.html(
-        f'<nav class="journey" aria-label="Projektpfad">{arrow.join(steps)}'
-        '<span class="loop">↺ Bei Verzug: Rest in der Planung neu planen</span></nav>'
-    )
+    st.html(f'<nav class="journey" aria-label="Projektpfad">{"".join(steps)}</nav>')
     if advice is None:
         return
     with st.container(horizontal=True, vertical_alignment="center", key="next-step"):

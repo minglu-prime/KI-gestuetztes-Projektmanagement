@@ -13,14 +13,16 @@
   --line: #dbe0d6;
   --line-strong: #90ad9a;
   --focus: #ba8d42;
-  --lift: 0 12px 26px -16px rgba(24, 53, 45, 0.5);
-  --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --paper: #fbfcf8;
+  --lift: 0 10px 24px -16px rgba(24, 53, 45, 0.42);
+  --soft: 0 1px 2px rgba(24, 53, 45, 0.04), 0 8px 24px -20px rgba(24, 53, 45, 0.3);
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 /* ---- Motion ---------------------------------------------------------------------------- */
 
 @keyframes rise {
-  from { opacity: 0; transform: translateY(12px); }
+  from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: none; }
 }
 @keyframes fade {
@@ -34,12 +36,18 @@
 }
 
 /* app.py wraps every page in a container with its own key. A page change mounts new
-   content, so this runs once per page change and not on every rerun. */
-[class*="st-key-page-"] { animation: rise 0.4s var(--ease) both; }
-.st-key-agents { animation: rise 0.5s var(--ease) 0.08s both; }
-.st-key-lab { animation: rise 0.5s var(--ease) 0.16s both; }
-.st-key-project { animation: rise 0.5s var(--ease) 0.24s both; }
-[data-testid="stTabPanel"] { animation: fade 0.3s ease-out both; }
+   content, so this runs once per page change and not on every rerun. The parts of a page
+   come in one after the other, top first; the eye follows them down. */
+[class*="st-key-page-"] > * { animation: rise 0.55s var(--ease) both; }
+[class*="st-key-page-"] > :nth-child(2) { animation-delay: 0.04s; }
+[class*="st-key-page-"] > :nth-child(3) { animation-delay: 0.08s; }
+[class*="st-key-page-"] > :nth-child(4) { animation-delay: 0.12s; }
+[class*="st-key-page-"] > :nth-child(5) { animation-delay: 0.16s; }
+[class*="st-key-page-"] > :nth-child(n + 6) { animation-delay: 0.2s; }
+[data-testid="stTabPanel"],
+[data-testid="stExpanderDetails"] { animation: fade 0.3s ease-out both; }
+/* A message that appears after a click (saved, rejected) eases in instead of jumping. */
+[data-testid="stAlert"] { animation: rise 0.35s var(--ease) both; }
 
 /* ---- Top bar --------------------------------------------------------------------------- */
 
@@ -76,14 +84,6 @@
 
 /* ---- Type ------------------------------------------------------------------------------ */
 
-.eyebrow {
-  margin: 0;
-  color: var(--green);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 2px;
-  text-transform: uppercase;
-}
 .lead {
   max-width: 560px;
   margin: 0;
@@ -141,7 +141,7 @@
 .stFormSubmitButton > button:hover:not(:disabled),
 .stLinkButton > a:hover {
   border-color: var(--line-strong);
-  box-shadow: var(--lift);
+  box-shadow: var(--soft);
   transform: translateY(-1px);
 }
 .stButton > button:active:not(:disabled),
@@ -220,9 +220,46 @@
 [class*="st-key-card-"]:hover {
   border-color: var(--line-strong);
   box-shadow: var(--lift);
-  transform: translateY(-4px);
+  transform: translateY(-2px);
 }
 .st-key-card-lab { background: var(--sage); }
+/* The eleven steps of the Startseite in even columns; the whole tile opens its page. */
+.st-key-steps {
+  display: grid !important;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
+}
+[class*="st-key-tile-"] {
+  position: relative;
+  height: 100%;
+  gap: 2px;
+  background: #fff;
+  border-radius: 12px;
+  transition:
+    transform 0.2s var(--ease),
+    box-shadow 0.2s var(--ease),
+    border-color 0.2s;
+}
+[class*="st-key-tile-"]:hover {
+  border-color: var(--line-strong);
+  box-shadow: var(--lift);
+  transform: translateY(-2px);
+}
+[class*="st-key-tile-"] [data-testid="stPageLink-NavLink"] {
+  padding: 0;
+  background: none;
+}
+[class*="st-key-tile-"] [data-testid="stPageLink-NavLink"] p {
+  color: var(--ink);
+  font-size: 16px;
+  font-weight: 600;
+}
+[class*="st-key-tile-"] [data-testid="stPageLink-NavLink"]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+}
+[class*="st-key-tile-"] [data-testid="stCaptionContainer"] { line-height: 1.35; }
 .card-number {
   margin: 0;
   color: var(--muted);
@@ -244,18 +281,13 @@
 
 /* ---- Numbers --------------------------------------------------------------------------- */
 
+/* A number is read, not clicked: it does not move under the pointer. */
 [data-testid="stMetric"] {
   border: 1px solid var(--line);
   background: #fff;
   border-radius: 12px;
   padding: 16px 18px;
-  transition:
-    box-shadow 0.2s var(--ease),
-    border-color 0.2s;
-}
-[data-testid="stMetric"]:hover {
-  border-color: var(--line-strong);
-  box-shadow: var(--lift);
+  box-shadow: var(--soft);
 }
 [data-testid="stMetricValue"] {
   font-weight: 500;
@@ -288,12 +320,7 @@
 
 /* ---- Menu and messages ----------------------------------------------------------------- */
 
-[data-testid="stSidebarNavLink"] {
-  transition:
-    background-color 0.15s,
-    transform 0.15s var(--ease);
-}
-[data-testid="stSidebarNavLink"]:hover { transform: translateX(3px); }
+[data-testid="stSidebarNavLink"] { transition: background-color 0.2s; }
 [data-testid="stAlertContainer"] {
   border-left: 3px solid currentColor;
   border-radius: 6px;
@@ -305,6 +332,7 @@
 [class*="st-key-panel-"] {
   background: #fff;
   border-radius: 12px;
+  box-shadow: var(--soft);
 }
 .chips,
 .path {
@@ -316,6 +344,8 @@
 }
 .path { font-size: 13px; }
 .path strong { margin-right: 4px; }
+/* Long lines of small grey text are hard to follow. */
+[data-testid="stMain"] [data-testid="stCaptionContainer"] { max-width: 78ch; }
 .chip {
   border: 1px solid var(--line);
   background: #fff;
@@ -349,22 +379,24 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px 8px;
-  margin: 0;
-  font-size: 13px;
+  gap: 6px;
+  margin: 0 0 4px;
+  font-size: 12.5px;
 }
 .journey .step {
   display: inline-flex;
-  flex-wrap: wrap;
   align-items: baseline;
-  gap: 6px;
+  gap: 5px;
   border: 1px solid var(--line);
   background: #fff;
   border-radius: 20px;
-  padding: 5px 12px;
+  padding: 3px 11px;
   color: var(--muted);
+  transition:
+    border-color 0.2s,
+    background-color 0.2s;
 }
-.journey .step small { font-size: 11px; }
+.journey .step b { font-weight: 600; font-variant-numeric: tabular-nums; }
 .journey .step.done {
   border-color: #b7c9b2;
   background: var(--mint);
@@ -379,9 +411,6 @@
   color: var(--ink);
   font-weight: 600;
 }
-.journey .arrow,
-.journey .loop { color: var(--muted); }
-.journey .loop { font-size: 12px; margin-left: 4px; }
 /* What is next: one line and one button, set apart from the page below. */
 [class*="st-key-next-step"] {
   background: #fff;
@@ -413,6 +442,15 @@
 .role.claude { background: #ece7f6; color: #3d2f6b; }
 .role.python { background: #e2ebf2; color: #1f3f57; }
 .role.du { background: #fbf2df; color: #6b4818; }
+/* Read out, not shown. */
+.sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
 /* A document preview: a sheet of the page colour inside its white panel. */
 [class*="st-key-preview-"] { background: var(--paper); }
 
@@ -432,6 +470,16 @@
 /* A wide table in a document (status report, exported plan) scrolls inside its own box. On a
    narrow screen it used to push the whole page sideways. */
 [data-testid="stMarkdownContainer"]:has(table) { overflow-x: auto; }
+
+/* A phone: the diagram's three steps fit the panel, the top bar takes one line. */
+@media (max-width: 640px) {
+  .flow { padding: 18px; }
+  .flow-nodes { gap: 6px; }
+  .flow-node { min-width: 0; padding: 10px; font-size: 12px; }
+  .flow-node strong { font-size: 19px; }
+  .brand small,
+  .badge { display: none; }
+}
 
 /* People who asked their system for less motion get none. */
 @media (prefers-reduced-motion: reduce) {

@@ -634,9 +634,12 @@ def test_the_startseite_shows_the_whole_lifecycle_in_order(site):
 def test_startseite_and_ueber_uns_describe_all_three_agents(site):
     # Durchführung and Kontrolle have an agent too: no page may still call them "ohne LLM".
     start = " ".join(m.value for m in site.markdown)
+    # Each step says who acts in it, Kontrolle included.
+    tiles = [c.value for c in site.caption]
     about = " ".join(m.value for m in site.switch_page("views/ueber_uns.py").run().markdown)
     assert "ohne LLM" not in start and "ohne LLM" not in about
-    assert "Aufwand der Agenten" in start and "Planungsagenten" not in start
+    assert "Planungsagenten" not in start
+    assert "Python rechnet, Claude bewertet" in tiles
 
 
 def test_project_and_team_survive_a_visit_to_another_page(site):
