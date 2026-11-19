@@ -18,7 +18,7 @@ Claude schlägt vor. Python prüft nach. Die Projektleitung entscheidet.
 [Schnellstart](#schnellstart) ·
 [Stand und Grenzen](#stand-und-grenzen)
 
-<img src="04-Prototyp/pm_agent/assets/screenshots/startseite.jpg" width="900" alt="Startseite der Website: Überschrift „Der Agent schlägt vor. Du entscheidest.“, daneben die drei Schritte Claude schlägt vor, Python prüft nach, Du entscheidest">
+<img src="04-Prototyp/pm_agent/assets/screenshots/startseite.jpg" width="900" alt="Startseite der Website: links das Menü mit Vorbereiten, Agenten, Experiment und Info, Überschrift „Der Agent schlägt vor. Du entscheidest.“, daneben die drei Schritte Claude schlägt vor, Python prüft nach, Du entscheidest; darunter das aktuelle Projekt mit 24 Aufgaben, 0 % Fortschritt und 5 im Verzug">
 
 </div>
 
@@ -36,6 +36,9 @@ und wo er es nicht sollte:
   Termine und Risiken ableiten.
 - **Durchführung:** den Stand zusammenfassen und nächste Schritte vorschlagen.
 - **Kontrolle:** Plan und Ist vergleichen, Verzug bewerten, Gegenmaßnahmen vorschlagen.
+- **Davor und danach:** Projektauftrag, Anforderungen, Entwurf und Testplan vor der Planung;
+  Test, Abschluss mit Lessons Learned, Betrieb und der nächste Durchlauf danach. Jeder Schritt
+  folgt demselben Muster wie die Planung.
 - **Experiment:** im KI-Lab dieselbe Art von Planungsaufgabe einmal ohne und einmal mit
   KI-Hilfe bearbeiten, mit Zeitlimit und Protokoll.
 
@@ -85,16 +88,12 @@ Ausgabe-Token, Modell `claude-opus-5-5`. Projekt (Web-App zum Buchen von Lernrä
 
 ## Die Website
 
-Eine Streamlit-Anwendung mit dem Menü Startseite, Agenten (Planung, Durchführung, Kontrolle),
-KI-Lab, Über uns und Impressum. Sie läuft nur auf dem eigenen Rechner.
-
-<div align="center">
-<img src="04-Prototyp/pm_agent/assets/screenshots/rundgang.gif" width="820" alt="Rundgang durch die laufende Website in 40 Sekunden: Startseite mit den drei Agenten, Planung mit einem geöffneten protokollierten Lauf, Terminplan als Gantt-Diagramm und eine Aufgabe im Detail, Durchführung mit den nächsten fünf Arbeitstagen, Kontrolle mit Prognose und Earned Value">
-</div>
-
-<sub>Rundgang in 40 Sekunden, aufgenommen aus der laufenden Website mit dem Beispielprojekt:
-Startseite, Planung mit einem protokollierten Lauf, Durchführung, Kontrolle. Ein neuer Lauf mit
-Claude ist nicht dabei; den zeigt der Abschnitt „Ein echter Lauf“.</sub>
+Eine Streamlit-Anwendung, die nur auf dem eigenen Rechner läuft. Das Menü folgt dem Ablauf eines
+Softwareprojekts: Startseite; Vorbereiten (Projektauftrag, Anforderungen, Entwurf, Testplan);
+Agenten (Planung, Durchführung, Test, Kontrolle, Abschluss, Betrieb, Iteration); Experiment
+(KI-Lab); Info (Über uns, Impressum). Über jeder dieser Seiten steht der Projektpfad mit allen
+elf Schritten und darunter, was als Nächstes zu tun ist. Die Screenshots zeigen das erfundene
+Beispielprojekt vom 19.11.2026.
 
 ### Planung
 
@@ -140,7 +139,7 @@ geben, der den verlangten Skill hat, oder durchspielen, was passiert, wenn die l
 auf dem kritischen Pfad doppelt so lange dauert.
 
 <div align="center">
-<img src="04-Prototyp/pm_agent/assets/screenshots/planung-gespraech.jpg" width="820" alt="Schritt Anpassen: oben das Feld „Mit Claude ändern“ mit einem vorgeschlagenen Wunsch und der Eingabezeile, darunter die Tabelle zum Ändern von Hand">
+<img src="04-Prototyp/pm_agent/assets/screenshots/planung-gespraech.jpg" width="820" alt="Schritt Anpassen: Bereich „Mit Claude ändern“ mit den Rollen Claude, Python und Du, einem aus der Prüfung vorgeschlagenen Wunsch als Schaltfläche und der Eingabezeile">
 </div>
 
 ### Durchführung und Kontrolle
@@ -154,13 +153,13 @@ Verzug behandelt.
 
 Die Kontrolle sagt auch, was ein Verzug bedeutet. Die **Prognose** plant alles, was noch nicht
 fertig ist, ab heute neu ein und vergleicht das Ende mit Plan und Deadline. Im Beispiel unten
-sind zwei Aufgaben ein bis zwei Tage im Verzug; die Folge ist ein Ende vier Arbeitstage nach
-Plan und einen Tag nach der Deadline. Die Fortschrittstabelle der Durchführung zeigt dasselbe je
+ist noch kein Fortschritt erfasst, fünf Aufgaben sind über ihr geplantes Ende; die Folge ist ein
+Ende acht Arbeitstage nach Plan und sechs Arbeitstage nach der Deadline. Die Fortschrittstabelle der Durchführung zeigt dasselbe je
 Aufgabe: „Prognose Ende“ neben dem geplanten Ende. Darüber steht, was daraus für die Woche folgt:
 wer in den nächsten fünf Arbeitstagen womit beginnt.
 
 <div align="center">
-<img src="04-Prototyp/pm_agent/assets/screenshots/durchfuehrung.jpg" width="820" alt="Seite Durchführung: Marken „1 von 18 Aufgaben fertig“, „0 in Arbeit“, „2 im Verzug“, der Fortschrittsbalken und der Bereich „Die nächsten fünf Arbeitstage“ mit fünf Aufgaben je Person samt Beginn, Ende und Status">
+<img src="04-Prototyp/pm_agent/assets/screenshots/durchfuehrung.jpg" width="820" alt="Seite Durchführung: oben der Projektpfad und „Jetzt dran“ mit dem Knopf zur Kontrolle, dann die Marken „0 von 24 Aufgaben fertig“, „0 in Arbeit“, „5 im Verzug“, der Fortschrittsbalken und der Bereich „Die nächsten fünf Arbeitstage“ mit der Demo der Woche und fünf Aufgaben samt Beginn, Ende und Status">
 </div>
 
 Von dort geht es zurück in die Planung: „Rest mit Claude umplanen“ lädt die unfertigen Aufgaben
@@ -186,7 +185,7 @@ Fertigstellungswert und Ist-Stunden, daraus SPI und CPI, mit der Kurve des Planw
 Laufzeit.
 
 <div align="center">
-<img src="04-Prototyp/pm_agent/assets/screenshots/kontrolle-earned-value.jpg" width="820" alt="Bereich Earned Value auf der Seite Kontrolle: Planwert bis heute 41,6 h, Fertigstellungswert 4 h, Ist-Stunden 5 h, SPI 0,10 und CPI 0,80; darunter die Kurve des Planwerts vom 09.11. bis zum 15.12. mit den beiden Punkten für heute">
+<img src="04-Prototyp/pm_agent/assets/screenshots/kontrolle-earned-value.jpg" width="820" alt="Bereich Earned Value auf der Seite Kontrolle: Planwert bis heute 76,5 h, Fertigstellungswert 0 h, Ist-Stunden 0 h, SPI 0,00, CPI nicht berechenbar, weil keine Ist-Stunden erfasst sind; darunter die Kurve des Planwerts vom 09.11. bis zum 15.12. mit den Punkten für heute">
 </div>
 
 Alles zusammen gibt es als **Kontrollbericht**: ein Markdown-Dokument aus einer Vorlage mit
@@ -194,7 +193,7 @@ Kennzahlen, Prognose, Verzug, Kosten und, wenn erstellt, der Bewertung des Agent
 nachgerechneter Wirkung.
 
 <div align="center">
-<img src="04-Prototyp/pm_agent/assets/screenshots/kontrolle.jpg" width="820" alt="Prognose auf der Seite Kontrolle: voraussichtliches Ende 21.12.2026, vier Arbeitstage nach Plan, Deadline um einen Arbeitstag verpasst; welche Aufgaben die beiden verspäteten aufhalten; Diagramm mit Plan und Prognose je Aufgabe und Linien für heute und die Deadline">
+<img src="04-Prototyp/pm_agent/assets/screenshots/kontrolle.jpg" width="820" alt="Prognose auf der Seite Kontrolle: voraussichtliches Ende 28.12.2026, acht Arbeitstage nach Plan, Deadline um sechs Arbeitstage verpasst; die drei verspäteten Aufgaben, die andere aufhalten; der Knopf „Rest mit Claude umplanen“; Diagramm mit Plan und Prognose je Aufgabe und Linien für heute und die Deadline">
 </div>
 
 ### KI-Lab
@@ -241,7 +240,7 @@ Einzelheiten zu Seiten, Agenten und Entwicklung:
 | `01-Projektplanung` | Projektplan der Gruppe | noch leer |
 | `02-Recherche` | Recherche zu KI im Projektmanagement | noch leer |
 | `03-Experiment` | Aufbau und Daten des Vergleichs | noch leer |
-| [`04-Prototyp/pm_agent`](04-Prototyp/pm_agent) | die Website mit den drei Agenten | in Arbeit |
+| [`04-Prototyp/pm_agent`](04-Prototyp/pm_agent) | die Website mit allen Schritten vom Projektauftrag bis zur Iteration | in Arbeit |
 | [`04-Prototyp/ki_lab`](04-Prototyp/ki_lab) | Studienserver für den Vergleich ohne und mit KI | in Arbeit |
 | `05-Ergebnisse` | Auswertung und Bericht | noch leer |
 
@@ -251,9 +250,9 @@ Einzelheiten zu Seiten, Agenten und Entwicklung:
 
 | Teil | Stand |
 |---|---|
-| Erster Plan mit Claude | gegen die echte API gelaufen (Protokoll vom 11.11.2026) |
-| Plan im Gespräch ändern | gebaut und ohne Netz getestet; **noch nicht gegen die echte API gelaufen** |
-| Agenten für Durchführung und Kontrolle | Gerüst mit je einem Werkzeug und einer Prüfung; **noch nicht gegen die echte API gelaufen** |
+| Erster Plan mit Claude | gegen die echte API gelaufen (Protokolle vom 11.11. und 18.11.2026) |
+| Alle übrigen Agenten | am 18.11.2026 je einmal ohne Fehler gegen die echte API gelaufen: Projektauftrag, Anforderungen, Entwurf, Testplan, Plan im Gespräch ändern, Durchführung, Kontrolle, Lessons Learned |
+| Abwesenheit aus einem Änderungswunsch | gebaut und ohne Netz getestet; **noch nicht gegen die echte API gelaufen** |
 | KI-Lab | eingebettet; Ablauf, Zeitlimit und Export im Browser geprüft, ein erfolgreicher KI-Aufruf noch nicht ([Prüfprotokoll](04-Prototyp/ki_lab/VERIFIKATION.md)) |
 | Vergleich mit Versuchspersonen | steht aus |
 

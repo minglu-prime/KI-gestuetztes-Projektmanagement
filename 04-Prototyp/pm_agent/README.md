@@ -5,9 +5,10 @@ Planungsphase von Softwareprojekten: Aufgaben zerlegen, Aufwand schätzen, nach 
 Verfügbarkeit zuweisen, Terminplan und Risiken ableiten. Die Projektleitung prüft und
 entscheidet.
 
-Stand: Planung mit Claude und deterministischer Prüfung; für Durchführung und Kontrolle steht
-je ein Agent als Gerüst (ein Werkzeug, eine Prüfung), bisher nur offline getestet; das KI-Lab
-(Vergleichsexperiment, `../ki_lab`) ist eingebettet.
+Stand: alle Schritte vom Projektauftrag bis zur Iteration als eigene Seiten, jeder mit Claude
+als Vorschlag, deterministischer Prüfung und Entscheidung der Projektleitung. Alle Agenten liefen
+am 18.11.2026 einmal ohne Fehler gegen die echte API. Das KI-Lab (Vergleichsexperiment,
+`../ki_lab`) ist eingebettet.
 
 ## Oberfläche
 
