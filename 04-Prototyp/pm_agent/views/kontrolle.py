@@ -557,7 +557,7 @@ with st.container(border=True, key="panel-effort"):
     if runs:
         st.dataframe(pd.DataFrame(runs), hide_index=True)
         st.caption(
-            "Ein Lauf ist ein Aufruf eines der drei Agenten. Token-Kosten in Euro werden nicht "
+            "Ein Lauf ist ein Aufruf eines Agenten. Token-Kosten in Euro werden nicht "
             "berechnet: Preise sind in der Anwendung nicht hinterlegt."
         )
     else:
