@@ -21,7 +21,9 @@ origin = f"{here.scheme}://{here.netloc}"
 lab_url = f"http://{here.hostname}:{lab_server.PORT}/"
 
 try:
-    status = lab_server.health(lab_server.PORT)
+    # Nothing listening can take two seconds to tell on Windows: the page said nothing meanwhile.
+    with st.spinner("Prüfe, ob das KI-Lab läuft …"):
+        status = lab_server.health(lab_server.PORT)
 except LabError as err:
     st.error(str(err))
     st.stop()

@@ -2622,3 +2622,16 @@ def test_what_is_next_sits_right_below_the_path_on_every_page(tracked):
         texts = in_order(tracked.switch_page(f"views/{page}.py").run().main)
         line = next(i for i, t in enumerate(texts) if "Jetzt dran" in t)
         assert line < texts.index(title), page
+
+
+def test_the_iteration_points_to_the_abschluss_instead_of_repeating_it(site, monkeypatch, tmp_path):
+    # The list of open requirements stood on the Abschluss and again here, below a green
+    # "Nichts offen" that meant only the backlog.
+    monkeypatch.setattr(workbench, "DATA_DIR", tmp_path)
+    tracking.adopt(PROJECT, TEAM, PLAN, requirements=NEEDS.items)
+    lifecycle.save(lifecycle.Lifecycle(project=PROJECT))
+    at = site.switch_page("views/iteration.py").run()
+    assert not at.exception
+    (error,) = [e.value for e in at.error]
+    assert error.startswith("Der Abschluss ist nicht fertig") and "R1" not in error
+    assert not any("Nichts offen" in i.value for i in at.info)
