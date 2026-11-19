@@ -1042,11 +1042,11 @@ def journey(at):
 
 def test_every_agent_page_shows_the_project_path_with_the_page_marked(site):
     for path, step in [
-        ("views/auftrag.py", "Auftrag"),
+        ("views/auftrag.py", "Projektauftrag"),
         ("views/anforderungen.py", "Anforderungen"),
-        ("views/planung.py", "Planen"),
-        ("views/durchfuehrung.py", "Ausführen"),
-        ("views/kontrolle.py", "Prüfen"),
+        ("views/planung.py", "Planung"),
+        ("views/durchfuehrung.py", "Durchführung"),
+        ("views/kontrolle.py", "Kontrolle"),
     ]:
         at = site.switch_page(path).run()
         html = journey(at)
@@ -1059,8 +1059,8 @@ def test_every_agent_page_shows_the_project_path_with_the_page_marked(site):
 def test_without_a_project_the_path_waits_at_planen_and_says_nothing_twice(site):
     at = site.switch_page("views/kontrolle.py").run()
     assert not at.exception
-    planen = journey(at).split("Ausführen")[0]
-    assert 'class="step next' in planen  # Planen comes next
+    planen = journey(at).split("Durchführung")[0]
+    assert 'class="step next' in planen  # Planung comes next
     assert "als Nächstes" in planen  # in words too, not by colour alone
     # The page itself already says there is no project: no second "Jetzt dran" for it.
     assert not any("Jetzt dran" in m.value for m in at.markdown)
@@ -1070,7 +1070,7 @@ def test_with_a_project_the_path_says_what_is_next_and_leads_there(tracked):
     at = tracked.switch_page("views/durchfuehrung.py").run()
     assert not at.exception
     advice, where = tracking.next_step(tracking.load(), date.today())
-    assert '<span class="step done' in journey(at).split("Ausführen")[0]  # Planen is done
+    assert '<span class="step done' in journey(at).split("Durchführung")[0]  # Planung is done
     assert any("Jetzt dran" in m.value and advice in m.value for m in at.markdown)
     # Said once on screen: by that line. In the path only for screen readers, else the
     # words push the last step onto a second row.
@@ -1102,7 +1102,7 @@ def test_the_planung_does_not_forecast_the_adopted_project(tracked, monkeypatch)
     monkeypatch.setattr(ui, "next_step", unused)
     at = tracked.switch_page("views/planung.py").run()
     assert not at.exception
-    assert '<span class="step done' in journey(at)  # Planen is still done
+    assert '<span class="step done' in journey(at)  # Planung is still done
 
 
 def test_the_advice_is_shown_as_text(tracked, monkeypatch):
@@ -1730,12 +1730,12 @@ def steps(at):
 
 def test_the_path_starts_at_the_auftrag_and_ticks_what_is_approved(site):
     at = site.switch_page("views/auftrag.py").run()
-    assert steps(at)["Auftrag"] >= {"here", "next"}
+    assert steps(at)["Projektauftrag"] >= {"here", "next"}
 
     lifecycle.save(with_charter())
     at = site.switch_page("views/planung.py").run()
     path = steps(at)
-    assert "done" in path["Auftrag"] and "next" in path["Anforderungen"]
+    assert "done" in path["Projektauftrag"] and "next" in path["Anforderungen"]
 
     approved = lifecycle.approve_requirements(
         with_charter().model_copy(update={"requirements": NEEDS}), APPROVED_AT
@@ -1750,14 +1750,14 @@ def test_a_draft_or_a_skipped_phase_is_marked_not_approved(tracked):
     # A project is adopted without charter and requirements: both were skipped.
     at = tracked.switch_page("views/kontrolle.py").run()
     path = steps(at)
-    skipped = ["Auftrag", "Anforderungen", "Entwurf", "Testplan"]
+    skipped = ["Projektauftrag", "Anforderungen", "Entwurf", "Testplan"]
     assert all("warn" in path[name] for name in skipped)
     assert journey(at).count("nicht freigegeben") == 4
     # A draft is marked too, before any project is adopted.
     tracking.PROJECT_FILE.unlink()
     lifecycle.save(with_charter(approved=False))
     path = steps(tracked.switch_page("views/planung.py").run())
-    assert "warn" in path["Auftrag"] and "warn" not in path["Anforderungen"]
+    assert "warn" in path["Projektauftrag"] and "warn" not in path["Anforderungen"]
 
 
 def test_an_unreadable_vorhaben_is_said_on_the_agent_pages(site):
@@ -1765,7 +1765,7 @@ def test_an_unreadable_vorhaben_is_said_on_the_agent_pages(site):
     at = site.switch_page("views/durchfuehrung.py").run()
     assert not at.exception
     assert any("vorhaben.json ist beschädigt" in c.value for c in at.caption)
-    assert "done" not in str(steps(at)) and "next" not in str(steps(at)["Auftrag"])
+    assert "done" not in str(steps(at)) and "next" not in str(steps(at)["Projektauftrag"])
 
 
 def approve_needs(needs=NEEDS):
@@ -2596,3 +2596,29 @@ def test_without_a_project_idea_no_page_offers_the_claude_draft(site):
         infos = [i.value for i in at.info]
         assert any("Noch keine Projektidee" in i for i in infos), page
         assert not any("von Claude entwerfen" in i for i in infos), page
+
+
+def test_with_an_adopted_project_the_planung_does_not_call_the_plan_open(tracked):
+    # The path ticks "Planung" for it: "Plan offen" beside the tick said the opposite.
+    at = tracked.switch_page("views/planung.py").run()
+    assert not at.exception
+    assert "Plan offen" not in chips(at)
+    assert "✓ Plan übernommen<" in chips(at)
+
+
+def in_order(node, out=None):
+    """The texts of headers and Markdown of a page, top to bottom."""
+    out = [] if out is None else out
+    for child in getattr(node, "children", {}).values():
+        if getattr(child, "type", "") in ("header", "markdown"):
+            out.append(child.value)
+        in_order(child, out)
+    return out
+
+
+def test_what_is_next_sits_right_below_the_path_on_every_page(tracked):
+    # Above the title on the pages after the plan, below it on the Planung: the title moved.
+    for page, title in [("planung", "Planung"), ("durchfuehrung", "Durchführung")]:
+        texts = in_order(tracked.switch_page(f"views/{page}.py").run().main)
+        line = next(i for i, t in enumerate(texts) if "Jetzt dran" in t)
+        assert line < texts.index(title), page

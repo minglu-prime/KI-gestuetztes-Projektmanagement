@@ -139,3 +139,14 @@ def test_findings_of_a_check_share_one_box_per_kind():
                     ):
                         stacked.append(f"{path.name}:{node.lineno}")
     assert not stacked, stacked
+
+
+def test_the_project_path_names_each_step_like_the_menu():
+    # "Prüfen" in the path above the title "Kontrolle": one step, two names.
+    from pm_agent.ui import JOURNEY
+
+    pages = re.findall(
+        r'st\.Page\("views/(\w+)\.py", title="([^"]+)"', (ROOT / "app.py").read_text("utf-8")
+    )
+    titles = dict(pages)
+    assert [(slug, name) for slug, name, _ in JOURNEY if titles[slug] != name] == []

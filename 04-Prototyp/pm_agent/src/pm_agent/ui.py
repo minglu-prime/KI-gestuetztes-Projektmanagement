@@ -156,14 +156,14 @@ def roles(**who: str) -> str:
 
 # The loop of a project, one step per agent page, and who acts in each.
 JOURNEY = [
-    ("auftrag", "Auftrag", "Claude entwirft, du gibst frei"),
+    ("auftrag", "Projektauftrag", "Claude entwirft, du gibst frei"),
     ("anforderungen", "Anforderungen", "Python prüft die Abdeckung"),
     ("entwurf", "Entwurf", "Python zeichnet die Abläufe"),
     ("testplan", "Testplan", "Python prüft die Abdeckung"),
-    ("planung", "Planen", "Claude entwirft, du übernimmst"),
-    ("durchfuehrung", "Ausführen", "du trägst den Fortschritt ein"),
-    ("testlauf", "Testen", "du trägst Ergebnisse und Fehler ein"),
-    ("kontrolle", "Prüfen", "Python rechnet, Claude bewertet"),
+    ("planung", "Planung", "Claude entwirft, du übernimmst"),
+    ("durchfuehrung", "Durchführung", "du trägst den Fortschritt ein"),
+    ("testlauf", "Test", "du trägst Ergebnisse und Fehler ein"),
+    ("kontrolle", "Kontrolle", "Python rechnet, Claude bewertet"),
     ("abschluss", "Abschluss", "du nimmst ab, Claude zieht Lehren"),
     ("betrieb", "Betrieb", "optional"),
     ("iteration", "Iteration", "Python sammelt den nächsten Backlog"),

@@ -315,6 +315,8 @@ trace = {"requirements": needs, "covered": state.covered} if needs is not None e
 # The agents also get the approved design, as context; the check does not use it.
 design = lifecycle.approved_design(life)
 context = {**trace, **({"design": design} if design is not None else {})}
+# Right below the project path, where every page says what is next.
+next_line = st.container()
 st.header("Planung")
 st.caption(
     "Claude schlägt einen Plan vor, Python prüft ihn deterministisch, die Projektleitung "
@@ -1125,7 +1127,14 @@ with tabs[5]:
             st.markdown(to_markdown(project, state.plan, result, needs))
 
 # Where the planning stands, above the steps.
-if state.plan is None:
+try:
+    adopted_exists = load_tracking() is not None
+except InputError:
+    adopted_exists = False  # ui.journey shows the error above this page
+if state.plan is None and adopted_exists:
+    # The path ticks "Planen" for it; "Plan offen" beside the tick said the opposite.
+    plan_chip = chip("Plan übernommen", "on")
+elif state.plan is None:
     plan_chip = chip("Plan offen")
 elif result is None:
     plan_chip = chip("Plan nicht prüfbar", "warn")
@@ -1165,6 +1174,7 @@ with status:
             *([demo_chip] if demo_chip else []),
         )
     )
+with next_line:
     with st.container(horizontal=True, vertical_alignment="center", key="next-step-planung"):
         st.markdown(f"**Jetzt dran (Schritt {step + 1}):** {todo}")
         if state.get("step", STEPS[0]) != STEPS[step]:

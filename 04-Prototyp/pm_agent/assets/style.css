@@ -378,9 +378,9 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   margin: 0 0 4px;
-  font-size: 12.5px;
+  font-size: 12px;
 }
 .journey .step {
   display: inline-flex;
@@ -389,7 +389,7 @@
   border: 1px solid var(--line);
   background: #fff;
   border-radius: 20px;
-  padding: 3px 11px;
+  padding: 3px 9px;
   color: var(--muted);
   transition:
     border-color 0.2s,
