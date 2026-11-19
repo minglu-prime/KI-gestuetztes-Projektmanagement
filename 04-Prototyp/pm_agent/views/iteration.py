@@ -33,8 +33,8 @@ with st.container(border=True, key="panel-backlog"):
         )
     else:
         st.info(
-            "Nichts offen: keine zurückgestellte Anforderung, kein offener Fehler, keine offene "
-            "Maßnahme, keine offene Störung."
+            "Der Backlog ist leer: keine zurückgestellte Anforderung, kein offener Fehler, keine "
+            "offene Maßnahme, keine offene Störung."
         )
 
 with st.container(border=True, key="panel-next-run"):
@@ -46,9 +46,13 @@ with st.container(border=True, key="panel-next-run"):
     )
     # Test evidence can add closing warnings. Only closing errors prevent archiving.
     errors = closing.check_closing(tracking, None).errors
-    for error in errors:
-        st.error(as_text(error))
     if errors:
+        # Each one is listed on the Abschluss, where it is decided.
+        count = len(errors)
+        st.error(
+            f"Der Abschluss ist nicht fertig: {count} offene{'r' if count == 1 else ''} "
+            f"Punkt{'' if count == 1 else 'e'}."
+        )
         st.page_link("views/abschluss.py", label="Zum Abschluss", icon=":material/flag_circle:")
     state = st.session_state
     if state.get("next_run_basis") != tracking:

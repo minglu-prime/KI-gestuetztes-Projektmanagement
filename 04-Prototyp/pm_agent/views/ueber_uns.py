@@ -52,12 +52,10 @@ for column, (slug, icon, title, text) in zip(st.columns(3), PRINCIPLES, strict=T
 st.subheader("Was die Website enthält")
 st.markdown(
     """
-- **Planung:** Claude erstellt einen Plan und ändert ihn im Gespräch. Jede Runde ist sichtbar,
-  und zu jeder Aufgabe steht, warum sie bei dieser Person liegt.
-- **Durchführung:** Fortschritt erfassen; Statusbericht und Arbeitspaketbeschreibungen entstehen
-  aus Vorlagen. Der Agent dafür ist ein erstes Gerüst.
-- **Kontrolle:** Plan gegen Ist, Prognose des Endes und der Weg zurück in die Planung. Der Agent
-  dafür ist ein erstes Gerüst.
+- **Vorbereiten:** Projektauftrag, Anforderungen, Entwurf und Testplan. Claude entwirft,
+  Python prüft, dass nichts fehlt, die Projektleitung gibt frei.
+- **Agenten:** Planung, Durchführung, Test, Kontrolle, Abschluss, Betrieb und Iteration: vom
+  geprüften Plan über Fortschritt und Prognose bis zum Backlog der nächsten Runde.
 - **KI-Lab:** kontrollierter Vergleich derselben Art von Planungsaufgabe ohne und mit KI-Hilfe.
 
 Teamdaten und Protokolle bleiben lokal und stehen nicht im Repository.

@@ -2,7 +2,7 @@
 
 import datetime
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from html import escape
 from typing import Any, TypeVar
 
@@ -60,6 +60,16 @@ def adopted_project() -> Tracking | None:
 def as_text(text: str) -> str:
     """`text` for st.markdown, shown as written: Markdown in it is not applied."""
     return re.sub(r"([\\`*_\[\]~|#!])", r"\\\1", text)
+
+
+def messages(errors: Sequence[str], warnings: Sequence[str] = ()) -> None:
+    """The findings of a check: the errors in one red box, the warnings in one yellow box.
+    One box each made a stack of eleven boxes beside the table they came from."""
+    for show, items in ((st.error, errors), (st.warning, warnings)):
+        if len(items) == 1:
+            show(as_text(items[0]))
+        elif items:
+            show("\n".join(f"- {as_text(item)}" for item in items))
 
 
 def saved_lifecycle() -> Lifecycle | None:
@@ -146,14 +156,14 @@ def roles(**who: str) -> str:
 
 # The loop of a project, one step per agent page, and who acts in each.
 JOURNEY = [
-    ("auftrag", "Auftrag", "Claude entwirft, du gibst frei"),
+    ("auftrag", "Projektauftrag", "Claude entwirft, du gibst frei"),
     ("anforderungen", "Anforderungen", "Python prüft die Abdeckung"),
     ("entwurf", "Entwurf", "Python zeichnet die Abläufe"),
     ("testplan", "Testplan", "Python prüft die Abdeckung"),
-    ("planung", "Planen", "Claude entwirft, du übernimmst"),
-    ("durchfuehrung", "Ausführen", "du trägst den Fortschritt ein"),
-    ("testlauf", "Testen", "du trägst Ergebnisse und Fehler ein"),
-    ("kontrolle", "Prüfen", "Python rechnet, Claude bewertet"),
+    ("planung", "Planung", "Claude entwirft, du übernimmst"),
+    ("durchfuehrung", "Durchführung", "du trägst den Fortschritt ein"),
+    ("testlauf", "Test", "du trägst Ergebnisse und Fehler ein"),
+    ("kontrolle", "Kontrolle", "Python rechnet, Claude bewertet"),
     ("abschluss", "Abschluss", "du nimmst ab, Claude zieht Lehren"),
     ("betrieb", "Betrieb", "optional"),
     ("iteration", "Iteration", "Python sammelt den nächsten Backlog"),
@@ -245,18 +255,20 @@ def journey(page: str) -> None:
         here = slug == page
         classes = " ".join(["step", *marks, *(["here"] if here else [])])
         current = ' aria-current="step"' if here else ""
-        cue = " <em>als Nächstes</em>" if slug == where else ""
+        # Seen: the golden or dashed edge, and the words once: with a "Jetzt dran" line below,
+        # it says what is next and the words here are for screen readers only (shown, they
+        # pushed the last step onto a second row). Who acts took four rows above every page.
+        cue = ""
+        if slug == where:
+            cue = f" <em{' class=sr' if advice else ''}>als Nächstes</em>"
         if slug in skipped:
-            cue += " <em>nicht freigegeben</em>"
+            cue += ' <span class="sr">nicht freigegeben</span>'
         steps.append(
             f'<span class="{classes}"{current}>'
-            f"<b>{'✓' if done[slug] else number}</b> {name}{cue} <small>{who}</small></span>"
+            f"<b>{'✓' if done[slug] else number}</b> {name}{cue}"
+            f' <span class="sr">{who}</span></span>'
         )
-    arrow = '<span class="arrow" aria-hidden="true">→</span>'
-    st.html(
-        f'<nav class="journey" aria-label="Projektpfad">{arrow.join(steps)}'
-        '<span class="loop">↺ Bei Verzug: Rest in der Planung neu planen</span></nav>'
-    )
+    st.html(f'<nav class="journey" aria-label="Projektpfad">{"".join(steps)}</nav>')
     if advice is None:
         return
     with st.container(horizontal=True, vertical_alignment="center", key="next-step"):
@@ -315,7 +327,7 @@ def kept_editor(
             # Saved or started again since: it never applies again, even if the saved data
             # later reads as it did then.
             del state[f"{name}restored"]
-    edited = st.data_editor(data, key=f"{name}{counts[0]}_{counts[1]}", **options)
+    edited = st.data_editor(data, key=f"{name}{counts[0]}_{counts[1]}", placeholder="", **options)
     state[f"{name}current"] = (basis, edited)
     state[f"{name}dirty_version"] = None if edited.equals(original) else current_version
     return edited, conflict

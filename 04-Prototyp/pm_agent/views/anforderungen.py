@@ -23,6 +23,7 @@ from pm_agent.ui import (
     consent,
     heading,
     kept_editor,
+    messages,
     phase_chip,
     run_with_progress,
     saved_lifecycle,
@@ -112,7 +113,9 @@ with st.container(border=True, key="panel-draft"):
 # 3 · Anforderungen ----------------------------------------------------------------------
 with st.container(border=True, key="panel-requirements"):
     heading("checklist", "Anforderungen", du="änderst und ergänzt", python="prüft")
-    if life.requirements is None:
+    if (
+        life.requirements is None and life.project is not None
+    ):  # without it, the top says what is missing
         st.info(
             "Noch keine Anforderungen. Lass sie von Claude entwerfen oder trag sie in der "
             "Tabelle selbst ein."
@@ -182,10 +185,7 @@ with st.container(border=True, key="panel-requirements"):
     errors = []
     if life.requirements is not None:
         errors, warnings = check_requirements(life.requirements, life.charter)
-        for error in errors:
-            st.error(as_text(error))
-        for warning in warnings:
-            st.warning(as_text(warning))
+        messages(errors, warnings)
 
 # 4 · Freigabe ---------------------------------------------------------------------------
 with st.container(border=True, key="panel-approve"):

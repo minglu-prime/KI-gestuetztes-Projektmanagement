@@ -23,7 +23,7 @@ from pm_agent.tracking import (
     reopen,
     save_if_current,
 )
-from pm_agent.ui import adopted_project, as_text, heading
+from pm_agent.ui import adopted_project, as_text, heading, messages
 from pm_agent.workbench import InputError
 
 state = st.session_state
@@ -130,10 +130,7 @@ with st.container(border=True, key="panel-results"):
 with st.container(border=True, key="panel-defects"):
     heading("bug_report", "Fehler", du="erfasst und entscheidest", python="prüft")
     errors, warnings = check_results(tracking, plan)
-    for error in errors:
-        st.error(as_text(error))
-    for warning in warnings:
-        st.warning(as_text(warning))
+    messages(errors, warnings)
     tasks = {t.id: t.title for t in tracking.plan.tasks}
     st.selectbox(
         "Gefunden von", list(titles), format_func=lambda c: f"{c} · {titles[c]}", key="defect_case"

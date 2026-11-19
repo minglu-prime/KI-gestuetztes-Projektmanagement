@@ -104,3 +104,64 @@ def test_working_days_are_counted_in_planning_only():
             and node.lineno not in allowed
         ]
     assert found == []
+
+
+def test_empty_cells_of_editable_tables_stay_empty():
+    # Without a placeholder an empty cell reads "None" (Fertig am of every open task).
+    missing = []
+    for path in SOURCES:
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and node.func.attr == "data_editor"
+                and "placeholder" not in {k.arg for k in node.keywords}
+            ):
+                missing.append(f"{path.name}:{node.lineno}")
+    assert not missing, missing
+
+
+def test_findings_of_a_check_share_one_box_per_kind():
+    # One box per finding stacked eleven boxes beside the table they came from: ui.messages.
+    stacked = []
+    for path in SOURCES:
+        for loop in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if isinstance(loop, ast.For):
+                # Shown for each item; an error inside a try in the loop is one at a time.
+                for statement in loop.body:
+                    node = statement.value if isinstance(statement, ast.Expr) else None
+                    if (
+                        isinstance(node, ast.Call)
+                        and isinstance(node.func, ast.Attribute)
+                        and node.func.attr in {"error", "warning"}
+                        and isinstance(node.func.value, ast.Name)
+                        and node.func.value.id == "st"
+                    ):
+                        stacked.append(f"{path.name}:{node.lineno}")
+    assert not stacked, stacked
+
+
+def test_the_project_path_names_each_step_like_the_menu():
+    # "Prüfen" in the path above the title "Kontrolle": one step, two names.
+    from pm_agent.ui import JOURNEY
+
+    pages = re.findall(
+        r'st\.Page\("views/(\w+)\.py", title="([^"]+)"', (ROOT / "app.py").read_text("utf-8")
+    )
+    titles = dict(pages)
+    assert [(slug, name) for slug, name, _ in JOURNEY if titles[slug] != name] == []
+
+
+def test_numbers_to_fill_in_follow_the_language_of_the_browser():
+    # Without a format, "0.0" with a point stood beside "76,5 h" on the Kontrolle.
+    bare = []
+    for path in SOURCES:
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and node.func.attr == "NumberColumn"
+                and "format" not in {k.arg for k in node.keywords}
+            ):
+                bare.append(f"{path.name}:{node.lineno}")
+    assert not bare, bare

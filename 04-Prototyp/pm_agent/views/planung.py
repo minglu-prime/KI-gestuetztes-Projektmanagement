@@ -39,6 +39,7 @@ from pm_agent.ui import (
     as_text,
     chip,
     heading,
+    messages,
     on_panel,
     phase_chip,
     roles,
@@ -314,6 +315,8 @@ trace = {"requirements": needs, "covered": state.covered} if needs is not None e
 # The agents also get the approved design, as context; the check does not use it.
 design = lifecycle.approved_design(life)
 context = {**trace, **({"design": design} if design is not None else {})}
+# Right below the project path, where every page says what is next.
+next_line = st.container()
 st.header("Planung")
 st.caption(
     "Claude schlägt einen Plan vor, Python prüft ihn deterministisch, die Projektleitung "
@@ -342,6 +345,7 @@ with tabs[0]:
     edited_team = st.data_editor(
         state.team_df,
         key=f"team_editor_{state.team_version}",
+        placeholder="",
         num_rows="dynamic",
         width="stretch",
         column_config={
@@ -349,7 +353,9 @@ with tabs[0]:
             "Skills": st.column_config.TextColumn(
                 help="Skill mit Stufe 1–5, z. B. Python 4, SQL 3"
             ),
-            "Stunden/Woche": st.column_config.NumberColumn(min_value=1, max_value=120),
+            "Stunden/Woche": st.column_config.NumberColumn(
+                format="localized", min_value=1, max_value=120
+            ),
             "Abwesend": st.column_config.TextColumn(
                 help="Tage ohne Arbeit, z. B. 01.12.2026–05.12.2026, 23.12.2026. Feiertage "
                 "und andere freie Tage für alle stehen beim Projekt (Schritt 2)."
@@ -549,10 +555,7 @@ with tabs[3]:
         a.metric("Planende", result.end_date.strftime("%d.%m.%Y") if result.end_date else "–")
         b.metric("Fehler", len(result.errors))
         c.metric("Warnungen", len(result.warnings))
-        for error in result.errors:
-            st.error(as_text(error))
-        for warning in result.warnings:
-            st.warning(as_text(warning))
+        messages(result.errors, result.warnings)
         if not result.errors and not result.warnings:
             st.success("Die Prüfung meldet keine Fehler und keine Warnungen.")
 
@@ -778,10 +781,11 @@ with tabs[4]:
         edited_plan = st.data_editor(
             state.plan_df,
             key=f"plan_editor_{state.editor_version}",
+            placeholder="",
             num_rows="dynamic",
             width="stretch",
             column_config={
-                "Stunden": st.column_config.NumberColumn(min_value=0.5),
+                "Stunden": st.column_config.NumberColumn(format="localized", min_value=0.5),
                 "Abhängig von": st.column_config.TextColumn(help="IDs, getrennt durch Komma"),
                 "Skills": st.column_config.TextColumn(help="getrennt durch Komma"),
             },
@@ -1125,7 +1129,14 @@ with tabs[5]:
             st.markdown(to_markdown(project, state.plan, result, needs))
 
 # Where the planning stands, above the steps.
-if state.plan is None:
+try:
+    adopted_exists = load_tracking() is not None
+except InputError:
+    adopted_exists = False  # ui.journey shows the error above this page
+if state.plan is None and adopted_exists:
+    # The path ticks "Planen" for it; "Plan offen" beside the tick said the opposite.
+    plan_chip = chip("Plan übernommen", "on")
+elif state.plan is None:
     plan_chip = chip("Plan offen")
 elif result is None:
     plan_chip = chip("Plan nicht prüfbar", "warn")
@@ -1165,6 +1176,7 @@ with status:
             *([demo_chip] if demo_chip else []),
         )
     )
+with next_line:
     with st.container(horizontal=True, vertical_alignment="center", key="next-step-planung"):
         st.markdown(f"**Jetzt dran (Schritt {step + 1}):** {todo}")
         if state.get("step", STEPS[0]) != STEPS[step]:

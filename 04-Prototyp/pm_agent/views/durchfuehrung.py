@@ -111,14 +111,19 @@ with st.container(border=True, key="panel-progress"):
         width="stretch",
         disabled=PROGRESS_READ_ONLY,
         column_config={
+            # Narrower than its longest title (shown in full on hover): otherwise the columns
+            # to fill in lay beyond the right edge of the panel.
+            "Aufgabe": st.column_config.TextColumn(width="medium"),
             "Status": st.column_config.SelectboxColumn(options=STATUSES, required=True),
             "Fertig am": st.column_config.DateColumn(
                 format="DD.MM.YYYY",
+                width=95,  # a date; left empty it took twice that and pushed out "Notiz"
                 help="Wird beim Speichern auf heute gesetzt, wenn die Aufgabe fertig wird. "
                 "Nachtragen, wenn sie früher fertig war.",
             ),
-            "Ist (h)": st.column_config.NumberColumn(min_value=0.0, step=0.5),
+            "Ist (h)": st.column_config.NumberColumn(format="localized", min_value=0.0, step=0.5),
             "Rest (h)": st.column_config.NumberColumn(
+                format="localized",
                 min_value=0.0,
                 step=0.5,
                 help="Was noch zu tun ist, wenn es von Plan minus Ist abweicht. Leer lassen, "
@@ -201,7 +206,7 @@ with st.container(border=True, key="panel-documents"):
         mime="text/markdown",
         icon=":material/download:",
     )
-    with st.container(border=True, key="preview-document"):
+    with st.expander("Vorschau"):
         st.markdown(text)
 
 if st.button("Weiter zur Kontrolle", icon=":material/arrow_forward:"):

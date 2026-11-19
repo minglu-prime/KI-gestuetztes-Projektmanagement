@@ -24,6 +24,7 @@ from pm_agent.ui import (
     consent,
     heading,
     kept_editor,
+    messages,
     phase_chip,
     run_with_progress,
     saved_lifecycle,
@@ -106,7 +107,7 @@ with st.container(border=True, key="panel-draft"):
 # 3 · Testfälle --------------------------------------------------------------------------
 with st.container(border=True, key="panel-cases"):
     heading("rule", "Testfälle", du="änderst und ergänzt", python="prüft")
-    if life.cases is None:
+    if life.cases is None and life.project is not None:  # without it, the top says what is missing
         st.info("Noch keine Testfälle. Lass sie von Claude entwerfen oder trag sie selbst ein.")
     st.caption(
         "Eine Zeile pro Testfall. Kriterien (R1.1 …) durch Komma, Schritte durch Semikolon "
@@ -158,10 +159,7 @@ with st.container(border=True, key="panel-cases"):
     errors = []
     if life.cases is not None:
         errors, warnings = check_cases(life.cases, life.requirements, life.design)
-        for error in errors:
-            st.error(as_text(error))
-        for warning in warnings:
-            st.warning(as_text(warning))
+        messages(errors, warnings)
 
 # 4 · Freigabe ---------------------------------------------------------------------------
 with st.container(border=True, key="panel-approve"):

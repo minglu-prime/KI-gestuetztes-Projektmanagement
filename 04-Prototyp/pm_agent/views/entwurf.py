@@ -27,6 +27,7 @@ from pm_agent.ui import (
     consent,
     heading,
     kept_editor,
+    messages,
     phase_chip,
     run_with_progress,
     saved_lifecycle,
@@ -131,7 +132,7 @@ CONFIG = {
 }
 with st.container(border=True, key="panel-design"):
     heading("account_tree", "Bausteine und Abläufe", du="änderst und ergänzt", python="prüft")
-    if life.design is None:
+    if life.design is None and life.project is not None:  # without it, the top says what is missing
         st.info("Noch kein Entwurf. Lass ihn von Claude entwerfen oder trag ihn selbst ein.")
     rows = (
         design_rows(life.design) if life.design is not None else {key: [] for key, _, _ in TABLES}
@@ -185,10 +186,7 @@ with st.container(border=True, key="panel-design"):
     errors = []
     if life.design is not None:
         errors, warnings = check_design(life.design, life.requirements)
-        for error in errors:
-            st.error(as_text(error))
-        for warning in warnings:
-            st.warning(as_text(warning))
+        messages(errors, warnings)
 
 # 4 · Diagramme --------------------------------------------------------------------------
 if life.design is not None:

@@ -42,6 +42,7 @@ from pm_agent.ui import (
     consent,
     heading,
     history_table,
+    messages,
     on_panel,
     roles,
     run_with_progress,
@@ -121,10 +122,16 @@ if tracking is not None:
                     f"{-outlook.deadline_gap} {days(outlook.deadline_gap)}",
                 )
             titles = {task.id: task.title for task in tracking.plan.tasks}
-            for late, waiting in outlook.blocked.items():
-                held = ", ".join(waiting) if waiting else "keine weitere Aufgabe"
+            # The late tasks themselves stand in the box "Im Verzug" above.
+            holding = {late: waiting for late, waiting in outlook.blocked.items() if waiting}
+            if holding:
                 st.markdown(
-                    f"- **{as_text(late)} · {as_text(titles[late])}** hält auf: {as_text(held)}"
+                    "**Verspätet und halten andere auf:**\n"
+                    + "\n".join(
+                        f"- **{as_text(late)} · {as_text(titles[late])}**: "
+                        f"{as_text(', '.join(waiting))}"
+                        for late, waiting in holding.items()
+                    )
                 )
 
             # From here the project lead can act: plan the rest again, with Claude.
@@ -381,8 +388,7 @@ if tracking is not None:
                 "Maßnahme."
             )
             st.dataframe(pd.DataFrame(demo_status(tracking, date.today())), hide_index=True)
-            for warning in check_retros(tracking, date.today()).warnings:
-                st.warning(as_text(warning))
+            messages([], check_retros(tracking, date.today()).warnings)
             titles = {d.week: d.title for d in tracking.plan.demos}
             mondays = demo_mondays(tracking)
             earlier = {r.monday: r for r in tracking.retros}
@@ -542,7 +548,7 @@ if tracking is not None:
             mime="text/markdown",
             icon=":material/download:",
         )
-        with st.container(border=True, key="preview-control"):
+        with st.expander("Vorschau"):
             st.markdown(document)
 
 with st.container(border=True, key="panel-effort"):

@@ -27,39 +27,9 @@ FLOW = """
 </div>
 """
 
-AGENTS = [
-    (
-        "planung",
-        "view_timeline",
-        "Planung",
-        "Aus Projektidee und Team entsteht ein geprüfter Plan: Aufgaben, Aufwand, Zuweisung, "
-        "Termine und Risiken. Claude plant, die Projektleitung passt an.",
-        "views/planung.py",
-    ),
-    (
-        "durchfuehrung",
-        "task_alt",
-        "Durchführung",
-        "Fortschritt und Ist-Stunden je Aufgabe erfassen. Claude schlägt Zusammenfassung und "
-        "nächste Schritte vor. Statusbericht und Arbeitspaketbeschreibungen werden aus Vorlagen "
-        "gefüllt.",
-        "views/durchfuehrung.py",
-    ),
-    (
-        "kontrolle",
-        "monitoring",
-        "Kontrolle",
-        "Plan und Ist vergleichen: Fortschritt, Abweichung, Verzug, Kosten bei gesetztem "
-        "Stundensatz. Claude bewertet den Stand und schlägt Gegenmaßnahmen vor. Dazu der "
-        "Aufwand der Agenten.",
-        "views/kontrolle.py",
-    ),
-]
-
 with st.container(key="hero"):
     words, diagram = st.columns([3, 2], gap="large", vertical_alignment="center")
     with words:
-        st.html('<p class="eyebrow">KI im Projektmanagement · Prototyp</p>')
         st.title("Der Agent schlägt vor. *Du entscheidest.*")
         st.html(
             '<p class="lead">Diese Seite zeigt an einem Softwareprojekt, welche Aufgaben des '
@@ -72,39 +42,6 @@ with st.container(key="hero"):
             if st.button("KI-Lab öffnen", icon=":material/science:"):
                 st.switch_page("views/ki_lab.py")
     diagram.html(FLOW)
-
-with st.container(key="agents"):
-    st.subheader("Agenten")
-    columns = st.columns(3)
-    for number, (column, agent) in enumerate(zip(columns, AGENTS, strict=True), start=1):
-        slug, icon, title, text, target = agent
-        with column.container(border=True, key=f"card-{slug}", height="stretch"):
-            st.html(f'<p class="card-number">0{number} · AGENT</p>')
-            heading(icon, title)
-            st.write(text)
-            st.page_link(target, label=f"{title} öffnen", icon=":material/arrow_forward:")
-
-with st.container(key="lifecycle"):
-    st.subheader("Der ganze Ablauf")
-    st.caption(
-        "Elf Schritte von der Idee bis zur nächsten Iteration, in dieser Reihenfolge auch im "
-        "Menü. Schritte vor der Planung dürfen übersprungen werden; die Seiten sagen dann, "
-        "was fehlt."
-    )
-    with st.container(border=True, key="steps", horizontal=True):
-        for number, (key, name, hint) in enumerate(JOURNEY, start=1):
-            st.page_link(PAGES[key][0], label=f"{number:02d} {name}", help=hint)
-
-with st.container(key="lab"):
-    st.subheader("Experiment")
-    with st.container(border=True, key="card-lab"):
-        st.html('<p class="card-number">VERGLEICH OHNE UND MIT KI</p>')
-        heading("science", "KI-Lab")
-        st.write(
-            "Kontrollierter Vergleich: dieselbe Art von Planungsaufgabe einmal ohne und einmal "
-            "mit KI-Hilfe, mit Zeitlimit und Protokoll."
-        )
-        st.page_link("views/ki_lab.py", label="KI-Lab öffnen", icon=":material/arrow_forward:")
 
 with st.container(key="project"):
     st.subheader("Aktuelles Projekt")
@@ -122,21 +59,22 @@ with st.container(key="project"):
         else:
             result = evaluate(tracking, date.today())
             st.markdown(f"**{as_text(tracking.project.idea)}**")
-            st.progress(result.progress, text=f"{percent(result.progress)} der Planstunden fertig")
             a, b, c = st.columns(3)
             a.metric("Aufgaben", len(result.tasks))
             b.metric("Fortschritt", percent(result.progress))
             c.metric("Im Verzug", len(result.overdue))
             outlook = forecast(tracking, date.today())
-            heading = forecast_text(outlook, tracking.project.deadline).rstrip(".")
+            said = forecast_text(outlook, tracking.project.deadline).rstrip(".")
             if outlook.problem:
-                st.error(f"Prognose: {heading}.")
+                st.error(f"Prognose: {said}.")
             elif outlook.deadline_gap > 0:
-                st.warning(f"Prognose: {heading}.")
+                st.warning(f"Prognose: {said}.")
             else:
-                st.caption(f"Prognose: {heading}.")
+                st.caption(f"Prognose: {said}.")
             advice, where = next_step(tracking, date.today())
-            st.markdown(f"**Als Nächstes:** {as_text(advice)}")
+            # Advice for the Kontrolle repeats the forecast or the delay shown above.
+            if where != "kontrolle":
+                st.markdown(f"**Als Nächstes:** {as_text(advice)}")
             # The button for the page the advice points to is the primary one.
             with st.container(horizontal=True):
                 if st.button(
@@ -156,3 +94,22 @@ with st.container(key="project"):
                     "Fehler beheben", icon=":material/bug_report:", type="primary"
                 ):
                     st.switch_page("views/testlauf.py")
+
+with st.container(key="lifecycle"):
+    st.subheader("Der ganze Ablauf")
+    st.caption("Elf Schritte, wie im Menü. Schritte vor der Planung dürfen übersprungen werden.")
+    with st.container(horizontal=True, key="steps"):
+        for number, (key, name, hint) in enumerate(JOURNEY, start=1):
+            with st.container(border=True, key=f"tile-{key}"):
+                st.html(f'<p class="card-number">{number:02d}</p>')
+                st.page_link(PAGES[key][0], label=name)
+                st.caption(hint)
+
+with st.container(key="lab"):
+    with st.container(border=True, key="card-lab"):
+        heading("science", "KI-Lab")
+        st.write(
+            "Kontrollierter Vergleich: dieselbe Art von Planungsaufgabe einmal ohne und einmal "
+            "mit KI-Hilfe, mit Zeitlimit und Protokoll."
+        )
+        st.page_link("views/ki_lab.py", label="KI-Lab öffnen", icon=":material/arrow_forward:")

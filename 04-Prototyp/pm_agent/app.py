@@ -40,7 +40,6 @@ MENU = {
     ],
 }
 page = st.navigation(MENU)
-section = next(name for name, pages in MENU.items() if page.url_path in [p.url_path for p in pages])
 
 st.html(ROOT / "assets" / "style.css")
 with st.container(
@@ -72,8 +71,6 @@ state.page = page.url_path
 # A container of its own per page: a page change mounts new content, which is what the
 # page transition in assets/style.css hangs on.
 with st.container(key=f"page-{page.url_path or 'startseite'}"):
-    if section:
-        st.html(f'<p class="eyebrow">{section}</p>')
     if page.url_path in PAGES:  # the pages of a phase
         journey(page.url_path)
     page.run()

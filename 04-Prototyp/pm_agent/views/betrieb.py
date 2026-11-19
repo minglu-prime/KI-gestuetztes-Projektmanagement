@@ -9,7 +9,7 @@ import streamlit as st
 from pm_agent import closing, lifecycle
 from pm_agent.closing import OPERATION_COLUMNS, check_operations, operation_rows, rows_to_operations
 from pm_agent.tracking import Incident, load, save_if_current
-from pm_agent.ui import adopted_project, as_text, heading, kept_editor
+from pm_agent.ui import adopted_project, as_text, heading, kept_editor, messages
 from pm_agent.workbench import InputError
 
 state = st.session_state
@@ -92,10 +92,7 @@ with st.container(border=True, key="panel-handbook"):
             if change(lambda t: t.model_copy(update={"operations": items})):
                 st.rerun()
         errors, warnings = check_operations(design, tracking.operations)
-        for error in errors:
-            st.error(as_text(error))
-        for warning in warnings:
-            st.warning(as_text(warning))
+        messages(errors, warnings)
 
 with st.container(border=True, key="panel-incidents"):
     heading("warning", "Störungen", du="erfasst")
