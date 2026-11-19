@@ -23,6 +23,7 @@ from pm_agent.ui import (
     as_text,
     consent,
     heading,
+    messages,
     phase_chip,
     run_with_progress,
     saved_lifecycle,
@@ -184,8 +185,7 @@ with st.container(border=True, key="panel-charter"):
         if store(life, life.model_copy(update={"charter": edited})) is not None:
             st.rerun()
     errors = check_charter(life.charter).errors if life.charter is not None else []
-    for error in errors:
-        st.error(as_text(error))
+    messages(errors)
 
 # 4 · Freigabe ---------------------------------------------------------------------------
 with st.container(border=True, key="panel-approve"):

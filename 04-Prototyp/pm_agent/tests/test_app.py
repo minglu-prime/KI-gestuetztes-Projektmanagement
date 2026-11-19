@@ -1030,6 +1030,11 @@ def tracked(site):
     return site
 
 
+def lines(boxes) -> list[str]:
+    """The messages in alert boxes: several of one kind share a box as a list (ui.messages)."""
+    return [line.removeprefix("- ") for box in boxes for line in box.value.splitlines()]
+
+
 def journey(at):
     """The project path above an agent page, as HTML, or None."""
     return next((h.value for h in at.html if 'class="journey"' in h.value), None)
@@ -1067,6 +1072,9 @@ def test_with_a_project_the_path_says_what_is_next_and_leads_there(tracked):
     advice, where = tracking.next_step(tracking.load(), date.today())
     assert '<span class="step done' in journey(at).split("Ausführen")[0]  # Planen is done
     assert any("Jetzt dran" in m.value and advice in m.value for m in at.markdown)
+    # Said once on screen: by that line. In the path only for screen readers, else the
+    # words push the last step onto a second row.
+    assert "<em class=sr>als Nächstes</em>" in journey(at)
     target = {"durchfuehrung": "Zur Durchführung", "kontrolle": "Zur Kontrolle"}[where]
     # A button to the page the advice points to, unless the advice is about this page.
     assert any(b.label == target for b in at.button) == (where != "durchfuehrung")
@@ -1682,7 +1690,7 @@ def test_a_requirement_for_an_unknown_criterion_cannot_be_approved(site):
     at = edit_table(at, "requirements_editor_", {0: {"Erfolgskriterien": "K9"}})
     button(at, "Änderungen speichern und prüfen").click()
     at = at.run()
-    errors = [e.value for e in at.error]
+    errors = lines(at.error)
     assert "Anforderung 'R1' nennt das unbekannte Erfolgskriterium 'K9'" in errors
     assert button(at, "Anforderungen freigeben").disabled
 
@@ -1778,7 +1786,7 @@ def test_approved_requirements_reach_agent_and_check(app, monkeypatch):
     at = at.run()
     assert not at.exception
     assert seen == {"requirements": NEEDS.items, "covered": frozenset()}
-    warnings = [w.value for w in at.warning]
+    warnings = lines(at.warning)
     assert "Muss-Anforderung 'R1' (Raum buchen) hat keine Task" in warnings
     assert "2 Tasks dienen keiner Anforderung: A, B" in warnings
     (trace,) = [d.value for d in at.dataframe if "Anforderung" in d.value.columns]
@@ -2560,3 +2568,12 @@ def test_iteration_confirmation_cannot_archive_a_replacement_project(site, tmp_p
     assert tracking.load() == current
     assert not (tmp_path / "archiv").exists()
     assert not at.checkbox(key="next_run_sure").value
+
+
+def test_the_report_previews_are_folded_like_on_the_other_pages(tracked):
+    # Open, the report repeated the tables above it and doubled the length of the page.
+    for page, title in [("durchfuehrung", "Statusbericht"), ("kontrolle", "Kontrollbericht")]:
+        at = tracked.switch_page(f"views/{page}.py").run()
+        assert not at.exception
+        previews = [e for e in at.expander if e.label == "Vorschau"]
+        assert any(title in m.value for e in previews for m in e.markdown), page

@@ -111,6 +111,9 @@ with st.container(border=True, key="panel-progress"):
         width="stretch",
         disabled=PROGRESS_READ_ONLY,
         column_config={
+            # Narrower than its longest title (shown in full on hover): otherwise the columns
+            # to fill in lay beyond the right edge of the panel.
+            "Aufgabe": st.column_config.TextColumn(width="medium"),
             "Status": st.column_config.SelectboxColumn(options=STATUSES, required=True),
             "Fertig am": st.column_config.DateColumn(
                 format="DD.MM.YYYY",
@@ -201,7 +204,7 @@ with st.container(border=True, key="panel-documents"):
         mime="text/markdown",
         icon=":material/download:",
     )
-    with st.container(border=True, key="preview-document"):
+    with st.expander("Vorschau"):
         st.markdown(text)
 
 if st.button("Weiter zur Kontrolle", icon=":material/arrow_forward:"):

@@ -23,6 +23,7 @@ from pm_agent.ui import (
     consent,
     heading,
     kept_editor,
+    messages,
     phase_chip,
     run_with_progress,
     saved_lifecycle,
@@ -182,10 +183,7 @@ with st.container(border=True, key="panel-requirements"):
     errors = []
     if life.requirements is not None:
         errors, warnings = check_requirements(life.requirements, life.charter)
-        for error in errors:
-            st.error(as_text(error))
-        for warning in warnings:
-            st.warning(as_text(warning))
+        messages(errors, warnings)
 
 # 4 · Freigabe ---------------------------------------------------------------------------
 with st.container(border=True, key="panel-approve"):

@@ -28,6 +28,7 @@ from pm_agent.ui import (
     consent,
     heading,
     kept_editor,
+    messages,
     run_with_progress,
 )
 from pm_agent.workbench import InputError
@@ -120,10 +121,7 @@ with st.container(border=True, key="panel-signoff"):
             on_click=on_signoff,
             args=({need.id: need for need in tracking.requirements},),
         )
-    for error in errors:
-        st.error(as_text(error))
-    for warning in warnings:
-        st.warning(as_text(warning))
+    messages(errors, warnings)
     if tracking.requirements and not errors:  # with nothing to accept, nothing is closed
         st.success("Nichts Schweres ist offen: Das Projekt lässt sich abschließen.")
 
@@ -171,8 +169,7 @@ with st.container(border=True, key="panel-lessons"):
             if save_lessons(tracking, items):
                 st.rerun()
     if tracking.lessons:
-        for problem in check_lessons(Lessons(items=tracking.lessons), tracking):
-            st.warning(as_text(problem))
+        messages([], check_lessons(Lessons(items=tracking.lessons), tracking))
 
 with st.container(border=True, key="panel-document"):
     heading("description", "Abschlussbericht", python="füllt die Vorlage aus")

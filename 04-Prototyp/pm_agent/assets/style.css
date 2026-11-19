@@ -408,6 +408,7 @@
   color: var(--ink);
   font-weight: 600;
 }
+.journey .step em { font-style: normal; font-size: 11px; color: #77501e; }
 /* What is next: one line and one button, set apart from the page below. */
 [class*="st-key-next-step"] {
   background: #fff;
@@ -421,7 +422,6 @@
    paragraph. With that margin gone here, the pull cut off the last line on a phone. */
 [class*="st-key-next-step"] [data-testid="stMarkdownContainer"] { margin-bottom: 0; }
 [class*="st-key-next-step"] [data-testid="stMarkdownContainer"] p { margin: 0; }
-.journey .step em { font-style: normal; font-size: 11px; color: #77501e; }
 
 /* Who does a part of a page: Claude proposes, Python computes and checks, du decides. */
 .roles {

@@ -27,6 +27,7 @@ from pm_agent.ui import (
     consent,
     heading,
     kept_editor,
+    messages,
     phase_chip,
     run_with_progress,
     saved_lifecycle,
@@ -185,10 +186,7 @@ with st.container(border=True, key="panel-design"):
     errors = []
     if life.design is not None:
         errors, warnings = check_design(life.design, life.requirements)
-        for error in errors:
-            st.error(as_text(error))
-        for warning in warnings:
-            st.warning(as_text(warning))
+        messages(errors, warnings)
 
 # 4 · Diagramme --------------------------------------------------------------------------
 if life.design is not None:

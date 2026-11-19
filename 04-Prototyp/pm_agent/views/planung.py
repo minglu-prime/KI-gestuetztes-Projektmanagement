@@ -39,6 +39,7 @@ from pm_agent.ui import (
     as_text,
     chip,
     heading,
+    messages,
     on_panel,
     phase_chip,
     roles,
@@ -342,6 +343,7 @@ with tabs[0]:
     edited_team = st.data_editor(
         state.team_df,
         key=f"team_editor_{state.team_version}",
+        placeholder="",
         num_rows="dynamic",
         width="stretch",
         column_config={
@@ -549,10 +551,7 @@ with tabs[3]:
         a.metric("Planende", result.end_date.strftime("%d.%m.%Y") if result.end_date else "–")
         b.metric("Fehler", len(result.errors))
         c.metric("Warnungen", len(result.warnings))
-        for error in result.errors:
-            st.error(as_text(error))
-        for warning in result.warnings:
-            st.warning(as_text(warning))
+        messages(result.errors, result.warnings)
         if not result.errors and not result.warnings:
             st.success("Die Prüfung meldet keine Fehler und keine Warnungen.")
 
@@ -778,6 +777,7 @@ with tabs[4]:
         edited_plan = st.data_editor(
             state.plan_df,
             key=f"plan_editor_{state.editor_version}",
+            placeholder="",
             num_rows="dynamic",
             width="stretch",
             column_config={

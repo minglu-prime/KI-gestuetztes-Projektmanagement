@@ -42,6 +42,7 @@ from pm_agent.ui import (
     consent,
     heading,
     history_table,
+    messages,
     on_panel,
     roles,
     run_with_progress,
@@ -381,8 +382,7 @@ if tracking is not None:
                 "Maßnahme."
             )
             st.dataframe(pd.DataFrame(demo_status(tracking, date.today())), hide_index=True)
-            for warning in check_retros(tracking, date.today()).warnings:
-                st.warning(as_text(warning))
+            messages([], check_retros(tracking, date.today()).warnings)
             titles = {d.week: d.title for d in tracking.plan.demos}
             mondays = demo_mondays(tracking)
             earlier = {r.monday: r for r in tracking.retros}
@@ -542,7 +542,7 @@ if tracking is not None:
             mime="text/markdown",
             icon=":material/download:",
         )
-        with st.container(border=True, key="preview-control"):
+        with st.expander("Vorschau"):
             st.markdown(document)
 
 with st.container(border=True, key="panel-effort"):
