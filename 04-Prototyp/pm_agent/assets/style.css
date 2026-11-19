@@ -36,14 +36,11 @@
 }
 
 /* app.py wraps every page in a container with its own key. A page change mounts new
-   content, so this runs once per page change and not on every rerun. The parts of a page
-   come in one after the other, top first; the eye follows them down. */
+   content, so this runs once per page change and not on every rerun. Streamlit sends the
+   parts of a page top first, so they already come in one after the other. No delay by
+   position: Streamlit inserts parts while others still run, an :nth-child delay then
+   changes mid-animation and the part jumps back (measured: opacity 0.35 to 0.11). */
 [class*="st-key-page-"] > * { animation: rise 0.55s var(--ease) both; }
-[class*="st-key-page-"] > :nth-child(2) { animation-delay: 0.04s; }
-[class*="st-key-page-"] > :nth-child(3) { animation-delay: 0.08s; }
-[class*="st-key-page-"] > :nth-child(4) { animation-delay: 0.12s; }
-[class*="st-key-page-"] > :nth-child(5) { animation-delay: 0.16s; }
-[class*="st-key-page-"] > :nth-child(n + 6) { animation-delay: 0.2s; }
 [data-testid="stTabPanel"],
 [data-testid="stExpanderDetails"] { animation: fade 0.3s ease-out both; }
 /* A message that appears after a click (saved, rejected) eases in instead of jumping. */
