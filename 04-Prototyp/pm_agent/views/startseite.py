@@ -72,7 +72,9 @@ with st.container(key="project"):
             else:
                 st.caption(f"Prognose: {said}.")
             advice, where = next_step(tracking, date.today())
-            st.markdown(f"**Als Nächstes:** {as_text(advice)}")
+            # Advice for the Kontrolle repeats the forecast or the delay shown above.
+            if where != "kontrolle":
+                st.markdown(f"**Als Nächstes:** {as_text(advice)}")
             # The button for the page the advice points to is the primary one.
             with st.container(horizontal=True):
                 if st.button(

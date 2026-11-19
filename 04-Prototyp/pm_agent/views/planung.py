@@ -353,7 +353,9 @@ with tabs[0]:
             "Skills": st.column_config.TextColumn(
                 help="Skill mit Stufe 1–5, z. B. Python 4, SQL 3"
             ),
-            "Stunden/Woche": st.column_config.NumberColumn(min_value=1, max_value=120),
+            "Stunden/Woche": st.column_config.NumberColumn(
+                format="localized", min_value=1, max_value=120
+            ),
             "Abwesend": st.column_config.TextColumn(
                 help="Tage ohne Arbeit, z. B. 01.12.2026–05.12.2026, 23.12.2026. Feiertage "
                 "und andere freie Tage für alle stehen beim Projekt (Schritt 2)."
@@ -783,7 +785,7 @@ with tabs[4]:
             num_rows="dynamic",
             width="stretch",
             column_config={
-                "Stunden": st.column_config.NumberColumn(min_value=0.5),
+                "Stunden": st.column_config.NumberColumn(format="localized", min_value=0.5),
                 "Abhängig von": st.column_config.TextColumn(help="IDs, getrennt durch Komma"),
                 "Skills": st.column_config.TextColumn(help="getrennt durch Komma"),
             },

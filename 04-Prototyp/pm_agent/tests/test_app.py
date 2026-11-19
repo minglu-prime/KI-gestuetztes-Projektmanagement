@@ -1296,8 +1296,8 @@ def test_the_startseite_says_where_the_project_is_heading(tracked):
     assert not at.exception
     said = [c.value for c in at.caption] + [w.value for w in at.warning]
     assert any(text.startswith("Prognose: Voraussichtliches Ende") for text in said)
-    # And what to do about it: one of the two buttons is the recommended one.
-    assert any(m.value.startswith("**Als Nächstes:** ") for m in at.markdown)
+    # And what to do about it: one of the two buttons is the recommended one (the line
+    # "Als Nächstes": test_the_startseite_says_the_forecast_once).
     assert sorted(b.proto.type for b in at.button if b.label in WAYS_ON) == [
         "primary",
         "secondary",
@@ -2635,3 +2635,22 @@ def test_the_iteration_points_to_the_abschluss_instead_of_repeating_it(site, mon
     (error,) = [e.value for e in at.error]
     assert error.startswith("Der Abschluss ist nicht fertig") and "R1" not in error
     assert not any("Nichts offen" in i.value for i in at.info)
+
+
+@pytest.mark.parametrize("where", ["kontrolle", "durchfuehrung"])
+def test_the_startseite_says_the_forecast_once(tracked, monkeypatch, where):
+    # "Deadline verpasst" stood in the forecast box and again in the line below it. What the
+    # Kontrolle is for, the forecast and the delay already say; its button is the primary one.
+    monkeypatch.setattr(tracking, "next_step", lambda *_: ("Rat.", where))
+    at = tracked.run()
+    assert not at.exception
+    said = any(m.value.startswith("**Als Nächstes:** ") for m in at.markdown)
+    assert said == (where != "kontrolle")
+
+
+def test_the_forecast_lists_only_late_tasks_that_hold_others(tracked):
+    # A late task holding nothing was the box "Im Verzug" once more, as "hält auf: keine
+    # weitere Aufgabe".
+    at = tracked.switch_page("views/kontrolle.py").run()
+    assert not at.exception
+    assert not any("keine weitere Aufgabe" in m.value for m in at.markdown)

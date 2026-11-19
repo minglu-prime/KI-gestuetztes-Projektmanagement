@@ -122,10 +122,16 @@ if tracking is not None:
                     f"{-outlook.deadline_gap} {days(outlook.deadline_gap)}",
                 )
             titles = {task.id: task.title for task in tracking.plan.tasks}
-            for late, waiting in outlook.blocked.items():
-                held = ", ".join(waiting) if waiting else "keine weitere Aufgabe"
+            # The late tasks themselves stand in the box "Im Verzug" above.
+            holding = {late: waiting for late, waiting in outlook.blocked.items() if waiting}
+            if holding:
                 st.markdown(
-                    f"- **{as_text(late)} · {as_text(titles[late])}** hält auf: {as_text(held)}"
+                    "**Verspätet und halten andere auf:**\n"
+                    + "\n".join(
+                        f"- **{as_text(late)} · {as_text(titles[late])}**: "
+                        f"{as_text(', '.join(waiting))}"
+                        for late, waiting in holding.items()
+                    )
                 )
 
             # From here the project lead can act: plan the rest again, with Claude.

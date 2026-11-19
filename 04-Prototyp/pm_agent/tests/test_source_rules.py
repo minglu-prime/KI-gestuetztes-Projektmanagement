@@ -150,3 +150,18 @@ def test_the_project_path_names_each_step_like_the_menu():
     )
     titles = dict(pages)
     assert [(slug, name) for slug, name, _ in JOURNEY if titles[slug] != name] == []
+
+
+def test_numbers_to_fill_in_follow_the_language_of_the_browser():
+    # Without a format, "0.0" with a point stood beside "76,5 h" on the Kontrolle.
+    bare = []
+    for path in SOURCES:
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and node.func.attr == "NumberColumn"
+                and "format" not in {k.arg for k in node.keywords}
+            ):
+                bare.append(f"{path.name}:{node.lineno}")
+    assert not bare, bare

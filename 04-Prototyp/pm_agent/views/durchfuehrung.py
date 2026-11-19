@@ -120,8 +120,9 @@ with st.container(border=True, key="panel-progress"):
                 help="Wird beim Speichern auf heute gesetzt, wenn die Aufgabe fertig wird. "
                 "Nachtragen, wenn sie früher fertig war.",
             ),
-            "Ist (h)": st.column_config.NumberColumn(min_value=0.0, step=0.5),
+            "Ist (h)": st.column_config.NumberColumn(format="localized", min_value=0.0, step=0.5),
             "Rest (h)": st.column_config.NumberColumn(
+                format="localized",
                 min_value=0.0,
                 step=0.5,
                 help="Was noch zu tun ist, wenn es von Plan minus Ist abweicht. Leer lassen, "
