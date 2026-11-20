@@ -9,7 +9,7 @@ from typing import Any, TypeVar
 import altair as alt
 import pandas as pd
 import streamlit as st
-from anthropic import APIError
+from openai import APIError
 
 from pm_agent import closing, lifecycle
 from pm_agent.agent import AgentError
@@ -361,7 +361,7 @@ def consent(key: str, data: str = TEAM_DATA) -> bool:
     """Consent before an agent sends what people wrote or are to Claude. `data` names what
     goes: by default the project with its people (Durchführung, Kontrolle)."""
     return st.checkbox(
-        f"Alle Personen im Projekt haben zugestimmt, dass {data} an die Anthropic API "
+        f"Alle Personen im Projekt haben zugestimmt, dass {data} an die OpenAI API "
         "gesendet werden.",
         key=key,
     )
@@ -427,7 +427,7 @@ def run_with_progress(label: str, run: Callable[[Callable[[dict[str, Any]], None
         except AgentError as err:
             failure = str(err)
         except APIError as err:
-            failure = f"Die Claude API meldet einen Fehler: {err}"
+            failure = f"Die OpenAI API meldet einen Fehler: {err}"
         status.update(
             label=f"Kein Ergebnis nach {rounds} Runden" if failure else "Vorschlag angenommen",
             state="error" if failure else "complete",

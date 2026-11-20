@@ -1,5 +1,5 @@
-"""Runs the agent against the real Claude API. It costs money and takes a few minutes, so it
-is skipped without ANTHROPIC_API_KEY. With the key in .env:
+"""Runs the agent against the real OpenAI API. It costs money and takes a few minutes, so it
+is skipped without OPENAI_API_KEY. With the key in .env:
 
     uv run --env-file .env pytest tests/test_agent_live.py
 """
@@ -14,7 +14,7 @@ from pm_agent.models import Member, Project
 from pm_agent.planning import check_plan
 
 pytestmark = pytest.mark.skipif(
-    not os.environ.get("ANTHROPIC_API_KEY"), reason="ANTHROPIC_API_KEY ist nicht gesetzt"
+    not os.environ.get("OPENAI_API_KEY"), reason="OPENAI_API_KEY ist nicht gesetzt"
 )
 
 

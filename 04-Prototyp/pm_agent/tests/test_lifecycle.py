@@ -204,8 +204,7 @@ def test_a_rejected_charter_goes_back_to_claude(api, tmp_path):
     result = lifecycle.run_charter(PROJECT, log_dir=tmp_path)
     assert result == charter()
     assert PROJECT.idea in json.dumps(requests[0]["messages"], ensure_ascii=False)
-    (rejection,) = requests[1]["messages"][-1]["content"]
-    assert rejection["is_error"] is True
+    rejection = requests[1]["messages"][-1]["content"]
     assert "'K1' ist mehrfach vergeben" in json.dumps(rejection, ensure_ascii=False)
     log = read_log(tmp_path, "auftrag")
     assert log["outcome"] == "projektauftrag" and log["result"] == charter().model_dump(mode="json")

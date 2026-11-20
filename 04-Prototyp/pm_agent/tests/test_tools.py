@@ -2,10 +2,9 @@ import json
 from datetime import date
 
 import pytest
-from anthropic.lib.tools import ToolError
 
 from pm_agent.models import Member, MemberAbsence, Plan, Project, Requirement
-from pm_agent.tools import PlanningTools
+from pm_agent.tools import PlanningTools, ToolError
 
 PROJECT = Project(
     idea="Raumbuchung für Lerngruppen", start_date=date(2026, 11, 9), deadline=date(2026, 12, 18)
@@ -104,8 +103,8 @@ def test_submit_plan_accepts_a_plan_with_warnings_because_the_project_lead_decid
 
 def test_both_tools_show_claude_the_plan_schema():
     tools = PlanningTools(PROJECT, TEAM)
-    definitions = [tools.check_plan.to_dict(), tools.submit_plan.to_dict()]
-    assert {d["name"]: d["input_schema"] for d in definitions} == {
+    definitions = [t.definition()["function"] for t in (tools.check_plan, tools.submit_plan)]
+    assert {d["name"]: d["parameters"] for d in definitions} == {
         "check_plan": Plan.model_json_schema(),
         "submit_plan": Plan.model_json_schema(),
     }

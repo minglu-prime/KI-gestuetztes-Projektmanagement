@@ -7,7 +7,8 @@ entscheidet.
 
 Stand: alle Schritte vom Projektauftrag bis zur Iteration als eigene Seiten, jeder mit Claude
 als Vorschlag, deterministischer Prüfung und Entscheidung der Projektleitung. Alle Agenten liefen
-am 18.11.2026 einmal ohne Fehler gegen die echte API. Das KI-Lab (Vergleichsexperiment,
+am 18.11.2026 einmal ohne Fehler gegen die Claude API. Seit dem 20.11.2026 rufen sie die
+OpenAI API auf (Chat Completions); gegen sie ist noch kein Agent gelaufen. Das KI-Lab (Vergleichsexperiment,
 `../ki_lab`) ist eingebettet.
 
 ## Oberfläche
@@ -119,11 +120,12 @@ Die Sequenzdiagramme zeichnet `src/pm_agent/diagram.py`, nie Claude.
 
 Die Agenten für Durchführung und Kontrolle bekommen die fertig berechneten Kennzahlen und
 rechnen nicht selbst. Sie sind ein Gerüst: Weitere Werkzeuge (zum Beispiel eine
-Umplanung zum Durchrechnen) kommen in `followup.py` neben das Einreichen-Werkzeug. Gegen die
-echte API sind beide noch nicht gelaufen.
+Umplanung zum Durchrechnen) kommen in `followup.py` neben das Einreichen-Werkzeug. 
 
-Zugang: `.env.example` nach `.env` kopieren und `ANTHROPIC_API_KEY` eintragen. Das Modell
-lässt sich mit `PM_AGENT_MODEL` ändern (Standard `claude-opus-5-5`).
+Zugang: `.env.example` nach `.env` kopieren, `OPENAI_API_KEY` und das Modell in
+`PM_AGENT_MODEL` eintragen (kein Standard; ohne den Wert gilt `PM_MODEL` des KI-Labs). Ein
+anderer OpenAI-kompatibler Endpunkt lässt sich mit `OPENAI_BASE_URL` setzen. Die Seiten nennen
+das Modell weiter „Claude“, nach dem Modell, mit dem die Website entstand.
 
 ## Entwicklung
 
@@ -136,7 +138,7 @@ uv run ruff check .
 uv run pytest
 ```
 
-Der Test gegen die echte API kostet Geld und dauert einige Minuten. Ohne `ANTHROPIC_API_KEY`
+Der Test gegen die echte API kostet Geld und dauert einige Minuten. Ohne `OPENAI_API_KEY`
 wird er übersprungen. Mit dem Key aus `.env`:
 
 ```bash
@@ -151,7 +153,7 @@ ausgeschlossen. Für Projektauftrag, Anforderungen und Entwurf gehen nur Idee, T
 Texte von Auftrag und Anforderungen an die API, keine Angaben zum Team; Beteiligte stehen dort als Rollen.
 
 Der Agent schickt Projektidee und Teamdaten (Namen, Skills, Wochenstunden, Notizen) an die
-Anthropic API. Teammitglieder müssen vorher zustimmen.
+OpenAI API. Teammitglieder müssen vorher zustimmen.
 
 Das KI-Lab speichert Sitzungen in `../ki_lab/data/` (ebenfalls ausgeschlossen) und schickt in
 KI-Runden Fallmaterial, Entwurf und Frage an OpenAI.

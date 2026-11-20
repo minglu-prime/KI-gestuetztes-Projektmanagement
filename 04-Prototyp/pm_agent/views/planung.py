@@ -14,7 +14,7 @@ from html import escape
 import altair as alt
 import pandas as pd
 import streamlit as st
-from anthropic import APIError
+from openai import APIError
 from pydantic import ValidationError
 
 from pm_agent import lifecycle
@@ -391,7 +391,7 @@ with tabs[0]:
             st.success(f"Gespeichert in {place} (lokal, nicht im Repository).")
     consent = st.checkbox(
         "Alle eingetragenen Personen haben zugestimmt, dass ihre Angaben (Name, Skills, Stunden, "
-        "Notiz) zur Planung an die Anthropic API gesendet werden.",
+        "Notiz) zur Planung an die OpenAI API gesendet werden.",
         key="consent",
         persist_state="session",
     )
@@ -495,7 +495,7 @@ with tabs[2]:
                 except PlanningError as err:
                     failure = str(err)
                 except APIError as err:
-                    failure = f"Die Claude API meldet einen Fehler: {err}"
+                    failure = f"Die OpenAI API meldet einen Fehler: {err}"
                 else:
                     show_plan(plan, rounds, "Agent", round(time.monotonic() - started, 1))
                     forget_conversation()
@@ -883,7 +883,7 @@ with tabs[4]:
                         except PlanningError as err:
                             failure = str(err)
                         except APIError as err:
-                            failure = f"Die Claude API meldet einen Fehler: {err}"
+                            failure = f"Die OpenAI API meldet einen Fehler: {err}"
                         else:
                             state.proposal = proposal = {
                                 "wish": wish,

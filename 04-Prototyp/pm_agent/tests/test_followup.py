@@ -128,11 +128,11 @@ def test_a_rejected_status_summary_goes_back_to_claude_until_it_is_accepted(
     assert summary == StatusSummary.model_validate(SUMMARY)
     assert [r["tool_results"][0]["is_error"] for r in seen] == [True, False]
     # Claude gets the plan, the progress and the numbers, and the rule it broke.
-    assert '"im_verzug": [\n      "B"' in requests[0]["messages"][0]["content"]
+    assert '"im_verzug": [\n      "B"' in requests[0]["messages"][1]["content"]
     assert "studentischen Projektgruppe während der Durchführung" in json.dumps(
-        requests[0]["system"], ensure_ascii=False
+        requests[0]["messages"][0]["content"], ensure_ascii=False
     )
-    (rejection,) = requests[1]["messages"][-1]["content"]
+    rejection = requests[1]["messages"][-1]["content"]
     assert "Statusbericht abgelehnt" in json.dumps(rejection, ensure_ascii=False)
     assert "Aufgabe 'B' ist im Verzug" in json.dumps(rejection, ensure_ascii=False)
 
@@ -150,7 +150,7 @@ def test_the_control_agent_returns_the_report_its_check_accepts(api, tracking, t
     report = run_control_report(tracking, TODAY, log_dir=tmp_path)
 
     assert report == ControlReport.model_validate(REPORT)
-    assert [tool["name"] for tool in requests[0]["tools"]] == ["submit_control"]
+    assert [tool["function"]["name"] for tool in requests[0]["tools"]] == ["submit_control"]
     log = read_log(tmp_path, "kontrolle")
     assert (log["outcome"], log["result"]["assessment"]) == ("kontrollbericht", "gefährdet")
 
@@ -159,7 +159,7 @@ def test_an_agent_that_stops_without_a_result_is_an_error_naming_the_result(
     api, tracking, tmp_path
 ):
     replies, _ = api
-    replies.append(reply([{"type": "text", "text": "Mir fehlen Angaben."}], "end_turn"))
+    replies.append(reply([{"type": "text", "text": "Mir fehlen Angaben."}]))
 
     with pytest.raises(AgentError, match="ohne einen Kontrollbericht einzureichen"):
         run_control_report(tracking, TODAY, log_dir=tmp_path)
@@ -218,8 +218,7 @@ def test_a_reassignment_to_someone_outside_the_team_goes_back_to_claude(api, tra
     report = run_control_report(tracking, TODAY, log_dir=tmp_path)
 
     assert report.measures[0].reassign_to is None
-    (rejection,) = requests[1]["messages"][-1]["content"]
-    assert rejection["is_error"] is True
+    rejection = requests[1]["messages"][-1]["content"]
     assert "an 'Zoe' geben, diese Person ist nicht im Team" in json.dumps(
         rejection, ensure_ascii=False
     )
