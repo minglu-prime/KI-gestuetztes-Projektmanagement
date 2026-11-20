@@ -5,10 +5,9 @@ one check, used by the agents for Durchführung and Kontrolle.
 """
 
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Any, Generic, TypeVar
 
-from anthropic import beta_tool
-from anthropic.lib.tools import ToolError
 from pydantic import BaseModel, ValidationError
 
 from pm_agent.models import (
@@ -23,6 +22,40 @@ from pm_agent.models import (
 from pm_agent.planning import check_plan
 
 T = TypeVar("T", bound=BaseModel)
+
+
+class ToolError(Exception):
+    """A tool rejects its input. `content` goes back to the model, which corrects the input."""
+
+    def __init__(self, content: str) -> None:
+        super().__init__(content)
+        self.content = content
+
+
+@dataclass(frozen=True)
+class Tool:
+    """A function the model can call: its name, what it does and the shape of its input."""
+
+    run: Callable[..., str]
+    name: str
+    description: str
+    input_schema: type[BaseModel]
+
+    def call(self, data: dict[str, Any]) -> str:
+        return self.run(**data)
+
+    def definition(self) -> dict[str, Any]:
+        """The tool as the OpenAI chat completions API takes it. Not "strict": that mode
+        allows no optional fields, and each tool validates its input itself."""
+        return {
+            "type": "function",
+            "function": {
+                "name": self.name,
+                "description": self.description,
+                "parameters": self.input_schema.model_json_schema(),
+            },
+        }
+
 
 # The schedule stays out: it is long, and the warnings already name late tasks.
 REPORTED = {"errors", "warnings", "end_date", "critical_path", "load"}
@@ -58,7 +91,7 @@ class PlanningTools:
         self.team = team
         self.absences: list[MemberAbsence] = []
         self.set_absence = (
-            beta_tool(
+            Tool(
                 self._set_absence,
                 name="set_absence",
                 description=(
@@ -76,7 +109,7 @@ class PlanningTools:
         self.requirements = requirements
         self.covered = covered
         self.plan: Plan | None = None
-        self.check_plan = beta_tool(
+        self.check_plan = Tool(
             self._check,
             name="check_plan",
             description=(
@@ -86,7 +119,7 @@ class PlanningTools:
             ),
             input_schema=Plan,
         )
-        self.submit_plan = beta_tool(
+        self.submit_plan = Tool(
             self._submit,
             name="submit_plan",
             description=(
@@ -212,7 +245,7 @@ class Submission(Generic[T]):
         self.schema = schema
         self.check = check
         self.result: T | None = None
-        self.tool = beta_tool(self._submit, name=name, description=description, input_schema=schema)
+        self.tool = Tool(self._submit, name=name, description=description, input_schema=schema)
 
     def _submit(self, /, **data: Any) -> str:
         try:

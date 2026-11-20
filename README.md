@@ -9,7 +9,7 @@ Claude schlägt vor. Python prüft nach. Die Projektleitung entscheidet.
 [![pm-agent](https://github.com/minglu-prime/KI-gestuetztes-Projektmanagement/actions/workflows/pm-agent.yml/badge.svg)](https://github.com/minglu-prime/KI-gestuetztes-Projektmanagement/actions/workflows/pm-agent.yml)
 ![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-23654c)
 ![Streamlit 1.67+](https://img.shields.io/badge/Streamlit-1.67%2B-23654c)
-![Claude Opus 5.5](https://img.shields.io/badge/Claude-Opus_5.5-9c5b22)
+![OpenAI API](https://img.shields.io/badge/OpenAI-API-9c5b22)
 
 [Worum es geht](#worum-es-geht) ·
 [So arbeitet der Agent](#so-arbeitet-der-agent) ·
@@ -210,7 +210,7 @@ Voraussetzung: [uv](https://docs.astral.sh/uv/) und Python 3.11 oder neuer.
 ```bash
 cd 04-Prototyp/pm_agent
 uv sync
-cp .env.example .env        # ANTHROPIC_API_KEY eintragen
+cp .env.example .env        # OPENAI_API_KEY und PM_AGENT_MODEL eintragen
 uv run --env-file .env streamlit run app.py
 ```
 
@@ -250,8 +250,9 @@ Einzelheiten zu Seiten, Agenten und Entwicklung:
 
 | Teil | Stand |
 |---|---|
-| Erster Plan mit Claude | gegen die echte API gelaufen (Protokolle vom 11.11. und 18.11.2026) |
-| Alle übrigen Agenten | am 18.11.2026 je einmal ohne Fehler gegen die echte API gelaufen: Projektauftrag, Anforderungen, Entwurf, Testplan, Plan im Gespräch ändern, Durchführung, Kontrolle, Lessons Learned |
+| Wechsel zur OpenAI API (20.11.2026) | Agentenschleife und Werkzeuge umgestellt und ohne Netz getestet. Die Planung lief am 20.11.2026 einmal gegen einen OpenAI-kompatiblen Endpunkt (`gpt-6-sol`, 3 Runden, 38 s, Plan ohne Fehler und Warnungen); **die übrigen Agenten sind gegen ihn noch nicht gelaufen**. Die Seiten nennen das Modell weiter „Claude“ |
+| Erster Plan mit Claude | gegen die Claude API gelaufen (Protokolle vom 11.11. und 18.11.2026) |
+| Alle übrigen Agenten | am 18.11.2026 je einmal ohne Fehler gegen die Claude API gelaufen: Projektauftrag, Anforderungen, Entwurf, Testplan, Plan im Gespräch ändern, Durchführung, Kontrolle, Lessons Learned |
 | Abwesenheit aus einem Änderungswunsch | gebaut und ohne Netz getestet; **noch nicht gegen die echte API gelaufen** |
 | KI-Lab | eingebettet; Ablauf, Zeitlimit und Export im Browser geprüft, ein erfolgreicher KI-Aufruf noch nicht ([Prüfprotokoll](04-Prototyp/ki_lab/VERIFIKATION.md)) |
 | Vergleich mit Versuchspersonen | steht aus |
@@ -283,6 +284,6 @@ Das Repository ist öffentlich. Teamdaten (`data/`), Protokolle (`logs/`), Sitzu
 und `.env` bleiben lokal und sind per `.gitignore` ausgeschlossen.
 
 Die Agenten schicken Projektidee und Teamdaten (Namen, Skills, Wochenstunden, Notizen) an die
-Anthropic API, das KI-Lab schickt in KI-Runden Fallmaterial, Entwurf und Frage an OpenAI. Die
+OpenAI API, das KI-Lab schickt in KI-Runden Fallmaterial, Entwurf und Frage ebenfalls an OpenAI. Die
 Website verlangt deshalb vor jedem Aufruf die Bestätigung, dass alle Personen zugestimmt haben.
 Die Namen der Gruppe stehen erst im Repository, wenn alle zugestimmt haben.

@@ -1,9 +1,11 @@
-"""The whole agent loop offline: the real SDK tool runner talks to a scripted fake API."""
+"""The whole agent loop offline: the real SDK client talks to a scripted fake API."""
 
 import json
+import os
 from datetime import date, datetime
 
 import pytest
+from conftest import completion as reply
 from test_tools import PROJECT, TEAM, plan_input
 
 from pm_agent import agent
@@ -11,19 +13,6 @@ from pm_agent.agent import PlanningError, run_planning, run_replanning
 from pm_agent.models import Plan
 from pm_agent.planning import check_plan
 from pm_agent.workbench import load_run
-
-
-def reply(content, stop_reason="tool_use"):
-    return {
-        "id": "msg_test",
-        "type": "message",
-        "role": "assistant",
-        "model": "claude-opus-5-5",
-        "content": content,
-        "stop_reason": stop_reason,
-        "stop_sequence": None,
-        "usage": {"input_tokens": 1200, "output_tokens": 300},
-    }
 
 
 def submit(plan, call_id):
@@ -58,9 +47,9 @@ def test_a_rejected_plan_goes_back_to_claude_and_every_round_is_logged(api, tmp_
     assert plan == Plan.model_validate(plan_input())
     # The UI shows each round while the run goes on, with the tool results already filled in.
     assert [r["tool_results"][0]["is_error"] for r in seen] == [True, False]
-    (rejection,) = requests[1]["messages"][-1]["content"]
-    assert rejection["is_error"] is True
-    assert "Plan abgelehnt" in json.dumps(rejection, ensure_ascii=False)
+    rejection = requests[1]["messages"][-1]
+    assert (rejection["role"], rejection["tool_call_id"]) == ("tool", "call_1")
+    assert "Plan abgelehnt" in rejection["content"]
 
     log = read_log(tmp_path)
     assert log["outcome"] == "plan"
@@ -96,18 +85,11 @@ def test_the_run_stops_after_the_last_round_without_an_accepted_plan(api, tmp_pa
 
 
 def test_missing_credentials_are_a_planning_error_in_german(monkeypatch, tmp_path):
-    for name in (
-        "ANTHROPIC_API_KEY",
-        "ANTHROPIC_AUTH_TOKEN",
-        "ANTHROPIC_PROFILE",
-        "ANTHROPIC_IDENTITY_TOKEN",
-        "ANTHROPIC_IDENTITY_TOKEN_FILE",
-    ):
-        monkeypatch.delenv(name, raising=False)
-    for home in ("HOME", "USERPROFILE", "APPDATA", "XDG_CONFIG_HOME"):  # no saved login profile
-        monkeypatch.setenv(home, str(tmp_path / "home"))
+    for name in [n for n in os.environ if n.startswith("OPENAI_")]:
+        monkeypatch.delenv(name)
+    monkeypatch.setenv("PM_AGENT_MODEL", "gpt-test")
 
-    with pytest.raises(PlanningError, match="ANTHROPIC_API_KEY"):
+    with pytest.raises(PlanningError, match="OPENAI_API_KEY"):
         run_planning(PROJECT, TEAM, log_dir=tmp_path)
 
     assert read_log(tmp_path)["outcome"] == "error"
@@ -115,7 +97,7 @@ def test_missing_credentials_are_a_planning_error_in_german(monkeypatch, tmp_pat
 
 def test_a_run_without_plan_is_logged_with_the_error(api, tmp_path):
     replies, _ = api
-    replies.append(reply([{"type": "text", "text": "Ich brauche mehr Infos."}], "end_turn"))
+    replies.append(reply([{"type": "text", "text": "Ich brauche mehr Infos."}]))
 
     with pytest.raises(PlanningError, match="ohne einen Plan einzureichen"):
         run_planning(PROJECT, TEAM, log_dir=tmp_path)
@@ -124,7 +106,7 @@ def test_a_run_without_plan_is_logged_with_the_error(api, tmp_path):
     assert log["outcome"] == "error"
     assert "ohne einen Plan einzureichen" in log["error"]
     assert log["plan"] is None
-    assert log["rounds"][0]["stop_reason"] == "end_turn"
+    assert log["rounds"][0]["stop_reason"] == "stop"
 
 
 def test_replanning_sends_the_current_plan_and_the_wish_and_logs_both(api, tmp_path):
@@ -139,10 +121,9 @@ def test_replanning_sends_the_current_plan_and_the_wish_and_logs_both(api, tmp_p
 
     assert (plan, absences) == (Plan.model_validate(longer), [])
     (request,) = requests
-    asked = request["messages"][0]["content"]
+    system, asked = (m["content"] for m in request["messages"])
     assert "Das Datenmodell braucht doppelt so lange." in asked
     assert '"title": "Datenmodell"' in asked  # the current plan goes along
-    system = json.dumps(request["system"], ensure_ascii=False)
     assert "Änderung eines bestehenden Plans" in system
     assert "Inhalt des Plans" in system  # the rules for a plan still apply
     log = read_log(tmp_path)
@@ -164,7 +145,7 @@ def test_planning_sends_the_requirements_and_logs_them(api, tmp_path):
     replies, requests = api
     replies += [reply([submit(plan_input(), "call_1")])]
     run_planning(PROJECT, TEAM, log_dir=tmp_path, requirements=NEEDS, covered=frozenset({"R7"}))
-    sent = requests[0]["messages"][0]["content"]
+    sent = requests[0]["messages"][1]["content"]
     sent = sent if isinstance(sent, str) else json.dumps(sent, ensure_ascii=False)
     assert "Freigegebene Anforderungen" in sent and "Raum buchen" in sent
     assert "Schon durch fertige Arbeit erfüllt: R7" in sent
@@ -175,7 +156,7 @@ def test_planning_without_requirements_sends_and_logs_none(api, tmp_path):
     replies, requests = api
     replies += [reply([submit(plan_input(), "call_1")])]
     run_planning(PROJECT, TEAM, log_dir=tmp_path)
-    assert "Anforderungen" not in json.dumps(requests[0]["messages"], ensure_ascii=False)
+    assert "Anforderungen" not in json.dumps(requests[0]["messages"][1:], ensure_ascii=False)
     assert "requirements" not in read_log(tmp_path)
 
 
@@ -188,7 +169,7 @@ def test_an_approved_design_goes_to_the_planner_without_its_flows(api, tmp_path)
     plan = Plan.model_validate(plan_input())
     run_replanning(PROJECT, TEAM, plan, "Schneller.", log_dir=tmp_path, design=design())
     for request in requests:
-        sent = json.dumps(request["messages"][0], ensure_ascii=False)
+        sent = json.dumps(request["messages"][1], ensure_ascii=False)
         assert "Freigegebener Entwurf" in sent and "Buchung anlegen" in sent
         # The flows name requirements the planner may not see.
         assert "Raum buchen" not in sent and "A1" not in sent
@@ -198,7 +179,7 @@ def test_without_a_design_the_planner_hears_nothing_of_it(api, tmp_path):
     replies, requests = api
     replies += [reply([submit(plan_input(), "call_1")])]
     run_planning(PROJECT, TEAM, log_dir=tmp_path)
-    assert "Entwurf" not in json.dumps(requests[0]["messages"], ensure_ascii=False)
+    assert "Entwurf" not in json.dumps(requests[0]["messages"][1:], ensure_ascii=False)
 
 
 def test_replanning_can_set_the_absence_a_wish_names_and_logs_it(api, tmp_path):
@@ -218,7 +199,7 @@ def test_replanning_can_set_the_absence_a_wish_names_and_logs_it(api, tmp_path):
         log_dir=tmp_path,
     )
     assert result.absences == [MemberAbsence.model_validate(away)]
-    assert "set_absence" in [tool["name"] for tool in requests[0]["tools"]]
+    assert "set_absence" in [tool["function"]["name"] for tool in requests[0]["tools"]]
     assert read_log(tmp_path)["absences"] == [away]
 
     (path,) = tmp_path.glob("run-*.json")
@@ -233,5 +214,52 @@ def test_a_new_plan_gets_no_tool_for_absences(api, tmp_path):
     replies, requests = api
     replies += [reply([submit(plan_input(), "call_1")])]
     run_planning(PROJECT, TEAM, log_dir=tmp_path)
-    assert "set_absence" not in [tool["name"] for tool in requests[0]["tools"]]
+    assert "set_absence" not in [tool["function"]["name"] for tool in requests[0]["tools"]]
     assert "absences" not in read_log(tmp_path)
+
+
+def test_input_that_is_no_json_object_and_an_unknown_tool_go_back_as_errors(api, tmp_path):
+    # The API sends tool input as text. Broken text must not end the run: the model corrects it.
+    replies, requests = api
+    broken = reply([submit(plan_input(), "call_1")])
+    broken["choices"][0]["message"]["tool_calls"][0]["function"]["arguments"] = '{"tasks": ['
+    unknown = reply([{"type": "tool_use", "id": "call_2", "name": "delete_plan", "input": {}}])
+    replies += [broken, unknown, reply([submit(plan_input(), "call_3")])]
+
+    run_planning(PROJECT, TEAM, log_dir=tmp_path)
+
+    first, second, third = read_log(tmp_path)["rounds"]
+    assert first["tool_results"][0] == {
+        "tool": "submit_plan",
+        "is_error": True,
+        "content": "Ungültige Eingabe: kein gültiges JSON-Objekt.",
+    }
+    assert second["tool_results"][0]["content"] == "Dieses Werkzeug gibt es nicht."
+    assert third["tool_results"][0]["is_error"] is False
+    assert requests[1]["messages"][-1]["content"] == first["tool_results"][0]["content"]
+
+
+def test_without_a_model_name_nothing_is_sent(api, monkeypatch, tmp_path):
+    _, requests = api
+    monkeypatch.delenv("PM_AGENT_MODEL")
+    monkeypatch.delenv("PM_MODEL", raising=False)
+    with pytest.raises(PlanningError, match="PM_AGENT_MODEL ist nicht gesetzt"):
+        run_planning(PROJECT, TEAM, log_dir=tmp_path)
+    assert requests == []
+    monkeypatch.setenv("PM_MODEL", "gpt-lab")  # the KI-Lab's setting serves both
+    requests_before = len(requests)
+    with pytest.raises(IndexError):  # the fake has no reply scripted: the request went out
+        run_planning(PROJECT, TEAM, log_dir=tmp_path / "second")
+    assert requests[requests_before]["model"] == "gpt-lab"
+
+
+def test_the_reasoning_effort_is_sent_only_when_set(api, monkeypatch, tmp_path):
+    # Some models take function tools in chat completions only with reasoning_effort "none";
+    # others reject the parameter. So it is a setting, and absent by default.
+    replies, requests = api
+    replies += [reply([submit(plan_input(), "call_1")])] * 2
+    run_planning(PROJECT, TEAM, log_dir=tmp_path)
+    monkeypatch.setenv("PM_AGENT_REASONING_EFFORT", "none")
+    run_planning(PROJECT, TEAM, log_dir=tmp_path)
+    assert ["reasoning_effort" in r for r in requests] == [False, True]
+    assert requests[1]["reasoning_effort"] == "none"

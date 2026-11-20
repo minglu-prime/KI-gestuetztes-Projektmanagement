@@ -54,8 +54,12 @@ zehn Phasen und wie sie zusammenhängen in `04-Prototyp/pm_agent/docs/lebenszykl
 
 - Neun Schritte als Seiten, vom Projektauftrag bis zum Abschluss; Betrieb und der nächste
   Durchlauf sind Reiter im Abschluss. Das Menü gruppiert nach Phase (Vorbereiten, Umsetzen),
-  nicht danach, wo ein Agent arbeitet. 624 Tests.
-- Am 18.11.2026 liefen alle Agenten einmal ohne Fehler gegen die echte API: Projektauftrag,
+  nicht danach, wo ein Agent arbeitet. 626 Tests.
+- Seit dem 20.11.2026 rufen die Agenten die OpenAI API auf (Chat Completions, `agent._run`;
+  `OPENAI_API_KEY`, `PM_AGENT_MODEL`, bei Bedarf `OPENAI_BASE_URL` und `PM_AGENT_REASONING_EFFORT`
+  in `.env`). Live lief bisher nur die Planung, gegen einen kompatiblen Endpunkt (20.11.2026). Die
+  Oberfläche nennt das Modell weiter „Claude“; die Umbenennung steht aus.
+- Am 18.11.2026 liefen alle Agenten einmal ohne Fehler gegen die Claude API: Projektauftrag,
   Anforderungen, Entwurf, Testplan, Planung, Plan im Gespräch ändern, Durchführung,
   Kontrolle, Lessons Learned. Noch nicht live gelaufen: eine Abwesenheit, die der Agent beim
   Umplanen selbst einträgt (`set_absence`).

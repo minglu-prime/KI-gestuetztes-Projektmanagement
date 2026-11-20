@@ -1,22 +1,21 @@
-"""The agent loop and the planning agent. Claude drafts a result, a deterministic tool checks
-it, and Claude corrects it until the submit tool accepts it. The project lead reviews the
+"""The agent loop and the planning agent. The model (an OpenAI model; the pages still call it
+Claude, after the model the site was built with) drafts a result, a deterministic tool checks
+it, and the model corrects it until the submit tool accepts it. The project lead reviews the
 result. The agents for Durchführung and Kontrolle (followup.py) use the same loop.
 """
 
 import json
 import os
 from collections.abc import Callable
-from contextlib import closing
 from datetime import datetime
 from pathlib import Path
 from typing import Any, NamedTuple, TypeVar
 
-from anthropic import Anthropic
+from openai import OpenAI, OpenAIError
 
 from pm_agent.models import Design, Member, MemberAbsence, Plan, Project, Requirement
-from pm_agent.tools import PlanningTools, Submission
+from pm_agent.tools import PlanningTools, Submission, Tool, ToolError
 
-DEFAULT_MODEL = "claude-opus-5-5"
 # One round is one reply from Claude. Drafting, a few checks and the submission take about
 # five; ten without an accepted result means Claude is stuck.
 MAX_ROUNDS = 10
@@ -26,17 +25,6 @@ SYSTEM_PROMPT = (PROMPTS / "planning.md").read_text(encoding="utf-8")
 REPLANNING_PROMPT = SYSTEM_PROMPT + "\n\n" + (PROMPTS / "replanning.md").read_text(encoding="utf-8")
 # 04-Prototyp/pm_agent/logs, next to the package and git-ignored: logs hold team data.
 LOG_DIR = Path(__file__).resolve().parents[2] / "logs"
-
-# The SDK's tool runner ends quietly on these replies. None of them can lead to a result.
-_STOP_ERRORS = {
-    "max_tokens": (
-        "Die Antwort von Claude wurde abgeschnitten, weil sie zu lang war. "
-        "Beschreibe das Projekt knapper oder plane es in Teilen."
-    ),
-    "model_context_window_exceeded": (
-        "Der Verlauf passt nicht mehr ins Kontextfenster von Claude. Starte die Planung neu."
-    ),
-}
 
 T = TypeVar("T")
 
@@ -189,7 +177,7 @@ def run_agent(
     noun: str,
     system: str,
     request: str,
-    tools: list[Any],
+    tools: list[Tool],
     result: Callable[[], T | None],
     record: Callable[[T | None], dict[str, Any]],
     log_dir: Path | None = LOG_DIR,
@@ -227,50 +215,99 @@ def _run(
     noun: str,
     system: str,
     request: str,
-    tools: list[Any],
+    tools: list[Tool],
     result: Callable[[], T | None],
     rounds: list[dict[str, Any]],
     on_round: Callable[[dict[str, Any]], None],
 ) -> T:
-    client = Anthropic()
-    # The SDK checks credentials only when it sends, and then raises a bare TypeError.
-    if client.api_key is None and client.auth_token is None and client.credentials is None:
+    try:
+        client = OpenAI()  # reads OPENAI_API_KEY and, for another endpoint, OPENAI_BASE_URL
+    except OpenAIError:
         raise AgentError(
-            "Kein Zugang zur Claude API: ANTHROPIC_API_KEY ist nicht gesetzt. Trage den "
+            "Kein Zugang zur OpenAI API: OPENAI_API_KEY ist nicht gesetzt. Trage den "
             "Schlüssel in 04-Prototyp/pm_agent/.env ein und starte mit --env-file .env."
+        ) from None
+    model = _model()
+    if not model:  # no default: which models an account may use differs
+        raise AgentError(
+            "Kein Modell gewählt: PM_AGENT_MODEL ist nicht gesetzt. Trage den Namen eines "
+            "OpenAI-Modells in 04-Prototyp/pm_agent/.env ein und starte mit --env-file .env."
         )
-    runner = client.beta.messages.tool_runner(
-        model=_model(),
-        max_tokens=16_000,
-        system=system,
-        messages=[{"role": "user", "content": request}],
-        tools=tools,
-        output_config={"effort": "high"},
-        cache_control={"type": "ephemeral"},  # every round resends the history
-        # On a refusal the API reruns the request on a fallback model it picks, in the same call.
-        betas=["server-side-fallback-2026-07-01"],
-        fallbacks="default",
-        # Full history in every request: no conversation copy with team data stays on the server.
-        thread=False,
-        max_iterations=MAX_ROUNDS,
-    )
-    message = None
-    with closing(runner):
-        for message in runner:
-            rounds.append(_round(message))
-            details = message.stop_details
-            raise_for_stop_reason(message.stop_reason, details.category if details else None)
-            # Runs the tools now; the runner reuses the result for the next request.
-            response = runner.generate_tool_call_response()
-            rounds[-1]["tool_results"] = _tool_results(message, response)
-            on_round(rounds[-1])
-            accepted = result()
-            if accepted is not None:
-                return accepted
-    if message is not None and message.stop_reason == "end_turn":
-        said = " ".join(block.text for block in message.content if block.type == "text")
-        raise AgentError(f"Claude hat aufgehört, ohne einen {noun} einzureichen. {said}".rstrip())
+    by_name = {tool.name: tool for tool in tools}
+    # Not sent unless set: models differ in what they take (see .env.example).
+    effort = os.environ.get("PM_AGENT_REASONING_EFFORT")
+    effort = {"reasoning_effort": effort} if effort else {}
+    # The whole history goes along in every request. Chat completions are not kept on the
+    # server unless asked for (`store`), so no copy with team data stays there.
+    messages: list[dict[str, Any]] = [
+        {"role": "system", "content": system},
+        {"role": "user", "content": request},
+    ]
+    said = ""
+    for _ in range(MAX_ROUNDS):
+        completion = client.chat.completions.create(
+            model=model,
+            messages=messages,
+            tools=[tool.definition() for tool in tools],
+            **effort,
+        )
+        choice = completion.choices[0]
+        calls = [(call, _arguments(call)) for call in choice.message.tool_calls or []]
+        rounds.append(_round(completion, calls))
+        raise_for_stop_reason(choice.finish_reason, choice.message.refusal)
+        said = choice.message.content or ""
+        messages.append(
+            {
+                "role": "assistant",
+                "content": choice.message.content,
+                "tool_calls": [
+                    {
+                        "id": call.id,
+                        "type": "function",
+                        "function": {
+                            "name": call.function.name,
+                            "arguments": call.function.arguments,
+                        },
+                    }
+                    for call, _ in calls
+                ],
+            }
+        )
+        for call, data in calls:
+            content, is_error = _call(by_name.get(call.function.name), data)
+            messages.append({"role": "tool", "tool_call_id": call.id, "content": content})
+            rounds[-1]["tool_results"].append(
+                {"tool": call.function.name, "is_error": is_error, "content": content}
+            )
+        on_round(rounds[-1])
+        accepted = result()
+        if accepted is not None:
+            return accepted
+        if not calls:  # an answer in words: nothing to correct, the model has stopped
+            raise AgentError(
+                f"Claude hat aufgehört, ohne einen {noun} einzureichen. {said}".rstrip()
+            )
     raise AgentError(f"Claude hat nach {MAX_ROUNDS} Runden noch keinen gültigen {noun}.")
+
+
+def _arguments(call: Any) -> Any:
+    """The input of a tool call. The API sends it as JSON text; text that is none stays text."""
+    try:
+        return json.loads(call.function.arguments)
+    except ValueError:
+        return call.function.arguments
+
+
+def _call(tool: Tool | None, data: Any) -> tuple[str, bool]:
+    """Runs a tool: what it answers, and whether that is a rejection the model must correct."""
+    if tool is None:
+        return "Dieses Werkzeug gibt es nicht.", True
+    if not isinstance(data, dict):
+        return "Ungültige Eingabe: kein gültiges JSON-Objekt.", True
+    try:
+        return tool.call(data), False
+    except ToolError as err:
+        return err.content, True
 
 
 def _write_log(log_dir: Path, prefix: str, started: datetime, entry: dict[str, Any]) -> Path:
@@ -289,51 +326,39 @@ def _write_log(log_dir: Path, prefix: str, started: datetime, entry: dict[str, A
             number += 1
 
 
-def raise_for_stop_reason(stop_reason: str | None, refusal_category: str | None) -> None:
-    if stop_reason == "refusal":
-        category = f" (Kategorie: {refusal_category})" if refusal_category else ""
+def raise_for_stop_reason(stop_reason: str | None, refusal: str | None) -> None:
+    """Replies that cannot lead to a result. `refusal` is what the model said when it declined."""
+    if stop_reason == "content_filter" or refusal:
+        why = f": {refusal.rstrip('.')}" if refusal else ""
+        raise AgentError(f"Claude hat die Anfrage abgelehnt{why}. Formuliere die Projektidee um.")
+    if stop_reason == "length":
         raise AgentError(
-            f"Claude hat die Anfrage abgelehnt{category}. Formuliere die Projektidee um."
+            "Die Antwort von Claude wurde abgeschnitten, weil sie zu lang war. "
+            "Beschreibe das Projekt knapper oder plane es in Teilen."
         )
-    if stop_reason in _STOP_ERRORS:
-        raise AgentError(_STOP_ERRORS[stop_reason])
 
 
 def _model() -> str:
-    return os.environ.get("PM_AGENT_MODEL") or DEFAULT_MODEL
+    """PM_AGENT_MODEL, or the model the KI-Lab uses (PM_MODEL): one setting serves both."""
+    return os.environ.get("PM_AGENT_MODEL") or os.environ.get("PM_MODEL") or ""
 
 
-def _round(message: Any) -> dict[str, Any]:
-    """What Claude did in one reply. `model` can differ from the requested one after a
-    refusal fallback."""
+def _round(completion: Any, calls: list[tuple[Any, Any]]) -> dict[str, Any]:
+    """What the model did in one reply, in the shape the logs have had from the start
+    (`input_tokens`, `output_tokens`), so that earlier logs and new ones read alike."""
+    choice, usage = completion.choices[0], completion.usage
     return {
-        "model": message.model,
-        "stop_reason": message.stop_reason,
-        "usage": message.usage.model_dump(exclude_none=True),
-        "text": " ".join(b.text for b in message.content if b.type == "text"),
-        "tool_calls": [
-            {"name": b.name, "input": b.input} for b in message.content if b.type == "tool_use"
-        ],
+        "model": completion.model,
+        "stop_reason": choice.finish_reason,
+        "usage": (
+            {"input_tokens": usage.prompt_tokens, "output_tokens": usage.completion_tokens}
+            if usage
+            else {}
+        ),
+        "text": choice.message.content or "",
+        "tool_calls": [{"name": call.function.name, "input": data} for call, data in calls],
         "tool_results": [],
     }
-
-
-def _tool_results(message: Any, response: dict[str, Any] | None) -> list[dict[str, Any]]:
-    names = {b.id: b.name for b in message.content if b.type == "tool_use"}
-    return [
-        {
-            "tool": names.get(result["tool_use_id"]),
-            "is_error": bool(result.get("is_error")),
-            "content": _text(result.get("content")),
-        }
-        for result in (response or {}).get("content", [])
-    ]
-
-
-def _text(content: Any) -> str:
-    if isinstance(content, str):
-        return content
-    return "\n".join(block.get("text", "") for block in content or [])
 
 
 class Trace(NamedTuple):

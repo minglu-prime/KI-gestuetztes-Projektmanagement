@@ -536,7 +536,7 @@ def test_a_team_or_project_that_cannot_be_saved_is_said_not_thrown(with_plan, mo
 
 def test_an_agent_error_is_shown_to_the_project_lead(app, monkeypatch):
     def failing_run(project, team, on_round=None):
-        raise PlanningError("Kein Zugang zur Claude API: ANTHROPIC_API_KEY ist nicht gesetzt.")
+        raise PlanningError("Kein Zugang zur OpenAI API: OPENAI_API_KEY ist nicht gesetzt.")
 
     monkeypatch.setattr(agent, "run_planning", failing_run)
     at = fill_project(app)
@@ -546,7 +546,7 @@ def test_an_agent_error_is_shown_to_the_project_lead(app, monkeypatch):
     assert not at.exception
     assert [e.value for e in at.error] == [
         # Shown as written: the underscores would set "API" in italics.
-        ui.as_text("Kein Zugang zur Claude API: ANTHROPIC_API_KEY ist nicht gesetzt.")
+        ui.as_text("Kein Zugang zur OpenAI API: OPENAI_API_KEY ist nicht gesetzt.")
     ]
     assert any("Noch kein Plan" in i.value for i in at.info)
 
@@ -683,7 +683,7 @@ def flow_site(site, monkeypatch):
     # AppTest executes each page's imports after this patch. date.today() itself,
     # adoption timestamps and download filenames are deliberately not frozen.
     monkeypatch.setattr(tracking, "evaluate", on_test_day)
-    monkeypatch.setattr(agent, "Anthropic", unexpected_provider)
+    monkeypatch.setattr(agent, "OpenAI", unexpected_provider)
     monkeypatch.setattr(agent, "run_planning", planned)
     monkeypatch.setattr(followup, "run_status_summary", unexpected_provider)
     monkeypatch.setattr(followup, "run_control_report", unexpected_provider)
@@ -1450,7 +1450,7 @@ def test_a_damaged_team_file_shows_no_link(local, monkeypatch, tmp_path):
 
 def test_a_failing_agent_shows_the_reason_and_no_result(tracked, monkeypatch):
     def failing(adopted, today, on_round=None):
-        raise AgentError("Kein Zugang zur Claude API: ANTHROPIC_API_KEY ist nicht gesetzt.")
+        raise AgentError("Kein Zugang zur OpenAI API: OPENAI_API_KEY ist nicht gesetzt.")
 
     monkeypatch.setattr(followup, "run_control_report", failing)
     at = tracked.switch_page("views/kontrolle.py").run()
@@ -1461,7 +1461,7 @@ def test_a_failing_agent_shows_the_reason_and_no_result(tracked, monkeypatch):
 
     assert not at.exception
     assert [e.value for e in at.error] == [
-        ui.as_text("Kein Zugang zur Claude API: ANTHROPIC_API_KEY ist nicht gesetzt.")
+        ui.as_text("Kein Zugang zur OpenAI API: OPENAI_API_KEY ist nicht gesetzt.")
     ]
     assert "Bewertung" not in {m.label for m in at.metric}
 
@@ -1545,7 +1545,7 @@ def test_a_charter_written_by_hand_needs_no_claude(site):
 
 def test_an_agent_error_on_the_auftrag_is_shown(site, monkeypatch):
     def failing(project, on_round=None):
-        raise AgentError("Kein Zugang zur Claude API: ANTHROPIC_API_KEY ist nicht gesetzt.")
+        raise AgentError("Kein Zugang zur OpenAI API: OPENAI_API_KEY ist nicht gesetzt.")
 
     monkeypatch.setattr(lifecycle, "run_charter", failing)
     at = enter_project(site.switch_page("views/auftrag.py").run())
@@ -1554,7 +1554,7 @@ def test_an_agent_error_on_the_auftrag_is_shown(site, monkeypatch):
     at = at.run()
     assert not at.exception
     # Unescaped for the page: the underscores may come escaped for Markdown.
-    assert "ANTHROPIC_API_KEY ist nicht gesetzt" in at.error[0].value.replace("\\_", "_")
+    assert "OPENAI_API_KEY ist nicht gesetzt" in at.error[0].value.replace("\\_", "_")
     assert lifecycle.load() is None or lifecycle.load().charter is None
 
 
