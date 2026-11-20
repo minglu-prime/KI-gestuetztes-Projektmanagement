@@ -234,6 +234,9 @@ def _run(
             "OpenAI-Modells in 04-Prototyp/pm_agent/.env ein und starte mit --env-file .env."
         )
     by_name = {tool.name: tool for tool in tools}
+    # Not sent unless set: models differ in what they take (see .env.example).
+    effort = os.environ.get("PM_AGENT_REASONING_EFFORT")
+    effort = {"reasoning_effort": effort} if effort else {}
     # The whole history goes along in every request. Chat completions are not kept on the
     # server unless asked for (`store`), so no copy with team data stays there.
     messages: list[dict[str, Any]] = [
@@ -243,7 +246,10 @@ def _run(
     said = ""
     for _ in range(MAX_ROUNDS):
         completion = client.chat.completions.create(
-            model=model, messages=messages, tools=[tool.definition() for tool in tools]
+            model=model,
+            messages=messages,
+            tools=[tool.definition() for tool in tools],
+            **effort,
         )
         choice = completion.choices[0]
         calls = [(call, _arguments(call)) for call in choice.message.tool_calls or []]

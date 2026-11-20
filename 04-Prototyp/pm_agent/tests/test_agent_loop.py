@@ -251,3 +251,15 @@ def test_without_a_model_name_nothing_is_sent(api, monkeypatch, tmp_path):
     with pytest.raises(IndexError):  # the fake has no reply scripted: the request went out
         run_planning(PROJECT, TEAM, log_dir=tmp_path / "second")
     assert requests[requests_before]["model"] == "gpt-lab"
+
+
+def test_the_reasoning_effort_is_sent_only_when_set(api, monkeypatch, tmp_path):
+    # Some models take function tools in chat completions only with reasoning_effort "none";
+    # others reject the parameter. So it is a setting, and absent by default.
+    replies, requests = api
+    replies += [reply([submit(plan_input(), "call_1")])] * 2
+    run_planning(PROJECT, TEAM, log_dir=tmp_path)
+    monkeypatch.setenv("PM_AGENT_REASONING_EFFORT", "none")
+    run_planning(PROJECT, TEAM, log_dir=tmp_path)
+    assert ["reasoning_effort" in r for r in requests] == [False, True]
+    assert requests[1]["reasoning_effort"] == "none"
