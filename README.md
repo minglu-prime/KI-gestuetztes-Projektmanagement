@@ -18,7 +18,7 @@ Claude schlägt vor. Python prüft nach. Die Projektleitung entscheidet.
 [Schnellstart](#schnellstart) ·
 [Stand und Grenzen](#stand-und-grenzen)
 
-<img src="04-Prototyp/pm_agent/assets/screenshots/startseite.jpg" width="900" alt="Startseite der Website: links das Menü mit Vorbereiten, Agenten, Experiment und Info, Überschrift „Der Agent schlägt vor. Du entscheidest.“, daneben die drei Schritte Claude schlägt vor, Python prüft nach, Du entscheidest; darunter das aktuelle Projekt mit 24 Aufgaben, 0 % Fortschritt und 5 im Verzug">
+<img src="04-Prototyp/pm_agent/assets/screenshots/startseite.jpg" width="900" alt="Startseite der Website: links das Menü mit Vorbereiten, Umsetzen, Experiment und Info, Überschrift „Der Agent schlägt vor. Du entscheidest.“, daneben die drei Schritte Claude schlägt vor, Python prüft nach, Du entscheidest; darunter das aktuelle Projekt mit 24 Aufgaben, 0 % Fortschritt und 8 im Verzug">
 
 </div>
 
@@ -90,10 +90,10 @@ Ausgabe-Token, Modell `claude-opus-5-5`. Projekt (Web-App zum Buchen von Lernrä
 
 Eine Streamlit-Anwendung, die nur auf dem eigenen Rechner läuft. Das Menü folgt dem Ablauf eines
 Softwareprojekts: Startseite; Vorbereiten (Projektauftrag, Anforderungen, Entwurf, Testplan);
-Agenten (Planung, Durchführung, Test, Kontrolle, Abschluss, Betrieb, Iteration); Experiment
-(KI-Lab); Info (Über uns, Impressum). Über jeder dieser Seiten steht der Projektpfad mit allen
-elf Schritten und darunter, was als Nächstes zu tun ist. Die Screenshots zeigen das erfundene
-Beispielprojekt vom 19.11.2026.
+Umsetzen (Planung, Durchführung, Test, Kontrolle, Abschluss); Experiment (KI-Lab); Info (Über
+uns, Impressum). Betrieb und der nächste Durchlauf sind Reiter im Abschluss. Über jeder dieser
+Seiten steht der Projektpfad mit allen neun Schritten und darunter, was als Nächstes zu tun ist. Die Screenshots zeigen das erfundene
+Beispielprojekt vom 20.11.2026.
 
 ### Planung
 
@@ -153,13 +153,13 @@ Verzug behandelt.
 
 Die Kontrolle sagt auch, was ein Verzug bedeutet. Die **Prognose** plant alles, was noch nicht
 fertig ist, ab heute neu ein und vergleicht das Ende mit Plan und Deadline. Im Beispiel unten
-ist noch kein Fortschritt erfasst, fünf Aufgaben sind über ihr geplantes Ende; die Folge ist ein
-Ende acht Arbeitstage nach Plan und sechs Arbeitstage nach der Deadline. Die Fortschrittstabelle der Durchführung zeigt dasselbe je
+ist noch kein Fortschritt erfasst, acht Aufgaben sind über ihr geplantes Ende; die Folge ist ein
+Ende neun Arbeitstage nach Plan und sieben Arbeitstage nach der Deadline. Die Fortschrittstabelle der Durchführung zeigt dasselbe je
 Aufgabe: „Prognose Ende“ neben dem geplanten Ende. Darüber steht, was daraus für die Woche folgt:
 wer in den nächsten fünf Arbeitstagen womit beginnt.
 
 <div align="center">
-<img src="04-Prototyp/pm_agent/assets/screenshots/durchfuehrung.jpg" width="820" alt="Seite Durchführung: oben der Projektpfad und „Jetzt dran“ mit dem Knopf zur Kontrolle, dann die Marken „0 von 24 Aufgaben fertig“, „0 in Arbeit“, „5 im Verzug“, der Fortschrittsbalken und der Bereich „Die nächsten fünf Arbeitstage“ mit der Demo der Woche und fünf Aufgaben samt Beginn, Ende und Status">
+<img src="04-Prototyp/pm_agent/assets/screenshots/durchfuehrung.jpg" width="820" alt="Seite Durchführung: oben der Projektpfad und „Jetzt dran“ mit dem Knopf zur Kontrolle, dann die Marken „0 von 24 Aufgaben fertig“, „0 in Arbeit“, „8 im Verzug“, der Fortschrittsbalken und der Bereich „Die nächsten fünf Arbeitstage“ mit der Demo der Woche und fünf Aufgaben samt Beginn, Ende und Status">
 </div>
 
 Von dort geht es zurück in die Planung: „Rest mit Claude umplanen“ lädt die unfertigen Aufgaben
@@ -185,7 +185,7 @@ Fertigstellungswert und Ist-Stunden, daraus SPI und CPI, mit der Kurve des Planw
 Laufzeit.
 
 <div align="center">
-<img src="04-Prototyp/pm_agent/assets/screenshots/kontrolle-earned-value.jpg" width="820" alt="Bereich Earned Value auf der Seite Kontrolle: Planwert bis heute 76,5 h, Fertigstellungswert 0 h, Ist-Stunden 0 h, SPI 0,00, CPI nicht berechenbar, weil keine Ist-Stunden erfasst sind; darunter die Kurve des Planwerts vom 09.11. bis zum 15.12. mit den Punkten für heute">
+<img src="04-Prototyp/pm_agent/assets/screenshots/kontrolle-earned-value.jpg" width="820" alt="Bereich Earned Value auf der Seite Kontrolle: Planwert bis heute 83,5 h, Fertigstellungswert 0 h, Ist-Stunden 0 h, SPI 0,00, CPI nicht berechenbar, weil keine Ist-Stunden erfasst sind; darunter die Kurve des Planwerts vom 09.11. bis zum 15.12. mit den Punkten für heute">
 </div>
 
 Alles zusammen gibt es als **Kontrollbericht**: ein Markdown-Dokument aus einer Vorlage mit
@@ -193,7 +193,7 @@ Kennzahlen, Prognose, Verzug, Kosten und, wenn erstellt, der Bewertung des Agent
 nachgerechneter Wirkung.
 
 <div align="center">
-<img src="04-Prototyp/pm_agent/assets/screenshots/kontrolle.jpg" width="820" alt="Prognose auf der Seite Kontrolle: voraussichtliches Ende 28.12.2026, acht Arbeitstage nach Plan, Deadline um sechs Arbeitstage verpasst; die drei verspäteten Aufgaben, die andere aufhalten; der Knopf „Rest mit Claude umplanen“; Diagramm mit Plan und Prognose je Aufgabe und Linien für heute und die Deadline">
+<img src="04-Prototyp/pm_agent/assets/screenshots/kontrolle.jpg" width="820" alt="Prognose auf der Seite Kontrolle: voraussichtliches Ende 29.12.2026, neun Arbeitstage nach Plan, Deadline um sieben Arbeitstage verpasst; die drei verspäteten Aufgaben, die andere aufhalten; der Knopf „Rest mit Claude umplanen“; Diagramm mit Plan und Prognose je Aufgabe und Linien für heute und die Deadline">
 </div>
 
 ### KI-Lab

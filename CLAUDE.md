@@ -50,9 +50,11 @@ zehn Phasen und wie sie zusammenhängen in `04-Prototyp/pm_agent/docs/lebenszykl
 - **Windows.** Python öffnet keine Pfade der Form `/d/...`, `D:/...` verwenden. Für Umlaute in
   der Konsole `PYTHONIOENCODING=utf-8` setzen.
 
-## Stand am 19.11.2026
+## Stand am 20.11.2026
 
-- `main` 8420d1d: alle elf Schritte als Seiten (Projektauftrag bis Iteration), 622 Tests.
+- Neun Schritte als Seiten, vom Projektauftrag bis zum Abschluss; Betrieb und der nächste
+  Durchlauf sind Reiter im Abschluss. Das Menü gruppiert nach Phase (Vorbereiten, Umsetzen),
+  nicht danach, wo ein Agent arbeitet. 624 Tests.
 - Am 18.11.2026 liefen alle Agenten einmal ohne Fehler gegen die echte API: Projektauftrag,
   Anforderungen, Entwurf, Testplan, Planung, Plan im Gespräch ändern, Durchführung,
   Kontrolle, Lessons Learned. Noch nicht live gelaufen: eine Abwesenheit, die der Agent beim
