@@ -250,7 +250,7 @@ Einzelheiten zu Seiten, Agenten und Entwicklung:
 
 | Teil | Stand |
 |---|---|
-| Wechsel zur OpenAI API (20.11.2026) | Agentenschleife und Werkzeuge umgestellt und ohne Netz getestet; **noch kein Lauf gegen die OpenAI API**. Die Seiten nennen das Modell weiter „Claude“ |
+| Wechsel zur OpenAI API (20.11.2026) | Agentenschleife und Werkzeuge umgestellt und ohne Netz getestet. Die Planung lief am 20.11.2026 einmal gegen einen OpenAI-kompatiblen Endpunkt (`gpt-6-sol`, 3 Runden, 38 s, Plan ohne Fehler und Warnungen); **die übrigen Agenten sind gegen ihn noch nicht gelaufen**. Die Seiten nennen das Modell weiter „Claude“ |
 | Erster Plan mit Claude | gegen die Claude API gelaufen (Protokolle vom 11.11. und 18.11.2026) |
 | Alle übrigen Agenten | am 18.11.2026 je einmal ohne Fehler gegen die Claude API gelaufen: Projektauftrag, Anforderungen, Entwurf, Testplan, Plan im Gespräch ändern, Durchführung, Kontrolle, Lessons Learned |
 | Abwesenheit aus einem Änderungswunsch | gebaut und ohne Netz getestet; **noch nicht gegen die echte API gelaufen** |

@@ -8,7 +8,8 @@ entscheidet.
 Stand: alle Schritte vom Projektauftrag bis zur Iteration als eigene Seiten, jeder mit Claude
 als Vorschlag, deterministischer Prüfung und Entscheidung der Projektleitung. Alle Agenten liefen
 am 18.11.2026 einmal ohne Fehler gegen die Claude API. Seit dem 20.11.2026 rufen sie die
-OpenAI API auf (Chat Completions); gegen sie ist noch kein Agent gelaufen. Das KI-Lab (Vergleichsexperiment,
+OpenAI API auf (Chat Completions); gegen einen kompatiblen Endpunkt lief bisher nur die Planung
+(20.11.2026). Das KI-Lab (Vergleichsexperiment,
 `../ki_lab`) ist eingebettet.
 
 ## Oberfläche
@@ -124,7 +125,8 @@ Umplanung zum Durchrechnen) kommen in `followup.py` neben das Einreichen-Werkzeu
 
 Zugang: `.env.example` nach `.env` kopieren, `OPENAI_API_KEY` und das Modell in
 `PM_AGENT_MODEL` eintragen (kein Standard; ohne den Wert gilt `PM_MODEL` des KI-Labs). Ein
-anderer OpenAI-kompatibler Endpunkt lässt sich mit `OPENAI_BASE_URL` setzen. Die Seiten nennen
+anderer OpenAI-kompatibler Endpunkt lässt sich mit `OPENAI_BASE_URL` setzen; verlangt ein Modell
+dort `reasoning_effort`, steht der Wert in `PM_AGENT_REASONING_EFFORT`. Die Seiten nennen
 das Modell weiter „Claude“, nach dem Modell, mit dem die Website entstand.
 
 ## Entwicklung
