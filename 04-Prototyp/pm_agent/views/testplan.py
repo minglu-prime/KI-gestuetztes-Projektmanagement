@@ -38,7 +38,7 @@ state = st.session_state
 st.header("Testplan")
 st.caption(
     "Woran erkennt man, dass das System tut, was die Anforderungen verlangen, und dass seine "
-    "Teile zusammenpassen? Claude entwirft Testfälle aus den Akzeptanzkriterien und den "
+    "Teile zusammenpassen? Der Agent entwirft Testfälle aus den Akzeptanzkriterien und den "
     "Schnittstellen, Python prüft die Abdeckung, du änderst und gibst frei. Ausführen wird "
     "das Team; die Ergebnisse trägst du auf der Seite Test ein."
 )
@@ -65,16 +65,17 @@ elif "freigegeben" not in (requirements_state(life), design_state(life)):
         "anlegen; geprüft wird gegen den Stand, wie er gerade ist."
     )
 
-# 2 · Entwurf von Claude ------------------------------------------------------------------
+# 2 · Entwurf vom Agenten ------------------------------------------------------------------
 with st.container(border=True, key="panel-draft"):
     heading(
         "smart_toy",
-        "Entwurf von Claude",
-        claude="entwirft aus Kriterien und Schnittstellen",
+        "Entwurf vom Agenten",
+        agent="entwirft aus Kriterien und Schnittstellen",
         python="prüft die Abdeckung",
     )
     st.caption(
-        "An Claude gehen Projektidee, Termine, Anforderungen und Schnittstellen, keine Angaben "
+        "An den Agenten gehen Projektidee, Termine, Anforderungen und Schnittstellen, keine "
+        "Angaben "
         "zum Team. Python gibt den Entwurf zurück, bis jedes Akzeptanzkriterium einer "
         "Muss-Anforderung einen Testfall hat."
     )
@@ -87,13 +88,13 @@ with st.container(border=True, key="panel-draft"):
             "Die vorhandenen Testfälle durch einen neuen Entwurf ersetzen.", key="cases_replace"
         )
     if st.button(
-        "Testfälle mit Claude entwerfen",
+        "Testfälle mit dem Agenten entwerfen",
         icon=":material/play_arrow:",
         type="primary" if life.cases is None else "secondary",
         disabled=life.project is None or not replace or not allowed,
     ):
         drafted = run_with_progress(
-            "Claude entwirft die Testfälle …",
+            "Der Agent entwirft die Testfälle …",
             lambda on_round: lifecycle.run_cases(
                 life.project, life.requirements, life.design, on_round=on_round
             ),
@@ -108,7 +109,7 @@ with st.container(border=True, key="panel-draft"):
 with st.container(border=True, key="panel-cases"):
     heading("rule", "Testfälle", du="änderst und ergänzt", python="prüft")
     if life.cases is None and life.project is not None:  # without it, the top says what is missing
-        st.info("Noch keine Testfälle. Lass sie von Claude entwerfen oder trag sie selbst ein.")
+        st.info("Noch keine Testfälle. Lass sie vom Agenten entwerfen oder trag sie selbst ein.")
     st.caption(
         "Eine Zeile pro Testfall. Kriterien (R1.1 …) durch Komma, Schritte durch Semikolon "
         "getrennt. Ein Integrationstest nennt eine Schnittstelle (S1 …) und, wenn er einen Fehler "

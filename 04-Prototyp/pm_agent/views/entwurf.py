@@ -40,7 +40,7 @@ state = st.session_state
 
 st.header("Entwurf")
 st.caption(
-    "Wie ist das System gebaut? Claude entwirft aus den Anforderungen die Bausteine, ihre "
+    "Wie ist das System gebaut? Der Agent entwirft aus den Anforderungen die Bausteine, ihre "
     "Schnittstellen und die Abläufe zwischen ihnen. Python prüft, dass jeder Ablauf zu den "
     "Schnittstellen passt, und zeichnet daraus die Sequenzdiagramme. Du änderst und gibst frei."
 )
@@ -71,16 +71,17 @@ elif needs_phase != "freigegeben":
         "geprüft wird gegen die Anforderungen, wie sie gerade stehen."
     )
 
-# 2 · Entwurf von Claude ------------------------------------------------------------------
+# 2 · Entwurf vom Agenten ------------------------------------------------------------------
 with st.container(border=True, key="panel-draft"):
     heading(
         "smart_toy",
-        "Entwurf von Claude",
-        claude="entwirft aus den Anforderungen",
+        "Entwurf vom Agenten",
+        agent="entwirft aus den Anforderungen",
         python="prüft die Abläufe",
     )
     st.caption(
-        "An Claude gehen Projektidee, Termine, Projektauftrag und Anforderungen, keine Angaben "
+        "An den Agenten gehen Projektidee, Termine, Projektauftrag und Anforderungen, keine "
+        "Angaben "
         "zum Team. Python gibt den Entwurf zurück, bis jede Muss-Anforderung einen Ablauf hat "
         "und jeder Schritt zu seiner Schnittstelle passt."
     )
@@ -91,13 +92,13 @@ with st.container(border=True, key="panel-draft"):
             "Den vorhandenen Entwurf durch einen neuen ersetzen.", key="design_replace"
         )
     if st.button(
-        "Entwurf mit Claude entwerfen",
+        "Entwurf mit dem Agenten entwerfen",
         icon=":material/play_arrow:",
         type="primary" if life.design is None else "secondary",
         disabled=life.project is None or not replace or not allowed,
     ):
         drafted = run_with_progress(
-            "Claude entwirft das System …",
+            "Der Agent entwirft das System …",
             lambda on_round: lifecycle.run_design(
                 life.project, life.charter, life.requirements, on_round=on_round
             ),
@@ -133,7 +134,7 @@ CONFIG = {
 with st.container(border=True, key="panel-design"):
     heading("account_tree", "Bausteine und Abläufe", du="änderst und ergänzt", python="prüft")
     if life.design is None and life.project is not None:  # without it, the top says what is missing
-        st.info("Noch kein Entwurf. Lass ihn von Claude entwerfen oder trag ihn selbst ein.")
+        st.info("Noch kein Entwurf. Lass ihn vom Agenten entwerfen oder trag ihn selbst ein.")
     rows = (
         design_rows(life.design) if life.design is not None else {key: [] for key, _, _ in TABLES}
     )

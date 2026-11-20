@@ -4,7 +4,7 @@
 
 **KI-gestütztes Projektmanagement · Projektgruppe 4 · HSBI, Modul IPM, Thema 4**
 
-Claude schlägt vor. Python prüft nach. Die Projektleitung entscheidet.
+Der Agent schlägt vor. Python prüft nach. Die Projektleitung entscheidet.
 
 [![pm-agent](https://github.com/minglu-prime/KI-gestuetztes-Projektmanagement/actions/workflows/pm-agent.yml/badge.svg)](https://github.com/minglu-prime/KI-gestuetztes-Projektmanagement/actions/workflows/pm-agent.yml)
 ![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-23654c)
@@ -18,7 +18,7 @@ Claude schlägt vor. Python prüft nach. Die Projektleitung entscheidet.
 [Schnellstart](#schnellstart) ·
 [Stand und Grenzen](#stand-und-grenzen)
 
-<img src="04-Prototyp/pm_agent/assets/screenshots/startseite.jpg" width="900" alt="Startseite der Website: links das Menü mit Vorbereiten, Umsetzen, Experiment und Info, Überschrift „Der Agent schlägt vor. Du entscheidest.“, daneben die drei Schritte Claude schlägt vor, Python prüft nach, Du entscheidest; darunter das aktuelle Projekt mit 24 Aufgaben, 0 % Fortschritt und 8 im Verzug">
+<img src="04-Prototyp/pm_agent/assets/screenshots/startseite.jpg" width="900" alt="Startseite der Website: links das Menü mit Vorbereiten, Umsetzen, Experiment und Info, Überschrift „Der Agent schlägt vor. Du entscheidest.“, daneben die drei Schritte der Agent schlägt vor, Python prüft nach, Du entscheidest; darunter das aktuelle Projekt mit 24 Aufgaben, 0 % Fortschritt und 8 im Verzug">
 
 </div>
 
@@ -45,33 +45,33 @@ und wo er es nicht sollte:
 ## So arbeitet der Agent
 
 Ein Sprachmodell rechnet nicht zuverlässig. Deshalb rechnet es hier nicht: Termine, Auslastung,
-kritischer Pfad und Verzug kommen aus Python, und jedes Ergebnis von Claude geht durch eine
+kritischer Pfad und Verzug kommen aus Python, und jedes Ergebnis vom Agenten geht durch eine
 deterministische Prüfung, bevor ein Mensch es sieht.
 
 ```mermaid
 flowchart LR
-    PL([Projektleitung]) -- Idee, Team oder Änderungswunsch --> C[Claude entwirft]
+    PL([Projektleitung]) -- Idee, Team oder Änderungswunsch --> C[Der Agent entwirft]
     C -- Entwurf --> P{Python prüft}
     P -- abgelehnt, mit Begründung --> C
     P -- ohne Fehler --> V[Vorschlag mit den Unterschieden zum bisherigen Plan]
     V --> E([Projektleitung übernimmt oder verwirft])
 ```
 
-- **Claude schlägt vor.** Der Agent bekommt Projektidee und Team und reicht einen Plan über ein
+- **Der Agent schlägt vor.** Der Agent bekommt Projektidee und Team und reicht einen Plan über ein
   Werkzeug ein. Freitext als Ergebnis gibt es nicht.
 - **Python prüft.** `check_plan` terminiert den Plan und meldet Fehler (unbekannte Person,
   zyklische Abhängigkeit) und Warnungen (Deadline verpasst, kein Puffer, Überlastung, fehlender
-  Skill). Ein Plan mit Fehlern wird abgelehnt und geht mit den Gründen zurück an Claude.
+  Skill). Ein Plan mit Fehlern wird abgelehnt und geht mit den Gründen zurück an den Agenten.
 - **Der Mensch entscheidet.** Warnungen bleiben stehen, bis die Projektleitung sie gesehen hat.
-  Auch die Unterschiede zwischen zwei Plänen berechnet Python, nicht Claude: Worüber entschieden
+  Auch die Unterschiede zwischen zwei Plänen berechnet Python, nicht der Agent: Worüber entschieden
   wird, hängt nicht an der Zusammenfassung des Modells.
 
 ## Ein echter Lauf
 
-So sah ein Planungslauf gegen die Claude API aus. Die Website zeigt jede Runde: was Claude
+So sah ein Planungslauf gegen die Claude API aus. Die Website zeigt jede Runde: was der Agent
 geändert hat und was die Prüfung darauf geantwortet hat.
 
-| Runde | Claude | Prüfung |
+| Runde | Agent | Prüfung |
 |---|---|---|
 | 1 | Erster Entwurf: 17 Aufgaben, 220 h | Planende 30.12., **8 Arbeitstage nach der Deadline** |
 | 2 | Aufgaben neu geschnitten und neu verteilt: 18 Aufgaben, 214 h | Planende 22.12., noch **2 Arbeitstage zu spät** |
@@ -109,18 +109,18 @@ Das Ergebnis zeigt Terminplan mit kritischem Pfad, Auslastung je Person, Risiken
 Begründung jeder Zuweisung. Der Plan lässt sich als Markdown oder CSV exportieren und als
 Projekt übernehmen.
 
-Zu jeder Aufgabe gibt es die Antwort auf „Warum diese Person, und was hängt daran?“: Claudes
-Begründung, die Stufe der Person in jedem verlangten Skill, was vorher fertig sein muss und was
+Zu jeder Aufgabe gibt es die Antwort auf „Warum diese Person, und was hängt daran?“: die Begründung
+des Agenten, die Stufe der Person in jedem verlangten Skill, was vorher fertig sein muss und was
 darauf wartet, wie viele Arbeitstage Puffer die Aufgabe hat, und wer im Team sie sonst
-übernehmen könnte. Nur die Begründung stammt von Claude, alles andere rechnet Python.
+übernehmen könnte. Nur die Begründung stammt vom Agenten, alles andere rechnet Python.
 
 <div align="center">
-<img src="04-Prototyp/pm_agent/assets/screenshots/planung-aufgabe.jpg" width="820" alt="Aufgabe im Detail: Person, Stunden, Zeitraum und Puffer als Marken, Claudes Begründung, Skills, Vorgänger und Nachfolger, darunter wer die Aufgabe sonst übernehmen könnte">
+<img src="04-Prototyp/pm_agent/assets/screenshots/planung-aufgabe.jpg" width="820" alt="Aufgabe im Detail: Person, Stunden, Zeitraum und Puffer als Marken, die Begründung des Agenten, Skills, Vorgänger und Nachfolger, darunter wer die Aufgabe sonst übernehmen könnte">
 </div>
 
 ### Den Plan im Gespräch ändern
 
-Im Schritt Anpassen nimmt Claude einen Wunsch oder eine Annahme entgegen, zum Beispiel „Clara
+Im Schritt Anpassen nimmt der Agent einen Wunsch oder eine Annahme entgegen, zum Beispiel „Clara
 übernimmt die Tests“ oder „Was, wenn das Backend doppelt so lange dauert?“. Das Ergebnis ist ein
 Vorschlag mit den Unterschieden zum aktuellen Plan:
 
@@ -130,7 +130,7 @@ Planende: 11.11.2026 → 12.11.2026 (1 Arbeitstag später)
 Termine von 2 Aufgaben verschieben sich
 ```
 
-Erst „Übernehmen“ macht ihn gültig. Wer Claude nicht fragen will, ändert die Tabelle darunter
+Erst „Übernehmen“ macht ihn gültig. Wer den Agenten nicht fragen will, ändert die Tabelle darunter
 von Hand; dann läuft nur die Prüfung.
 
 Was sich zu fragen lohnt, leitet Python aus der Prüfung ab und bietet es als Schaltfläche an:
@@ -139,7 +139,7 @@ geben, der den verlangten Skill hat, oder durchspielen, was passiert, wenn die l
 auf dem kritischen Pfad doppelt so lange dauert.
 
 <div align="center">
-<img src="04-Prototyp/pm_agent/assets/screenshots/planung-gespraech.jpg" width="820" alt="Schritt Anpassen: Bereich „Mit Claude ändern“ mit den Rollen Claude, Python und Du, einem aus der Prüfung vorgeschlagenen Wunsch als Schaltfläche und der Eingabezeile">
+<img src="04-Prototyp/pm_agent/assets/screenshots/planung-gespraech.jpg" width="820" alt="Schritt Anpassen: Bereich „Mit dem Agenten ändern“ mit den Rollen Agent, Python und Du, einem aus der Prüfung vorgeschlagenen Wunsch als Schaltfläche und der Eingabezeile">
 </div>
 
 ### Durchführung und Kontrolle
@@ -162,8 +162,8 @@ wer in den nächsten fünf Arbeitstagen womit beginnt.
 <img src="04-Prototyp/pm_agent/assets/screenshots/durchfuehrung.jpg" width="820" alt="Seite Durchführung: oben der Projektpfad und „Jetzt dran“ mit dem Knopf zur Kontrolle, dann die Marken „0 von 24 Aufgaben fertig“, „0 in Arbeit“, „8 im Verzug“, der Fortschrittsbalken und der Bereich „Die nächsten fünf Arbeitstage“ mit der Demo der Woche und fünf Aufgaben samt Beginn, Ende und Status">
 </div>
 
-Von dort geht es zurück in die Planung: „Rest mit Claude umplanen“ lädt die unfertigen Aufgaben
-als Plan ab heute, und das Gespräch mit Claude beginnt mit genau dem Problem, das die Prognose
+Von dort geht es zurück in die Planung: „Rest mit dem Agenten umplanen“ lädt die unfertigen Aufgaben
+als Plan ab heute, und das Gespräch mit dem Agenten beginnt mit genau dem Problem, das die Prognose
 gezeigt hat. Wer den neuen Plan übernimmt, wählt, ob die bisherige Arbeit erhalten bleibt: Fertige
 Aufgaben und gebuchte Stunden zählen dann als frühere Arbeit in allen Kennzahlen und Berichten
 weiter.
@@ -177,7 +177,7 @@ flowchart LR
 ```
 
 Schlägt der Kontroll-Agent vor, Aufgaben einer anderen Person zu geben, rechnet Python nach, was
-das für das voraussichtliche Ende bedeutet. Das Ergebnis steht neben der Wirkung, die Claude
+das für das voraussichtliche Ende bedeutet. Das Ergebnis steht neben der Wirkung, die der Agent
 erwartet. Maßnahmen ohne Umverteilung sind als nicht nachrechenbar markiert.
 
 Dazu kommt die **Earned-Value-Analyse** nach der 0/100-Methode: Planwert bis heute,
@@ -193,7 +193,7 @@ Kennzahlen, Prognose, Verzug, Kosten und, wenn erstellt, der Bewertung des Agent
 nachgerechneter Wirkung.
 
 <div align="center">
-<img src="04-Prototyp/pm_agent/assets/screenshots/kontrolle.jpg" width="820" alt="Prognose auf der Seite Kontrolle: voraussichtliches Ende 29.12.2026, neun Arbeitstage nach Plan, Deadline um sieben Arbeitstage verpasst; die drei verspäteten Aufgaben, die andere aufhalten; der Knopf „Rest mit Claude umplanen“; Diagramm mit Plan und Prognose je Aufgabe und Linien für heute und die Deadline">
+<img src="04-Prototyp/pm_agent/assets/screenshots/kontrolle.jpg" width="820" alt="Prognose auf der Seite Kontrolle: voraussichtliches Ende 29.12.2026, neun Arbeitstage nach Plan, Deadline um sieben Arbeitstage verpasst; die drei verspäteten Aufgaben, die andere aufhalten; der Knopf „Rest mit dem Agenten umplanen“; Diagramm mit Plan und Prognose je Aufgabe und Linien für heute und die Deadline">
 </div>
 
 ### KI-Lab
@@ -250,11 +250,10 @@ Einzelheiten zu Seiten, Agenten und Entwicklung:
 
 | Teil | Stand |
 |---|---|
-| Wechsel zur OpenAI API (20.11.2026) | Agentenschleife und Werkzeuge umgestellt und ohne Netz getestet. Die Planung lief am 20.11.2026 einmal gegen einen OpenAI-kompatiblen Endpunkt (`gpt-6-sol`, 3 Runden, 38 s, Plan ohne Fehler und Warnungen); **die übrigen Agenten sind gegen ihn noch nicht gelaufen**. Die Seiten nennen das Modell weiter „Claude“ |
-| Erster Plan mit Claude | gegen die Claude API gelaufen (Protokolle vom 11.11. und 18.11.2026) |
-| Alle übrigen Agenten | am 18.11.2026 je einmal ohne Fehler gegen die Claude API gelaufen: Projektauftrag, Anforderungen, Entwurf, Testplan, Plan im Gespräch ändern, Durchführung, Kontrolle, Lessons Learned |
-| Abwesenheit aus einem Änderungswunsch | gebaut und ohne Netz getestet; **noch nicht gegen die echte API gelaufen** |
-| KI-Lab | eingebettet; Ablauf, Zeitlimit und Export im Browser geprüft, ein erfolgreicher KI-Aufruf noch nicht ([Prüfprotokoll](04-Prototyp/ki_lab/VERIFIKATION.md)) |
+| Wechsel zur OpenAI API (20.11.2026) | Agenten rufen die OpenAI Responses API auf (mit Reasoning). Am 20.11.2026 lief jeder Agent einmal ohne Fehler gegen einen OpenAI-kompatiblen Endpunkt (`gpt-6-sol`), auch die Abwesenheit aus einem Wunsch; ebenso eine KI-Runde des KI-Labs. **Gütebeurteilung der Ergebnisse steht aus** |
+| Erster Plan mit dem Agenten | gegen die Claude API gelaufen (Protokolle vom 11.11. und 18.11.2026) |
+| Frühere Läufe | am 18.11.2026 je einmal ohne Fehler gegen die Claude API: alle Agenten außer der Abwesenheit aus einem Wunsch |
+| KI-Lab | eingebettet; Ablauf, Zeitlimit und Export im Browser geprüft, eine KI-Runde gegen den OpenAI-kompatiblen Endpunkt lief am 20.11.2026 ([Prüfprotokoll](04-Prototyp/ki_lab/VERIFIKATION.md)) |
 | Vergleich mit Versuchspersonen | steht aus |
 
 Was der Prototyp bewusst vereinfacht:
@@ -273,7 +272,7 @@ Was der Prototyp bewusst vereinfacht:
 - **Prognose:** Die restliche Arbeit beginnt heute und wird nach derselben Regel eingeplant,
   bei Gleichstand Begonnenes vor Offenem. Ein Projekt genau im Plan bekommt deshalb seinen
   Plan als Prognose, und
-  „Rest mit Claude umplanen“ zeigt in der Planung dasselbe Ende wie die Prognose.
+  „Rest mit dem Agenten umplanen“ zeigt in der Planung dasselbe Ende wie die Prognose.
   Ohne eingetragenen Rest zählt eine begonnene Aufgabe mit Schätzung minus Ist-Stunden.
 - **Kosten:** Stunden mal Stundensatz. Token-Kosten der Agenten werden gezählt, aber nicht in
   Euro umgerechnet.

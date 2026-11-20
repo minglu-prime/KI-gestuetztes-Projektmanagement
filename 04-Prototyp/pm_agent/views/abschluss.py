@@ -97,7 +97,7 @@ def on_signoff(requirements: dict[str, Requirement]) -> None:
 st.header("Abschluss")
 st.caption(
     "Ist jede Anforderung erfüllt, und was lernen wir daraus? Python schlägt aus Testergebnissen "
-    "und Fehlern vor, was sich abnehmen lässt; du entscheidest je Anforderung. Claude entwirft "
+    "und Fehlern vor, was sich abnehmen lässt; du entscheidest je Anforderung. Der Agent entwirft"
     "die Lessons Learned aus Rückblicken und Fehlern. Betrieb und der nächste Durchlauf stehen "
     "in den Reitern daneben."
 )
@@ -179,16 +179,17 @@ with closing_tab:
         heading(
             "lightbulb",
             "Lessons Learned",
-            claude="entwirft",
+            agent="entwirft",
             python="prüft die Bezüge",
             du="änderst",
         )
         st.caption(
-            "An Claude gehen Kennzahlen, Wochenrückblicke, Fehler und Abnahmen, keine Angaben zum "
+            "An den Agenten gehen Kennzahlen, Wochenrückblicke, Fehler und Abnahmen, keine Angaben "
+            "zum "
             "Team. Freie Texte können trotzdem Namen enthalten, daher die Zustimmung."
         )
         if st.button(
-            "Lessons Learned mit Claude entwerfen",
+            "Lessons Learned mit dem Agenten entwerfen",
             icon=":material/play_arrow:",
             disabled=not consent(
                 "consent_abschluss",
@@ -196,7 +197,7 @@ with closing_tab:
             ),
         ):
             drafted = run_with_progress(
-                "Claude entwirft die Lessons Learned …",
+                "Der Agent entwirft die Lessons Learned …",
                 lambda on_round: closing.run_lessons(tracking, today, on_round=on_round),
             )
             if drafted is not None and save_lessons(tracking, drafted.items):
@@ -299,7 +300,7 @@ with operations_tab:
 with next_tab:
     st.caption(
         "Was kommt in den nächsten Durchlauf? Python stellt den Backlog zusammen, jeder Eintrag "
-        "mit seiner Herkunft. Mit dem neuen Durchlauf beginnt ein neues Vorhaben: Claude bekommt "
+        "mit seiner Herkunft. Mit dem neuen Durchlauf beginnt ein neues Vorhaben: Der Agent bekommt"
         "den Backlog beim Entwurf der Anforderungen."
     )
     with st.container(border=True, key="panel-backlog"):

@@ -62,7 +62,7 @@ def show(charter: Charter) -> None:
 st.header("Projektauftrag")
 st.caption(
     "Warum gibt es das Projekt, was gehört dazu und woran sieht man am Ende den Erfolg? "
-    "Claude entwirft den Auftrag, Python prüft ihn, du änderst ihn und gibst ihn frei. Aus "
+    "Der Agent entwirft den Auftrag, Python prüft ihn, du änderst ihn und gibst ihn frei. Aus "
     "ihm entstehen danach die Anforderungen und der Plan."
 )
 life = saved_lifecycle()
@@ -107,16 +107,16 @@ with st.container(border=True, key="panel-eckdaten"):
             state.auftrag_basis = updated.project
     st.caption("Freie Tage für alle trägst du in der Planung ein (Schritt Projekt).")
 
-# 2 · Entwurf von Claude ------------------------------------------------------------------
+# 2 · Entwurf vom Agenten ------------------------------------------------------------------
 with st.container(border=True, key="panel-draft"):
     heading(
         "smart_toy",
-        "Entwurf von Claude",
-        claude="entwirft aus Idee und Terminen",
+        "Entwurf vom Agenten",
+        agent="entwirft aus Idee und Terminen",
         python="prüft ihn",
     )
     st.caption(
-        "An Claude gehen nur Projektidee, Start und Deadline, keine Angaben zum Team. Ist der "
+        "An den Agenten gehen nur Projektidee, Start und Deadline, keine Angaben zum Team. Ist der "
         "Entwurf fehlerhaft, gibt Python ihn mit den Gründen zurück, bis er stimmt."
     )
     allowed = consent("charter_consent", "Projektidee und Projekttermine")
@@ -127,13 +127,13 @@ with st.container(border=True, key="panel-draft"):
             key="charter_replace",
         )
     if st.button(
-        "Projektauftrag mit Claude entwerfen",
+        "Projektauftrag mit dem Agenten entwerfen",
         icon=":material/play_arrow:",
         type="primary" if life.charter is None else "secondary",
         disabled=project is None or project != life.project or not replace or not allowed,
     ):
         drafted = run_with_progress(
-            "Claude entwirft den Projektauftrag …",
+            "Der Agent entwirft den Projektauftrag …",
             lambda on_round: lifecycle.run_charter(project, on_round=on_round),
         )
         if drafted is not None:
@@ -147,7 +147,7 @@ with st.container(border=True, key="panel-charter"):
     heading("edit_note", "Projektauftrag", du="änderst und ergänzt", python="prüft")
     if life.charter is None:
         st.info(
-            "Noch kein Projektauftrag. Lass ihn von Claude entwerfen oder schreib ihn hier selbst."
+            "Noch kein Projektauftrag. Lass ihn vom Agenten entwerfen oder schreib ihn hier selbst."
         )
     if "charter_goal" not in state:
         if life.charter is not None:

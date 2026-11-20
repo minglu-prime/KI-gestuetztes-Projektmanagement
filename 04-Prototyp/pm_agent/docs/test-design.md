@@ -14,12 +14,12 @@ vermuteter Ursache, der in die Durchführung zurückgeht.
 
 ## Ziele
 
-- **Testfälle:** Claude entwirft sie aus zwei Quellen, Python prüft die Abdeckung:
+- **Testfälle:** der Agent entwirft sie aus zwei Quellen, Python prüft die Abdeckung:
   - je Akzeptanzkriterium (R1.1, R1.2 …) mindestens ein Testfall;
   - je Schnittstelle mindestens ein Integrationstest, und je Fehlercode des Vertrags
     (`409 Raum belegt`) ein Testfall, der ihn auslöst.
 - **Ergebnisse:** Die Projektleitung trägt je Testfall ein: bestanden / fehlgeschlagen /
-  blockiert, Datum, Notiz. Fakten trägt der Mensch ein, nicht Claude.
+  blockiert, Datum, Notiz. Fakten trägt der Mensch ein, nicht der Agent.
 - **Fehler:** Jeder fehlgeschlagene Testfall braucht einen Fehlereintrag (Schwere, vermutete
   Ursache, zuständige Aufgabe oder Komponente, Status offen/behoben). Ein Fehler kann eine
   Aufgabe in der Durchführung wieder auf „in Arbeit“ setzen (der Pfeil „Fehler → Durchführung“
@@ -89,7 +89,7 @@ eine Datenänderung an Batch 1 mit Übernahme alter Dateien.
 
 ## Seiten
 
-- **Vorbereiten · Testplan** (nach Entwurf): Entwurf von Claude, Tabelle der Testfälle,
+- **Vorbereiten · Testplan** (nach Entwurf): Entwurf vom Agenten, Tabelle der Testfälle,
   Abdeckung je Kriterium und je Schnittstelle, Freigabe, Markdown. Projektpfad: 7 Schritte.
 - **Agenten · Test** (nach Durchführung): Ergebnisse eintragen, Fehler erfassen, „Aufgabe
   wieder öffnen“ setzt die zuständige Aufgabe auf „in Arbeit“.

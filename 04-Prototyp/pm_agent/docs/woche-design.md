@@ -14,7 +14,7 @@ wir?
 ## Ziele
 
 - **Planung:** Der Plan nennt je Projektwoche eine **Demo**: was gezeigt wird und welche
-  Aufgaben dafür fertig sein müssen. Claude schlägt sie vor, Python prüft sie gegen den
+  Aufgaben dafür fertig sein müssen. Der Agent schlägt sie vor, Python prüft sie gegen den
   Zeitplan.
 - **Kontrolle:** Für jede vergangene Woche ein **Rückblick**: Demo gezeigt (ja / teilweise /
   nein), was schiefging, vermutete Ursache, Maßnahme. Die Fakten trägt der Mensch ein.
@@ -24,7 +24,7 @@ wir?
 
 ## Nicht-Ziele (Batch 3)
 
-- Claude schreibt den Rückblick (später möglich: Claude schlägt Ursache und Maßnahme aus den
+- der Agent schreibt den Rückblick (später möglich: Der Agent schlägt Ursache und Maßnahme aus den
   Daten vor, wie beim Kontrollbericht).
 - Termine, Erinnerungen, Kalender.
 - Demos für frühere Pläne nach „Rest umplanen“ (nur der aktuelle Plan hat Demos).

@@ -137,7 +137,7 @@ def heading(icon: str, text: str, **who: str) -> None:
 
 # The three who act on every agent page. One word each, the same everywhere, also on the
 # Startseite: a reader who does not know agents sees what the machine did and what is theirs.
-ROLES = {"claude": "CLAUDE", "python": "PYTHON", "du": "DU"}
+ROLES = {"agent": "AGENT", "python": "PYTHON", "du": "DU"}
 
 
 def roles(**who: str) -> str:
@@ -156,15 +156,15 @@ def roles(**who: str) -> str:
 
 # The loop of a project, one step per agent page, and who acts in each.
 JOURNEY = [
-    ("auftrag", "Projektauftrag", "Claude entwirft, du gibst frei"),
+    ("auftrag", "Projektauftrag", "Der Agent entwirft, du gibst frei"),
     ("anforderungen", "Anforderungen", "Python prüft die Abdeckung"),
     ("entwurf", "Entwurf", "Python zeichnet die Abläufe"),
     ("testplan", "Testplan", "Python prüft die Abdeckung"),
-    ("planung", "Planung", "Claude entwirft, du übernimmst"),
+    ("planung", "Planung", "Der Agent entwirft, du übernimmst"),
     ("durchfuehrung", "Durchführung", "du trägst den Fortschritt ein"),
     ("testlauf", "Test", "du trägst Ergebnisse und Fehler ein"),
-    ("kontrolle", "Kontrolle", "Python rechnet, Claude bewertet"),
-    ("abschluss", "Abschluss", "du nimmst ab, Claude zieht Lehren"),
+    ("kontrolle", "Kontrolle", "Python rechnet, der Agent bewertet"),
+    ("abschluss", "Abschluss", "du nimmst ab, der Agent zieht Lehren"),
 ]
 PAGES = {
     "auftrag": ("views/auftrag.py", "Zum Projektauftrag"),
@@ -369,7 +369,7 @@ def consent(key: str, data: str = TEAM_DATA) -> bool:
 
 # Streamlit ends a running script when any widget on the page is used. With an agent in
 # the middle of its rounds that loses the run, and the tokens it has used.
-BUSY_HINT = "Solange Claude arbeitet, bricht jeder Klick auf dieser Seite den Lauf ab."
+BUSY_HINT = "Solange der Agent arbeitet, bricht jeder Klick auf dieser Seite den Lauf ab."
 
 # A first redraft can touch every task. The view names the first changes and counts the rest;
 # the proposal the project lead decides on always lists all of them.
@@ -388,7 +388,7 @@ def round_printer(start: Plan | None = None) -> Callable[[dict[str, Any]], None]
         view = describe_round(number, record, previous)
         st.markdown(f"**{as_text(view['headline'])}**")
         if view["said"] and view["said"] not in view["headline"]:
-            st.caption(f"Claude: {as_text(view['said'])}")
+            st.caption(f"Agent: {as_text(view['said'])}")
         if view["size"]:
             st.caption(f"Entwurf: {view['size']}")
         if view["changes"]:

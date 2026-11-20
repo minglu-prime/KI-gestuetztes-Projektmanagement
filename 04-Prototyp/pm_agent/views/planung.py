@@ -319,7 +319,7 @@ context = {**trace, **({"design": design} if design is not None else {})}
 next_line = st.container()
 st.header("Planung")
 st.caption(
-    "Claude schlägt einen Plan vor, Python prüft ihn deterministisch, die Projektleitung "
+    "Der Agent schlägt einen Plan vor, Python prüft ihn deterministisch, die Projektleitung "
     "entscheidet."
 )
 if rest_error:
@@ -401,7 +401,7 @@ with tabs[0]:
 with tabs[1]:
     st.subheader("Projekt")
     st.html(roles(du="beschreibst Ziel und Termine"))
-    st.caption("Was soll bis wann entstehen? Aus der Idee leitet Claude die Aufgaben ab.")
+    st.caption("Was soll bis wann entstehen? Aus der Idee leitet der Agent die Aufgaben ab.")
     if life is not None and life.project is not None:
         st.button(
             "Eckdaten aus dem Projektauftrag übernehmen",
@@ -450,17 +450,18 @@ with tabs[1]:
 
 # 3 · Planung ------------------------------------------------------------------------------
 with tabs[2]:
-    st.subheader("Planung mit Claude")
+    st.subheader("Planung mit dem Agenten")
     new_plan, logged_run = st.columns([3, 2], gap="medium")
-    with new_plan.container(border=True, key="panel-claude", height="stretch"):
+    with new_plan.container(border=True, key="panel-agent", height="stretch"):
         heading(
             "smart_toy",
             "Neuen Plan erstellen",
-            claude="entwirft",
+            agent="entwirft",
             python="prüft jede Runde",
         )
         st.caption(
-            "Claude entwirft, Python prüft, Claude bessert nach, bis der Plan ohne Fehler ist."
+            "Der Agent entwirft, Python prüft, der Agent bessert nach, bis der Plan ohne Fehler "
+            "ist."
         )
         missing = [
             text
@@ -474,13 +475,13 @@ with tabs[2]:
         if missing:
             st.info("Für die Planung fehlt noch: " + ", ".join(missing) + ".")
         if st.button(
-            "Plan mit Claude erstellen",
+            "Plan mit dem Agenten erstellen",
             type="primary",
             icon=":material/play_arrow:",
             disabled=bool(missing),
         ):
             rounds = []
-            with st.status("Claude plant …", expanded=True) as status:
+            with st.status("Der Agent plant …", expanded=True) as status:
                 st.caption(BUSY_HINT)
                 show_round = round_printer()
 
@@ -511,7 +512,7 @@ with tabs[2]:
 
     with logged_run.container(border=True, key="panel-run", height="stretch"):
         heading("history", "Protokollierten Lauf öffnen", du="öffnest einen früheren Lauf")
-        st.caption("Zeigt einen früheren Plan ohne neuen Aufruf von Claude.")
+        st.caption("Zeigt einen früheren Plan ohne neuen Aufruf vom Agenten.")
         try:
             runs = saved_runs()
         except (OSError, ValueError) as err:  # a damaged log file, or one that cannot be read
@@ -653,7 +654,7 @@ with tabs[3]:
             heading(
                 "slideshow",
                 "Demos je Woche",
-                claude="schlägt vor",
+                agent="schlägt vor",
                 python="prüft gegen den Zeitplan",
             )
             demos = demo_rows(state.plan, result, project) if project else []
@@ -665,7 +666,8 @@ with tabs[3]:
                 st.dataframe(pd.DataFrame(demos), hide_index=True)
             else:
                 st.caption(
-                    "Der Plan nennt keine Wochen-Demos. Bitte Claude im Schritt Anpassen darum, "
+                    "Der Plan nennt keine Wochen-Demos. Bitte den Agenten im Schritt Anpassen "
+                    "darum, "
                     "zum Beispiel: „Plane für jede Woche eine Demo.“"
                 )
 
@@ -681,7 +683,7 @@ with tabs[3]:
                 heading("search", "Aufgabe im Detail")
                 st.caption(
                     "Warum diese Person, was hängt an der Aufgabe, und wer könnte sie sonst "
-                    "übernehmen? Die Begründung stammt von Claude, alles andere rechnet Python."
+                    "übernehmen? Die Begründung stammt vom Agenten, alles andere rechnet Python."
                 )
                 names = {task.id: f"{task.id} · {task.title}" for task in state.plan.tasks}
                 chosen = st.selectbox("Aufgabe", list(names), format_func=names.get)
@@ -776,7 +778,7 @@ with tabs[4]:
         heading("edit", "Von Hand ändern", du="änderst die Tabelle", python="prüft erneut")
         st.caption(
             "Ändere Personen, Stunden oder Abhängigkeiten. „Erneut prüfen“ rechnet nur "
-            "deterministisch nach, Claude wird nicht aufgerufen."
+            "deterministisch nach, der Agent wird nicht aufgerufen."
         )
         edited_plan = st.data_editor(
             state.plan_df,
@@ -812,14 +814,14 @@ with tabs[4]:
         with chat_panel:
             heading(
                 "forum",
-                "Mit Claude ändern",
-                claude="ändert auf deinen Wunsch",
+                "Mit dem Agenten ändern",
+                agent="ändert auf deinen Wunsch",
                 python="prüft",
                 du="übernimmst oder verwirfst",
             )
             st.caption(
                 "Sag, was sich ändern soll, oder spiel eine Annahme durch: „Clara übernimmt die "
-                "Tests“, „Was, wenn das Backend doppelt so lange dauert?“. Claude ändert den "
+                "Tests“, „Was, wenn das Backend doppelt so lange dauert?“. Der Agent ändert den "
                 "Plan, Python prüft ihn, du siehst die Unterschiede und entscheidest."
             )
             for turn in state.chat:
@@ -865,7 +867,7 @@ with tabs[4]:
                 with st.chat_message("user"):
                     st.text(wish)
                 change_rounds = []
-                with st.status("Claude ändert den Plan …", expanded=True) as status:
+                with st.status("Der Agent ändert den Plan …", expanded=True) as status:
                     st.caption(BUSY_HINT)
                     with st.container(key="rounds-change"):
                         show_change_round = round_printer(state.plan)
@@ -922,7 +924,7 @@ with tabs[4]:
                     else None
                 )
                 with st.chat_message("assistant"):
-                    st.markdown("**Vorschlag von Claude, von Python geprüft**")
+                    st.markdown("**Vorschlag vom Agenten, von Python geprüft**")
                     st.text(proposal["wish"])
                     proposal["changes"] = [
                         f"Abwesenheit neu: {a.member} {free_days_text([a])}"
@@ -935,7 +937,7 @@ with tabs[4]:
                     if proposal["changes"]:
                         st.markdown("\n".join(f"- {as_text(c)}" for c in proposal["changes"]))
                     else:
-                        st.info("Claude schlägt keine Änderung am Plan vor.")
+                        st.info("Der Agent schlägt keine Änderung am Plan vor.")
                     with st.container(horizontal=True):
                         st.button(
                             "Übernehmen",
@@ -949,7 +951,7 @@ with tabs[4]:
                             "Verwerfen", icon=":material/close:", on_click=decide, args=(False,)
                         )
                     if proposal["rounds"]:
-                        title = f"So ist Claude vorgegangen ({len(proposal['rounds'])} Runden)"
+                        title = f"So ist der Agent vorgegangen ({len(proposal['rounds'])} Runden)"
                         # Open: how Claude got there belongs to the proposal.
                         with (
                             st.expander(title, expanded=True),
@@ -962,10 +964,13 @@ with tabs[4]:
             # The input comes last, below the conversation. Its callback hands the wish to
             # the run that follows, which answers it above.
             if blocked:
-                st.caption("Für eine Änderung mit Claude fehlt noch: " + ", ".join(blocked) + ".")
+                st.caption(
+                    "Für eine Änderung mit dem Agenten fehlt noch: " + ", ".join(blocked) + "."
+                )
             elif unchecked:
                 st.warning(
-                    "In der Tabelle unten stehen Änderungen, die noch nicht geprüft sind. Claude "
+                    "In der Tabelle unten stehen Änderungen, die noch nicht geprüft sind. Der "
+                    "Agent "
                     "bekäme den Plan ohne sie, und sein Vorschlag würde sie überschreiben. "
                     "Übernimm sie mit „Erneut prüfen“ oder setz die Tabelle zurück."
                     + (" Dein Wunsch wurde nicht gestellt." if wish else "")
@@ -1082,7 +1087,7 @@ with tabs[5]:
                     index=None,
                     key="adopt_progress",
                     help="Behalten passt, wenn dieser Plan der neu geplante Rest des Projekts "
-                    "ist (Seite Kontrolle, „Rest mit Claude umplanen“): Fertige Aufgaben und "
+                    "ist (Seite Kontrolle, „Rest mit dem Agenten umplanen“): Fertige Aufgaben und "
                     "gebuchte Stunden bleiben in den Kennzahlen, begonnene Aufgaben gehen im "
                     "neuen Plan weiter.",
                 )
@@ -1095,7 +1100,8 @@ with tabs[5]:
                         st.warning(
                             f"Schon fertig und wieder im Plan: {', '.join(again)}. Behalten "
                             "würde diese Arbeit doppelt zählen. Plane den Rest über die Seite "
-                            "Kontrolle („Rest mit Claude umplanen“), oder verwirf den Fortschritt."
+                            "Kontrolle („Rest mit dem Agenten umplanen“), oder verwirf den "
+                            "Fortschritt."
                         )
                 else:
                     overwrite = st.checkbox(
@@ -1155,13 +1161,13 @@ people = f"Team: {len(team)} Person{'' if len(team) == 1 else 'en'}" if team els
 if not team:
     todo, step = "Trage das Team ein: Name, Skills und Stunden pro Woche.", 0
 elif not consent:
-    todo, step = "Bestätige die Zustimmung des Teams, dass seine Angaben an Claude gehen.", 0
+    todo, step = "Bestätige die Zustimmung des Teams, dass seine Angaben an den Agenten gehen.", 0
 elif project is None:
     todo, step = "Beschreibe Projektidee und Deadline.", 1
 elif state.plan is None:
-    todo, step = "Lass Claude einen Plan erstellen oder öffne einen protokollierten Lauf.", 2
+    todo, step = "Lass den Agenten einen Plan erstellen oder öffne einen protokollierten Lauf.", 2
 elif result.errors:  # team, project and plan are there, so the plan was checked
-    todo, step = "Der Plan hat Fehler. Ändere ihn von Hand oder mit Claude.", 4
+    todo, step = "Der Plan hat Fehler. Ändere ihn von Hand oder mit dem Agenten.", 4
 else:
     todo, step = "Der Plan ist geprüft. Sieh dir das Ergebnis an und übernimm ihn als Projekt.", 5
 with status:

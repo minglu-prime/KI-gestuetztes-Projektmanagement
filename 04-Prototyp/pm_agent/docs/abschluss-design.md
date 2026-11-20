@@ -1,6 +1,6 @@
 # Design-Vorschlag: Abschluss, Betrieb und Iteration (Batch 5 des Lebenszyklus)
 
-Stand 17.11.2026. **Umgesetzt auf dem Branch `feat/closing`, mit den vorgeschlagenen Antworten auf die drei Fragen unten (Archiv unter `data/archiv/<Datum>`, Betrieb optional, Lessons Learned von Claude). Der Projektpfad hat 11 Schritte in einer Zeile, die umbricht.** Baut auf Batch 1–4 auf (Anforderungen,
+Stand 17.11.2026. **Umgesetzt auf dem Branch `feat/closing`, mit den vorgeschlagenen Antworten auf die drei Fragen unten (Archiv unter `data/archiv/<Datum>`, Betrieb optional, Lessons Learned vom Agenten). Der Projektpfad hat 11 Schritte in einer Zeile, die umbricht.** Baut auf Batch 1–4 auf (Anforderungen,
 Entwurf, Wochen-Demos mit Rückblick, Testplan mit Ergebnissen und Fehlern). Gesamtbild:
 `docs/lebenszyklus.md`, Phasen 8–10.
 
@@ -24,7 +24,7 @@ So schließt sich der Kreis im Ablaufdiagramm („nächster Backlog → Anforder
   Testfälle bestanden sind und kein offener Fehler an ihnen hängt.
 - **Abschlussbericht** (Markdown aus Vorlage): Ziel und Erfolgskriterien, Abnahme je
   Anforderung, Termine Plan/Ist, Kennzahlen, Demos und Rückblicke, Fehlerbilanz, Lessons
-  Learned. Claude entwirft die Lessons Learned aus Rückblicken und Fehlern; die
+  Learned. Der Agent entwirft die Lessons Learned aus Rückblicken und Fehlern; die
   Projektleitung ändert sie.
 - **Betriebshandbuch:** je Komponente des Entwurfs Verantwortliche (Rolle, kein Name),
   Bereitstellung, Überwachung, Rücknahme. Störungen erfassen (Datum, Komponente, Auswirkung,
@@ -45,7 +45,7 @@ So schließt sich der Kreis im Ablaufdiagramm („nächster Backlog → Anforder
 
 ## Seiten
 
-- **Abschluss** (nach Kontrolle): Abnahmetabelle, Lessons Learned (Entwurf von Claude),
+- **Abschluss** (nach Kontrolle): Abnahmetabelle, Lessons Learned (Entwurf vom Agenten),
   Abschlussbericht.
 - **Betrieb:** Handbuchtabelle je Komponente, Störungen.
 - **Iteration:** nächster Backlog mit Herkunft, „Als neues Vorhaben beginnen“.
@@ -58,8 +58,8 @@ So schließt sich der Kreis im Ablaufdiagramm („nächster Backlog → Anforder
    `data/archiv/<Datum>/` ablegen? Vorschlag: ja, nichts wird gelöscht.
 2. **Betrieb im Studienprojekt:** Viele Gruppenprojekte gehen nie in Betrieb. Phase 9 als
    optional markieren (Soft Gate wie bisher)? Vorschlag: ja.
-3. **Lessons Learned:** Claude-Entwurf aus Rückblicken und Fehlern (kostet einen API-Lauf)
-   oder nur ein Textfeld? Vorschlag: Entwurf von Claude, wie bei den anderen Dokumenten.
+3. **Lessons Learned:** Entwurf des Agenten aus Rückblicken und Fehlern (kostet einen API-Lauf)
+   oder nur ein Textfeld? Vorschlag: Entwurf vom Agenten, wie bei den anderen Dokumenten.
 
 ## Annahmen
 

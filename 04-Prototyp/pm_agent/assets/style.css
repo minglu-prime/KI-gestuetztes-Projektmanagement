@@ -449,7 +449,7 @@
   padding: 2px 8px;
 }
 .role b { font-size: 11px; letter-spacing: 0.06em; margin-right: 3px; }
-.role.claude { background: #ece7f6; color: #3d2f6b; }
+.role.agent { background: #ece7f6; color: #3d2f6b; }
 .role.python { background: #e2ebf2; color: #1f3f57; }
 .role.du { background: #fbf2df; color: #6b4818; }
 /* Read out, not shown. */

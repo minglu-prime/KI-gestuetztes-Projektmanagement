@@ -271,9 +271,9 @@ def _run(
             return accepted
         if not calls:  # an answer in words: nothing to correct, the model has stopped
             raise AgentError(
-                f"Claude hat aufgehört, ohne einen {noun} einzureichen. {said}".rstrip()
+                f"Der Agent hat aufgehört, ohne einen {noun} einzureichen. {said}".rstrip()
             )
-    raise AgentError(f"Claude hat nach {MAX_ROUNDS} Runden noch keinen gültigen {noun}.")
+    raise AgentError(f"Der Agent hat nach {MAX_ROUNDS} Runden noch keinen gültigen {noun}.")
 
 
 def _effort() -> str:
@@ -339,10 +339,12 @@ def raise_for_stop_reason(stop_reason: str | None, refusal: str | None) -> None:
     """Replies that cannot lead to a result. `refusal` is what the model said when it declined."""
     if stop_reason == "content_filter" or refusal:
         why = f": {refusal.rstrip('.')}" if refusal else ""
-        raise AgentError(f"Claude hat die Anfrage abgelehnt{why}. Formuliere die Projektidee um.")
+        raise AgentError(
+            f"Der Agent hat die Anfrage abgelehnt{why}. Formuliere die Projektidee um."
+        )
     if stop_reason == "length":
         raise AgentError(
-            "Die Antwort von Claude wurde abgeschnitten, weil sie zu lang war. "
+            "Die Antwort vom Agenten wurde abgeschnitten, weil sie zu lang war. "
             "Beschreibe das Projekt knapper oder plane es in Teilen."
         )
 

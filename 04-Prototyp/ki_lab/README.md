@@ -22,8 +22,11 @@ Dann `http://127.0.0.1:8874` öffnen. Der Server ist nur auf dem eigenen Rechner
   Option ist Einbetten verboten. Erlaubt sind nur `http://localhost:<Port>` und
   `http://127.0.0.1:<Port>`.
 
-Für KI-Runden `OPENAI_API_KEY` und `PM_MODEL` setzen. Ohne sie funktionieren die Runden ohne KI;
-KI-Runden melden einen protokollierten Fehler, es gibt keine Demo-Antworten.
+Für KI-Runden `OPENAI_API_KEY` und `PM_MODEL` setzen (ersatzweise gilt `PM_AGENT_MODEL`). Ein
+anderer OpenAI-kompatibler Dienst steht in `OPENAI_BASE_URL`, das Reasoning (Standard `medium`) in
+`PM_LAB_REASONING_EFFORT`. Ohne Schlüssel und Modell funktionieren die Runden ohne KI;
+KI-Runden melden einen protokollierten Fehler, es gibt keine Demo-Antworten. Der Freeze für die
+formale Studie verlangt zusätzlich eine datierte Modell-Snapshot-ID.
 
 Studienleitung (Einladungen, Export, Auswertung): `python manage.py --help`.
 
