@@ -165,8 +165,6 @@ JOURNEY = [
     ("testlauf", "Test", "du trägst Ergebnisse und Fehler ein"),
     ("kontrolle", "Kontrolle", "Python rechnet, Claude bewertet"),
     ("abschluss", "Abschluss", "du nimmst ab, Claude zieht Lehren"),
-    ("betrieb", "Betrieb", "optional"),
-    ("iteration", "Iteration", "Python sammelt den nächsten Backlog"),
 ]
 PAGES = {
     "auftrag": ("views/auftrag.py", "Zum Projektauftrag"),
@@ -178,8 +176,6 @@ PAGES = {
     "testlauf": ("views/testlauf.py", "Zum Test"),
     "kontrolle": ("views/kontrolle.py", "Zur Kontrolle"),
     "abschluss": ("views/abschluss.py", "Zum Abschluss"),
-    "betrieb": ("views/betrieb.py", "Zum Betrieb"),
-    "iteration": ("views/iteration.py", "Zur Iteration"),
 }
 
 
@@ -232,11 +228,6 @@ def journey(page: str) -> None:
         "abschluss": tracking is not None
         and bool(closing.current_signoffs(tracking))
         and not closing.check_closing(tracking, None).errors,
-        "betrieb": tracking is not None
-        and bool(tracking.operations)
-        and life is not None
-        and not closing.check_operations(life.design, tracking.operations).errors,
-        "iteration": False,  # it begins the next run
     }
     # Not approved: a draft or a changed one, or skipped although the project goes on.
     skipped = {

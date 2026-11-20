@@ -2239,7 +2239,7 @@ def test_unsaved_design_lessons_and_handbook_survive_a_visit_to_another_page(tra
         ("views/entwurf.py", "design_steps_", {1: {"Von": "B3"}}, "Von", "B3"),
         ("views/abschluss.py", "lessons_editor_", {0: {"Empfehlung": "neu"}}, "Empfehlung", "neu"),
         (
-            "views/betrieb.py",
+            "views/abschluss.py",
             "operations_editor",
             {0: {"Verantwortlich": "Team"}},
             "Verantwortlich",
@@ -2276,7 +2276,7 @@ def test_the_operations_page_checks_the_handbook_and_records_incidents(tracked):
     from test_lifecycle import design
 
     lifecycle.save(lifecycle.Lifecycle(project=PROJECT, design=design()))
-    at = tracked.switch_page("views/betrieb.py").run()
+    at = tracked.switch_page("views/abschluss.py").run()
     assert not at.exception
     assert any("keine Verantwortlichen" in e.value for e in at.error)
 
@@ -2316,7 +2316,7 @@ def test_a_new_run_starts_from_the_backlog(site, monkeypatch, tmp_path):
         )
     )
     lifecycle.save(lifecycle.Lifecycle(project=PROJECT))
-    at = site.switch_page("views/iteration.py").run()
+    at = site.switch_page("views/abschluss.py").run()
     assert not at.exception
     (backlog,) = [d.value for d in at.dataframe if "Herkunft" in d.value.columns]
     assert list(backlog["Herkunft"]) == ["R1 zurückgestellt"]
@@ -2340,14 +2340,14 @@ def test_the_operations_step_is_done_only_when_the_handbook_passes(tracked):
     lifecycle.save(lifecycle.Lifecycle(project=PROJECT, design=design()))
     empty = [Operation(component_id="B2"), Operation(component_id="B3")]
     tracking.save(tracking.load().model_copy(update={"operations": empty}))
-    at = tracked.switch_page("views/betrieb.py").run()
-    assert "done" not in steps(at)["Betrieb"]
+    at = tracked.switch_page("views/abschluss.py").run()
+    assert any("keine Verantwortlichen" in e.value for e in at.error)
     full = [
         Operation(component_id=c, owner="Team", monitoring="Health-Check") for c in ["B2", "B3"]
     ]
     tracking.save(tracking.load().model_copy(update={"operations": full}))
-    at = tracked.switch_page("views/betrieb.py").run()
-    assert "done" in steps(at)["Betrieb"]
+    at = tracked.switch_page("views/abschluss.py").run()
+    assert not any("keine Verantwortlichen" in e.value for e in at.error)
 
 
 def test_without_requirements_the_closing_page_does_not_call_the_project_closable(tracked):
@@ -2444,7 +2444,7 @@ def test_iteration_cannot_archive_a_project_with_blocking_closing_errors(
             adopted, tracking.Defect(case_id="T1", severity="schwer", cause="offen", task_id="A")
         )
         tracking.save(adopted)
-    at = site.switch_page("views/iteration.py").run()
+    at = site.switch_page("views/abschluss.py").run()
     assert not at.exception
     at.checkbox(key="next_run_sure").check().run()
     assert button(at, "Neuen Durchlauf beginnen").disabled
@@ -2559,7 +2559,7 @@ def test_iteration_confirmation_cannot_archive_a_replacement_project(site, tmp_p
     monkeypatch.setattr(workbench, "DATA_DIR", tmp_path)
     lifecycle.save(with_charter())
     tracking.adopt(PROJECT, TEAM, PLAN)
-    at = site.switch_page("views/iteration.py").run()
+    at = site.switch_page("views/abschluss.py").run()
     at.checkbox(key="next_run_sure").check().run()
     assert not button(at, "Neuen Durchlauf beginnen").disabled
     current = tracking.adopt(PROJECT.model_copy(update={"idea": "Neues Vorhaben"}), TEAM, PLAN)
@@ -2630,10 +2630,12 @@ def test_the_iteration_points_to_the_abschluss_instead_of_repeating_it(site, mon
     monkeypatch.setattr(workbench, "DATA_DIR", tmp_path)
     tracking.adopt(PROJECT, TEAM, PLAN, requirements=NEEDS.items)
     lifecycle.save(lifecycle.Lifecycle(project=PROJECT))
-    at = site.switch_page("views/iteration.py").run()
+    at = site.switch_page("views/abschluss.py").run()
     assert not at.exception
-    (error,) = [e.value for e in at.error]
-    assert error.startswith("Der Abschluss ist nicht fertig") and "R1" not in error
+    errors = [e.value for e in at.error]
+    (pointer,) = [e for e in errors if e.startswith("Der Abschluss ist nicht fertig")]
+    assert "R1" not in pointer and "Reiter" in pointer
+    assert sum("Muss-Anforderung 'R1'" in e for e in errors) == 1  # listed once, where decided
     assert not any("Nichts offen" in i.value for i in at.info)
 
 
@@ -2654,3 +2656,18 @@ def test_the_forecast_lists_only_late_tasks_that_hold_others(tracked):
     at = tracked.switch_page("views/kontrolle.py").run()
     assert not at.exception
     assert not any("keine weitere Aufgabe" in m.value for m in at.markdown)
+
+
+def test_betrieb_and_the_next_run_are_parts_of_the_abschluss(tracked):
+    # Two pages of their own: one optional, one a table and a button. The path had eleven
+    # steps for it and the menu seven entries under "Agenten".
+    from pm_agent.ui import JOURNEY, PAGES
+
+    assert [slug for slug, _, _ in JOURNEY][-1] == "abschluss" and len(JOURNEY) == 9
+    assert "betrieb" not in PAGES and "iteration" not in PAGES
+    at = tracked.switch_page("views/abschluss.py").run()
+    assert not at.exception
+    assert [t.label for t in at.tabs] == ["Abnahme und Lehren", "Betrieb", "Nächster Durchlauf"]
+    for label in ["Lessons Learned speichern", "Neuen Durchlauf beginnen"]:
+        button(at, label)  # raises if the part is missing
+    assert any("kein Betriebshandbuch" in i.value for i in at.info)  # no design in this project

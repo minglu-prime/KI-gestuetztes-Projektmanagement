@@ -95,5 +95,5 @@ sequenceDiagram
 | Sequenzdiagramme (SVG und Mermaid) | `src/pm_agent/diagram.py` |
 | Testfälle, Prüfung der Abdeckung | `lifecycle.check_cases`, `views/testplan.py` |
 | Ergebnisse und Fehler | `tracking.record_result`, `record_defect`, `reopen`, `views/testlauf.py` |
-| Abnahme, Lessons Learned, Abschlussbericht, Betrieb, nächster Backlog | `src/pm_agent/closing.py`, `views/abschluss.py`, `views/betrieb.py`, `views/iteration.py` |
+| Abnahme, Lessons Learned, Abschlussbericht, Betrieb, nächster Backlog | `src/pm_agent/closing.py`, `views/abschluss.py` (Betrieb und nächster Durchlauf als Reiter) |
 | Seiten | `views/auftrag.py`, `views/anforderungen.py`, `views/entwurf.py`; Projektpfad in `ui.journey` |

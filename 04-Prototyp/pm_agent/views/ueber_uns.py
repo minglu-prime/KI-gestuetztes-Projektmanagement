@@ -54,8 +54,8 @@ st.markdown(
     """
 - **Vorbereiten:** Projektauftrag, Anforderungen, Entwurf und Testplan. Claude entwirft,
   Python prüft, dass nichts fehlt, die Projektleitung gibt frei.
-- **Agenten:** Planung, Durchführung, Test, Kontrolle, Abschluss, Betrieb und Iteration: vom
-  geprüften Plan über Fortschritt und Prognose bis zum Backlog der nächsten Runde.
+- **Umsetzen:** Planung, Durchführung, Test, Kontrolle und Abschluss: vom geprüften Plan über
+  Fortschritt und Prognose bis zum Backlog der nächsten Runde.
 - **KI-Lab:** kontrollierter Vergleich derselben Art von Planungsaufgabe ohne und mit KI-Hilfe.
 
 Teamdaten und Protokolle bleiben lokal und stehen nicht im Repository.
