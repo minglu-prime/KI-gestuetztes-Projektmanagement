@@ -200,3 +200,22 @@ def test_no_text_shown_to_the_project_lead_names_the_model_claude():
             ):
                 found.append(f"{path.name}:{node.lineno}")
     assert not found, found
+
+
+def test_texts_split_over_lines_keep_the_space_between_words():
+    # "Der Agent entwirft" + "die Lessons Learned" read "entwirftdie" on the Abschluss.
+    import io
+    import itertools
+    import tokenize
+
+    glued = []
+    for path in SOURCES:
+        tokens = list(tokenize.generate_tokens(io.StringIO(path.read_text("utf-8")).readline))
+        strings = [t for t in tokens if t.type not in (tokenize.NL, tokenize.COMMENT)]
+        for first, second in itertools.pairwise(strings):
+            if first.type == second.type == tokenize.STRING and first.end[0] < second.start[0]:
+                left, right = first.string.rstrip("\"'"), second.string.lstrip("rbfRBF\"'")
+                ends_in_word = left[-1:].isalpha() and not left.endswith("\\n")
+                if ends_in_word and right[:1].isalpha():
+                    glued.append(f"{path.name}:{first.start[0]}")
+    assert not glued, glued
