@@ -82,26 +82,56 @@ Echter Test: `uv run --env-file .env pytest tests/test_agent_live.py` (verbrauch
 nur auf Wort der Projektleitung). Chat Completions nimmt bei diesem Modell Werkzeuge nur mit
 `reasoning_effort` „none“ an; deshalb Responses.
 
-## Offen, in dieser Reihenfolge sinnvoll
+## Projekt in Zahlen (20.11.2026, `main` nach PR 65)
 
-1. **Vergleich mit Versuchspersonen im KI-Lab.** Der „Freeze“ des Protokolls verlangt eine
-   datierte Modell-Snapshot-ID (Name endet auf `YYYY-MM-DD`, `ki_lab/lab.py`, `freeze`).
-   `gpt-6-sol` hat keine; mit ihm geht der Pilot, die formale Studie nicht. Entweder ein
-   datiertes Modell wählen oder mit der Projektleitung entscheiden, wie die Studie ohne Freeze
-   belegt wird (das ist eine Studienentscheidung, nicht meine).
-2. **Prompts.** Sie sind für Claude geschrieben und mit dem neuen Modell nur je einmal
-   gelaufen. Qualität der Ergebnisse (nicht nur: Prüfung bestanden) beurteilen.
-3. **Zustimmungstexte.** Sie nennen die „OpenAI API“; mit `OPENAI_BASE_URL` gehen die Daten an
-   den dort eingetragenen Dienst.
-4. **Arbeit der Gruppe außerhalb des Prototyps:** die Ordner `01-Projektplanung`,
-   `02-Recherche`, `03-Experiment` und `05-Ergebnisse` sind leer.
-5. Kleineres: Prüfung in Firefox und Safari; die drei Reiter des Abschlusses bei 375 px;
-   englische Kommentare und Docstrings sagen noch „Claude“.
+- 284 Commits auf `main` (223 ohne Merges) seit dem 28.10.2026, 53 gemergte PRs, **0 Releases,
+  0 Tags**.
+- Fachcode rund 9 900 Zeilen Python (ohne Leerzeilen und Kommentare) mit 356 Funktionen:
+  `pm_agent` 9 260 Zeilen (Paket und Seiten), `ki_lab` 610. Dazu 9 Prompts, 8 Vorlagen, CSS.
+- 666 Tests (629 `pm_agent`, 37 `ki_lab`), alle ohne Netz; dazu ein Live-Test, der sich ohne
+  Schlüssel überspringt. CI: `pm-agent.yml` (Lint, Tests) und `static.yml` (README als Pages).
+- Läuft lokal als Streamlit-Seite: geprüft in Chrome, Firefox und WebKit (Playwright), je 1440 px
+  und 375 px. Nicht geprüft: Safari auf einem echten Mac, Edge. Kein öffentlicher Betrieb.
+- 11 Issues (#1–#11, Meilensteine M1–M4), alle offen, keines zugewiesen.
+
+## Offen, nach Wirkung geordnet
+
+1. **Die Forschungsarbeit.** Alle Issues sind offen, die Ordner `01-Projektplanung`,
+   `02-Recherche`, `03-Experiment` und `05-Ergebnisse` sind leer. Das Werkzeug ist weit, die
+   Frage des Projekts („Was ändert KI im Projektmanagement?“) hat noch keine Daten.
+2. **KI-Lab für die formale Studie.** Der „Freeze“ des Protokolls verlangt eine datierte
+   Modell-Snapshot-ID (Name endet auf `YYYY-MM-DD`, `ki_lab/lab.py`, `freeze`). `gpt-6-sol` hat
+   keine: der Pilot geht, die formale Studie nicht. Bei KI:connect nach einem datierten Modell
+   fragen, sonst mit der Gruppe entscheiden, wie der feste Modellstand belegt wird. Das ist
+   eine Studienentscheidung, keine des Coding-Agenten.
+3. **Vorhandene Vergleichsdaten auswerten.** Alle Agenten liefen je einmal mit Claude
+   (18.11.2026) und mit `gpt-6-sol` (20.11.2026); die Protokolle liegen lokal in `logs/` (die vom
+   20.11. im Unterordner `logs/gpt-6-sol-20261120/`). Vergleichbar: Runden, Ablehnungen durch
+   Python, Dauer, Token, Plan vor der Deadline. Für belastbare Aussagen je Agent mehrere Läufe
+   (z. B. fünf; kostet Kontingent, nur auf Wort der Projektleitung).
+4. **Einen Stand festhalten.** Es gibt kein Release. Ein `v0.1` mit „was geht, mit welchem
+   Modell geprüft“ gibt Gruppe und Betreuung einen Bezugspunkt (öffentlich: nur auf Wort der
+   Projektleitung).
+5. **Issues pflegen.** Zuständige eintragen; die Meilenstein-Issues in Aufgaben für einen Tag
+   zerlegen, damit morgens geplant und abends mit Nachweis geschlossen werden kann. #9 ist am
+   weitesten: echter KI-Aufruf und Browserprüfung haben jetzt Nachweise, das datierte Modell
+   fehlt noch.
+6. **Genauigkeit.** Die Zustimmungstexte nennen die „OpenAI API“, die Daten gehen aber an den
+   Dienst in `OPENAI_BASE_URL` (KI:connect); für die Datenschutzangaben genau benennen. Die
+   Prompts sind für Claude geschrieben und mit dem neuen Modell je einmal gelaufen: Qualität
+   der Ergebnisse lesen, nicht nur „Prüfung bestanden“.
+7. **Code, nicht dringend.** `views/planung.py` hat rund 1 190 Zeilen und ist am schwersten zu
+   ändern; teilen, wenn dort wieder gearbeitet wird. Englische Kommentare und Docstrings sagen
+   noch „Claude“. Die Prüfung in Firefox und WebKit lief nur lokal; sie könnte in die CI.
+8. **Betrieb, vorsichtig.** Die Seite läuft nur auf dem eigenen Rechner. Für die Gruppe auf
+   einem Server erst mit Anmeldung und geschütztem Schlüssel, sonst nutzt jeder das Kontingent.
 
 ## Lokaler Stand dieses Rechners
 
 - `data/` enthält ein erfundenes Beispielprojekt (Team Anna, Ben, Clara) mit freigegebenem
   Projektauftrag, Anforderungen, Entwurf und Testplan aus den Läufen vom 18.11.2026.
+- `logs/` enthält die Protokolle der echten Läufe: mit Claude (11. bis 18.11.2026) und mit
+  `gpt-6-sol` (20.11.2026, Unterordner `gpt-6-sol-20261120/`). Nicht im Repository.
 - `.claude/` (nicht im Repository): `launch.json` für den Entwicklungsserver und der Skill
   `sibling-fix` für Fehlerbehebungen.
 - Entfernte Branches außer `main`: `feat/polish` (zusammengeführt, bleibt auf Wunsch),
