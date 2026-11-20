@@ -97,7 +97,7 @@ def on_signoff(requirements: dict[str, Requirement]) -> None:
 st.header("Abschluss")
 st.caption(
     "Ist jede Anforderung erfüllt, und was lernen wir daraus? Python schlägt aus Testergebnissen "
-    "und Fehlern vor, was sich abnehmen lässt; du entscheidest je Anforderung. Der Agent entwirft"
+    "und Fehlern vor, was sich abnehmen lässt; du entscheidest je Anforderung. Der Agent entwirft "
     "die Lessons Learned aus Rückblicken und Fehlern. Betrieb und der nächste Durchlauf stehen "
     "in den Reitern daneben."
 )
@@ -300,8 +300,8 @@ with operations_tab:
 with next_tab:
     st.caption(
         "Was kommt in den nächsten Durchlauf? Python stellt den Backlog zusammen, jeder Eintrag "
-        "mit seiner Herkunft. Mit dem neuen Durchlauf beginnt ein neues Vorhaben: Der Agent bekommt"
-        "den Backlog beim Entwurf der Anforderungen."
+        "mit seiner Herkunft. Mit dem neuen Durchlauf beginnt ein neues Vorhaben: Der Agent "
+        "bekommt den Backlog beim Entwurf der Anforderungen."
     )
     with st.container(border=True, key="panel-backlog"):
         heading("playlist_add", "Nächster Backlog", python="stellt zusammen")
