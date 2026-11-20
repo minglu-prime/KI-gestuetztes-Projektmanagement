@@ -9,7 +9,8 @@ PRINCIPLES = [
         "vorschlag",
         "smart_toy",
         "Die KI schlägt vor",
-        "Claude zerlegt, schätzt, verteilt und begründet. Jedes Ergebnis kommt über ein Werkzeug "
+        "Der Agent zerlegt, schätzt, verteilt und begründet. Jedes Ergebnis kommt über ein "
+        "Werkzeug "
         "mit festem Format, nie als freier Text.",
     ),
     (
@@ -17,7 +18,7 @@ PRINCIPLES = [
         "fact_check",
         "Python rechnet und prüft",
         "Termine, Auslastung, Puffer, Verzug und Prognose rechnet Python. Was die Prüfung "
-        "ablehnt, geht mit den Gründen zurück an Claude.",
+        "ablehnt, geht mit den Gründen zurück an den Agenten.",
     ),
     (
         "entscheidung",
@@ -52,7 +53,7 @@ for column, (slug, icon, title, text) in zip(st.columns(3), PRINCIPLES, strict=T
 st.subheader("Was die Website enthält")
 st.markdown(
     """
-- **Vorbereiten:** Projektauftrag, Anforderungen, Entwurf und Testplan. Claude entwirft,
+- **Vorbereiten:** Projektauftrag, Anforderungen, Entwurf und Testplan. Der Agent entwirft,
   Python prüft, dass nichts fehlt, die Projektleitung gibt frei.
 - **Umsetzen:** Planung, Durchführung, Test, Kontrolle und Abschluss: vom geprüften Plan über
   Fortschritt und Prognose bis zum Backlog der nächsten Runde.

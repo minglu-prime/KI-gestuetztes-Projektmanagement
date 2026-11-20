@@ -58,7 +58,7 @@ def days(count: int) -> str:
 
 st.header("Kontrolle")
 st.caption(
-    "Plan und Ist im Vergleich, mit einer Bewertung von Claude. Alle Zahlen rechnet Python aus "
+    "Plan und Ist im Vergleich, mit einer Bewertung vom Agenten. Alle Zahlen rechnet Python aus "
     "dem übernommenen Plan, dem erfassten Fortschritt und den Protokollen."
 )
 
@@ -136,7 +136,7 @@ if tracking is not None:
 
             # From here the project lead can act: plan the rest again, with Claude.
             if st.button(
-                "Rest mit Claude umplanen",
+                "Rest mit dem Agenten umplanen",
                 icon=":material/forum:",
                 type="primary" if outlook.deadline_gap > 0 else "secondary",
             ):
@@ -144,7 +144,7 @@ if tracking is not None:
                 st.switch_page("views/planung.py")
             st.caption(
                 "Lädt die unfertigen Aufgaben als Plan ab heute in die Planung. Dort lässt er "
-                "sich im Gespräch mit Claude ändern und wieder als Projekt übernehmen. Das "
+                "sich im Gespräch mit dem Agenten ändern und wieder als Projekt übernehmen. Das "
                 "übernommene Projekt bleibt bis dahin, wie es ist. Beim Übernehmen entscheidest "
                 "du, ob fertige Aufgaben und erfasste Stunden als frühere Arbeit bleiben."
             )
@@ -377,7 +377,8 @@ if tracking is not None:
         )
         if not tracking.plan.demos:
             st.caption(
-                "Der Plan hat keine Wochen-Demos. Bitte Claude in der Planung darum, zum Beispiel "
+                "Der Plan hat keine Wochen-Demos. Bitte den Agenten in der Planung darum, zum "
+                "Beispiel "
                 "„Plane für jede Woche eine Demo“, und übernimm den Plan erneut."
             )
         else:
@@ -467,21 +468,22 @@ if tracking is not None:
         heading(
             "smart_toy",
             "Kontroll-Agent",
-            claude="bewertet und schlägt vor",
+            agent="bewertet und schlägt vor",
             python="prüft",
             du="entscheidest, was umgesetzt wird",
         )
         st.caption(
-            "Claude bewertet den Stand und schlägt Gegenmaßnahmen vor. Python nimmt den Vorschlag "
+            "Der Agent bewertet den Stand und schlägt Gegenmaßnahmen vor. Python nimmt den "
+            "Vorschlag "
             "nur an, wenn jede Aufgabe im Verzug eine Gegenmaßnahme hat. Was umgesetzt wird, "
             "entscheidest du."
         )
         agreed = consent("consent_kontrolle")
         if st.button(
-            "Stand mit Claude bewerten", icon=":material/play_arrow:", disabled=not agreed
+            "Stand mit dem Agenten bewerten", icon=":material/play_arrow:", disabled=not agreed
         ):
             proposed = run_with_progress(
-                "Claude bewertet den Stand …",
+                "Der Agent bewertet den Stand …",
                 lambda on_round: followup.run_control_report(
                     tracking, date.today(), on_round=on_round
                 ),
@@ -509,7 +511,7 @@ if tracking is not None:
                                 {
                                     "Aufgaben": ", ".join(m.task_ids),
                                     "Maßnahme": m.action,
-                                    "Erwartete Wirkung (Claude)": m.effect,
+                                    "Erwartete Wirkung (Agent)": m.effect,
                                     "Nachgerechnet (Python)": measure_effect(
                                         tracking, date.today(), m.task_ids, m.reassign_to
                                     ),
@@ -525,7 +527,7 @@ if tracking is not None:
                         "klären, Umfang ändern) lassen sich nicht nachrechnen."
                     )
                 else:
-                    st.caption("Claude schlägt keine Gegenmaßnahmen vor.")
+                    st.caption("Der Agent schlägt keine Gegenmaßnahmen vor.")
 
 if tracking is not None:
     with st.container(border=True, key="panel-document"):

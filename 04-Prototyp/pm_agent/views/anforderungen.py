@@ -36,9 +36,9 @@ state = st.session_state
 
 st.header("Anforderungen")
 st.caption(
-    "Was muss das System können, und woran erkennt man, dass es das kann? Claude entwirft die "
+    "Was muss das System können, und woran erkennt man, dass es das kann? Der Agent entwirft die "
     "Anforderungen aus dem Projektauftrag, Python prüft, dass jedes Erfolgskriterium abgedeckt "
-    "ist, du änderst sie und gibst sie frei. Danach plant Claude für jede Anforderung Aufgaben."
+    "ist, du änderst sie und gibst sie frei. Danach plant der Agent für jede Anforderung Aufgaben."
 )
 life = saved_lifecycle()
 if life is None:
@@ -49,7 +49,7 @@ status = st.container()  # filled at the end, when the requirements of this run 
 if life.backlog:
     with st.container(border=True, key="panel-backlog"):
         st.markdown("**Offen aus dem letzten Durchlauf**")
-        st.caption("Claude bekommt diese Punkte beim Entwurf der Anforderungen.")
+        st.caption("Der Agent bekommt diese Punkte beim Entwurf der Anforderungen.")
         st.dataframe(
             pd.DataFrame([{"Eintrag": b.text, "Herkunft": b.origin} for b in life.backlog]),
             hide_index=True,
@@ -67,16 +67,16 @@ elif charter_phase != "freigegeben":
         "entwerfen; geprüft wird gegen den Auftrag, wie er gerade steht."
     )
 
-# 2 · Entwurf von Claude ------------------------------------------------------------------
+# 2 · Entwurf vom Agenten ------------------------------------------------------------------
 with st.container(border=True, key="panel-draft"):
     heading(
         "smart_toy",
-        "Entwurf von Claude",
-        claude="entwirft aus dem Projektauftrag",
+        "Entwurf vom Agenten",
+        agent="entwirft aus dem Projektauftrag",
         python="prüft die Abdeckung",
     )
     st.caption(
-        "An Claude gehen Projektidee, Termine, Projektauftrag und gegebenenfalls die offenen "
+        "An den Agenten gehen Projektidee, Termine, Projektauftrag und gegebenenfalls die offenen "
         "Punkte des letzten Durchlaufs. Python prüft die Abdeckung der Erfolgskriterien."
     )
     allowed = consent(
@@ -90,13 +90,13 @@ with st.container(border=True, key="panel-draft"):
             key="requirements_replace",
         )
     if st.button(
-        "Anforderungen mit Claude entwerfen",
+        "Anforderungen mit dem Agenten entwerfen",
         icon=":material/play_arrow:",
         type="primary" if life.requirements is None else "secondary",
         disabled=life.project is None or not replace or not allowed,
     ):
         drafted = run_with_progress(
-            "Claude entwirft die Anforderungen …",
+            "Der Agent entwirft die Anforderungen …",
             lambda on_round: lifecycle.run_requirements(
                 life.project,
                 life.charter,
@@ -117,7 +117,7 @@ with st.container(border=True, key="panel-requirements"):
         life.requirements is None and life.project is not None
     ):  # without it, the top says what is missing
         st.info(
-            "Noch keine Anforderungen. Lass sie von Claude entwerfen oder trag sie in der "
+            "Noch keine Anforderungen. Lass sie vom Agenten entwerfen oder trag sie in der "
             "Tabelle selbst ein."
         )
     st.caption(

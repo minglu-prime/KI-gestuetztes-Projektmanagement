@@ -175,3 +175,28 @@ def test_the_menu_groups_pages_by_phase():
     assert groups == ["", "Vorbereiten", "Umsetzen", "Experiment", "Info"]
     assert not (ROOT / "views" / "betrieb.py").exists()
     assert not (ROOT / "views" / "iteration.py").exists()
+
+
+def test_no_text_shown_to_the_project_lead_names_the_model_claude():
+    # A different model answers now, and the pages call it "der Agent". Comments and
+    # docstrings may still say Claude; strings that reach a page or a document may not.
+    found = []
+    for path in SOURCES:
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        docstrings = {
+            id(node.body[0].value)
+            for node in ast.walk(tree)
+            if isinstance(node, (ast.Module, ast.FunctionDef, ast.ClassDef))
+            and node.body
+            and isinstance(node.body[0], ast.Expr)
+            and isinstance(node.body[0].value, ast.Constant)
+        }
+        for node in ast.walk(tree):
+            if (
+                isinstance(node, ast.Constant)
+                and isinstance(node.value, str)
+                and id(node) not in docstrings
+                and re.search("claude", node.value, re.I)
+            ):
+                found.append(f"{path.name}:{node.lineno}")
+    assert not found, found

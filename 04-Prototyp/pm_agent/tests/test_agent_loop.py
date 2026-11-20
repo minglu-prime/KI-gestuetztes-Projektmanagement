@@ -5,7 +5,7 @@ import os
 from datetime import date, datetime
 
 import pytest
-from conftest import completion as reply
+from conftest import response as reply
 from test_tools import PROJECT, TEAM, plan_input
 
 from pm_agent import agent
@@ -47,9 +47,9 @@ def test_a_rejected_plan_goes_back_to_claude_and_every_round_is_logged(api, tmp_
     assert plan == Plan.model_validate(plan_input())
     # The UI shows each round while the run goes on, with the tool results already filled in.
     assert [r["tool_results"][0]["is_error"] for r in seen] == [True, False]
-    rejection = requests[1]["messages"][-1]
-    assert (rejection["role"], rejection["tool_call_id"]) == ("tool", "call_1")
-    assert "Plan abgelehnt" in rejection["content"]
+    rejection = requests[1]["input"][-1]
+    assert (rejection["type"], rejection["call_id"]) == ("function_call_output", "call_1")
+    assert "Plan abgelehnt" in rejection["output"]
 
     log = read_log(tmp_path)
     assert log["outcome"] == "plan"
@@ -106,7 +106,7 @@ def test_a_run_without_plan_is_logged_with_the_error(api, tmp_path):
     assert log["outcome"] == "error"
     assert "ohne einen Plan einzureichen" in log["error"]
     assert log["plan"] is None
-    assert log["rounds"][0]["stop_reason"] == "stop"
+    assert log["rounds"][0]["stop_reason"] == "completed"
 
 
 def test_replanning_sends_the_current_plan_and_the_wish_and_logs_both(api, tmp_path):
@@ -121,7 +121,7 @@ def test_replanning_sends_the_current_plan_and_the_wish_and_logs_both(api, tmp_p
 
     assert (plan, absences) == (Plan.model_validate(longer), [])
     (request,) = requests
-    system, asked = (m["content"] for m in request["messages"])
+    system, asked = request["instructions"], request["input"][0]["content"]
     assert "Das Datenmodell braucht doppelt so lange." in asked
     assert '"title": "Datenmodell"' in asked  # the current plan goes along
     assert "Änderung eines bestehenden Plans" in system
@@ -145,7 +145,7 @@ def test_planning_sends_the_requirements_and_logs_them(api, tmp_path):
     replies, requests = api
     replies += [reply([submit(plan_input(), "call_1")])]
     run_planning(PROJECT, TEAM, log_dir=tmp_path, requirements=NEEDS, covered=frozenset({"R7"}))
-    sent = requests[0]["messages"][1]["content"]
+    sent = requests[0]["input"][0]["content"]
     sent = sent if isinstance(sent, str) else json.dumps(sent, ensure_ascii=False)
     assert "Freigegebene Anforderungen" in sent and "Raum buchen" in sent
     assert "Schon durch fertige Arbeit erfüllt: R7" in sent
@@ -156,7 +156,7 @@ def test_planning_without_requirements_sends_and_logs_none(api, tmp_path):
     replies, requests = api
     replies += [reply([submit(plan_input(), "call_1")])]
     run_planning(PROJECT, TEAM, log_dir=tmp_path)
-    assert "Anforderungen" not in json.dumps(requests[0]["messages"][1:], ensure_ascii=False)
+    assert "Anforderungen" not in json.dumps(requests[0]["input"], ensure_ascii=False)
     assert "requirements" not in read_log(tmp_path)
 
 
@@ -169,7 +169,7 @@ def test_an_approved_design_goes_to_the_planner_without_its_flows(api, tmp_path)
     plan = Plan.model_validate(plan_input())
     run_replanning(PROJECT, TEAM, plan, "Schneller.", log_dir=tmp_path, design=design())
     for request in requests:
-        sent = json.dumps(request["messages"][1], ensure_ascii=False)
+        sent = json.dumps(request["input"][0], ensure_ascii=False)
         assert "Freigegebener Entwurf" in sent and "Buchung anlegen" in sent
         # The flows name requirements the planner may not see.
         assert "Raum buchen" not in sent and "A1" not in sent
@@ -179,7 +179,7 @@ def test_without_a_design_the_planner_hears_nothing_of_it(api, tmp_path):
     replies, requests = api
     replies += [reply([submit(plan_input(), "call_1")])]
     run_planning(PROJECT, TEAM, log_dir=tmp_path)
-    assert "Entwurf" not in json.dumps(requests[0]["messages"][1:], ensure_ascii=False)
+    assert "Entwurf" not in json.dumps(requests[0]["input"], ensure_ascii=False)
 
 
 def test_replanning_can_set_the_absence_a_wish_names_and_logs_it(api, tmp_path):
@@ -199,7 +199,7 @@ def test_replanning_can_set_the_absence_a_wish_names_and_logs_it(api, tmp_path):
         log_dir=tmp_path,
     )
     assert result.absences == [MemberAbsence.model_validate(away)]
-    assert "set_absence" in [tool["function"]["name"] for tool in requests[0]["tools"]]
+    assert "set_absence" in [tool["name"] for tool in requests[0]["tools"]]
     assert read_log(tmp_path)["absences"] == [away]
 
     (path,) = tmp_path.glob("run-*.json")
@@ -214,7 +214,7 @@ def test_a_new_plan_gets_no_tool_for_absences(api, tmp_path):
     replies, requests = api
     replies += [reply([submit(plan_input(), "call_1")])]
     run_planning(PROJECT, TEAM, log_dir=tmp_path)
-    assert "set_absence" not in [tool["function"]["name"] for tool in requests[0]["tools"]]
+    assert "set_absence" not in [tool["name"] for tool in requests[0]["tools"]]
     assert "absences" not in read_log(tmp_path)
 
 
@@ -222,7 +222,7 @@ def test_input_that_is_no_json_object_and_an_unknown_tool_go_back_as_errors(api,
     # The API sends tool input as text. Broken text must not end the run: the model corrects it.
     replies, requests = api
     broken = reply([submit(plan_input(), "call_1")])
-    broken["choices"][0]["message"]["tool_calls"][0]["function"]["arguments"] = '{"tasks": ['
+    broken["output"][0]["arguments"] = '{"tasks": ['
     unknown = reply([{"type": "tool_use", "id": "call_2", "name": "delete_plan", "input": {}}])
     replies += [broken, unknown, reply([submit(plan_input(), "call_3")])]
 
@@ -236,7 +236,7 @@ def test_input_that_is_no_json_object_and_an_unknown_tool_go_back_as_errors(api,
     }
     assert second["tool_results"][0]["content"] == "Dieses Werkzeug gibt es nicht."
     assert third["tool_results"][0]["is_error"] is False
-    assert requests[1]["messages"][-1]["content"] == first["tool_results"][0]["content"]
+    assert requests[1]["input"][-1]["output"] == first["tool_results"][0]["content"]
 
 
 def test_without_a_model_name_nothing_is_sent(api, monkeypatch, tmp_path):
@@ -253,13 +253,16 @@ def test_without_a_model_name_nothing_is_sent(api, monkeypatch, tmp_path):
     assert requests[requests_before]["model"] == "gpt-lab"
 
 
-def test_the_reasoning_effort_is_sent_only_when_set(api, monkeypatch, tmp_path):
-    # Some models take function tools in chat completions only with reasoning_effort "none";
-    # others reject the parameter. So it is a setting, and absent by default.
+def test_the_reasoning_effort_is_medium_unless_the_setting_says_otherwise(
+    api, monkeypatch, tmp_path
+):
+    # Function tools need reasoning with the Responses API (not "none", which the chat
+    # completions endpoint of the model required); "medium" is the default.
     replies, requests = api
     replies += [reply([submit(plan_input(), "call_1")])] * 2
     run_planning(PROJECT, TEAM, log_dir=tmp_path)
-    monkeypatch.setenv("PM_AGENT_REASONING_EFFORT", "none")
+    monkeypatch.setenv("PM_AGENT_REASONING_EFFORT", "high")
     run_planning(PROJECT, TEAM, log_dir=tmp_path)
-    assert ["reasoning_effort" in r for r in requests] == [False, True]
-    assert requests[1]["reasoning_effort"] == "none"
+    assert [r["reasoning"]["effort"] for r in requests] == ["medium", "high"]
+    assert all(r["store"] is False for r in requests)
+    assert all("reasoning.encrypted_content" in r["include"] for r in requests)

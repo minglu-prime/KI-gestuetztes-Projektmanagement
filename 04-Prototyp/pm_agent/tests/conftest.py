@@ -9,39 +9,59 @@ from openai import OpenAI
 from pm_agent import agent
 
 
-def completion(blocks, finish_reason=None):
-    """A chat completion as the OpenAI API returns it. A test scripts it as blocks: a text
-    ({"type": "text", "text": …}) or a tool call ({"type": "tool_use", "id", "name", "input"})."""
-    calls = [
-        {
-            "id": block["id"],
-            "type": "function",
-            "function": {
-                "name": block["name"],
-                "arguments": json.dumps(block["input"], ensure_ascii=False),
-            },
-        }
-        for block in blocks
-        if block["type"] == "tool_use"
-    ]
-    text = " ".join(block["text"] for block in blocks if block["type"] == "text")
-    message = {"role": "assistant", "content": text or None, "refusal": None}
-    if calls:
-        message["tool_calls"] = calls
+def response(blocks, status="completed", reason=None):
+    """A Responses API reply. A test scripts it as blocks: a text ({"type": "text", "text": …}),
+    a refusal ({"type": "refusal", "refusal": …}) or a tool call ({"type": "tool_use", "id",
+    "name", "input"})."""
+    output = []
+    for block in blocks:
+        if block["type"] == "tool_use":
+            output.append(
+                {
+                    "type": "function_call",
+                    "id": "fc_" + block["id"],
+                    "call_id": block["id"],
+                    "name": block["name"],
+                    "arguments": json.dumps(block["input"], ensure_ascii=False),
+                    "status": "completed",
+                }
+            )
+        else:
+            part = (
+                {"type": "refusal", "refusal": block["refusal"]}
+                if block["type"] == "refusal"
+                else {"type": "output_text", "text": block["text"], "annotations": []}
+            )
+            output.append(
+                {
+                    "type": "message",
+                    "id": "msg_test",
+                    "role": "assistant",
+                    "status": "completed",
+                    "content": [part],
+                }
+            )
     return {
-        "id": "chatcmpl-test",
-        "object": "chat.completion",
-        "created": 0,
+        "id": "resp_test",
+        "object": "response",
+        "created_at": 0,
         "model": "gpt-test",
-        "choices": [
-            {
-                "index": 0,
-                "message": message,
-                "finish_reason": finish_reason or ("tool_calls" if calls else "stop"),
-                "logprobs": None,
-            }
-        ],
-        "usage": {"prompt_tokens": 1200, "completion_tokens": 300, "total_tokens": 1500},
+        "status": status,
+        "incomplete_details": {"reason": reason} if reason else None,
+        "output": output,
+        "parallel_tool_calls": True,
+        "tool_choice": "auto",
+        "tools": [],
+        "error": None,
+        "instructions": None,
+        "metadata": {},
+        "usage": {
+            "input_tokens": 1200,
+            "output_tokens": 300,
+            "total_tokens": 1500,
+            "input_tokens_details": {"cached_tokens": 0},
+            "output_tokens_details": {"reasoning_tokens": 0},
+        },
     }
 
 

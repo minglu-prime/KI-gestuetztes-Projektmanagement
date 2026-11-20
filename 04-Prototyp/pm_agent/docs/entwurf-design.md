@@ -11,7 +11,7 @@ in welcher Reihenfolge. In einer echten Softwareentwicklung sind das Schnittstel
 und Sequenzdiagramme. Ohne sie plant das Team Aufgaben, ohne zu wissen, wo zwei Teile
 zusammenpassen müssen, und merkt das erst im Integrationstest.
 
-Die Phase folgt demselben Muster wie Phase 1 und 2: **CLAUDE** entwirft, **PYTHON** prüft
+Die Phase folgt demselben Muster wie Phase 1 und 2: **AGENT** entwirft, **PYTHON** prüft
 (vor allem: lässt sich alles auf die Anforderungen zurückführen?), **DU** änderst und gibst
 frei. Soft Gate: Wer den Entwurf überspringt, plant wie bisher; der Pfad zeigt ihn gestrichelt.
 
@@ -30,15 +30,15 @@ frei. Soft Gate: Wer den Entwurf überspringt, plant wie bisher; der Pfad zeigt 
 - Testfälle aus den Verträgen (Batch 4).
 - Aufgaben auf Schnittstellen zurückverfolgen und prüfen (Batch 4).
 - Datenmodell, Klassendiagramm, OpenAPI-Export.
-- „Mit Claude ändern“-Dialog (wie in Batch 1 nicht gebaut).
+- „Mit dem Agenten ändern“-Dialog (wie in Batch 1 nicht gebaut).
 
 ## Anti-Ziele
 
-- Claude schreibt Diagrammcode (Mermaid, SVG). Dann könnte das Bild etwas anderes zeigen als
+- der Agent schreibt Diagrammcode (Mermaid, SVG). Dann könnte das Bild etwas anderes zeigen als
   die Daten.
 - Neue Abhängigkeiten oder Skripte von fremden Servern (CDN) nur für Diagramme. Die Seite
   läuft nur an localhost.
-- Ein Formular, das nur Informatiker ausfüllen können: Claude liefert den Entwurf, der Mensch
+- Ein Formular, das nur Informatiker ausfüllen können: Der Agent liefert den Entwurf, der Mensch
   korrigiert.
 
 ## Ansätze
@@ -49,8 +49,8 @@ frei. Soft Gate: Wer den Entwurf überspringt, plant wie bisher; der Pfad zeigt 
 |---|---|---|
 | Form | Eingabe/Ausgabe als `name: Typ`, Fehler als `Code Bedeutung` | je ein Satz für Eingabe, Ausgabe, Fehler |
 | Python prüft | doppelte Feldnamen und Fehlercodes; Diagramm zeigt die Felder aus dem Vertrag | nur „ausgefüllt?“ |
-| Batch 4 | Testfälle je Feld und Fehlercode ableitbar | Claude muss Text deuten |
-| Aufwand für Nutzer | höher, aber Claude füllt vor | gering |
+| Batch 4 | Testfälle je Feld und Fehlercode ableitbar | Der Agent muss Text deuten |
+| Aufwand für Nutzer | höher, aber der Agent füllt vor | gering |
 
 **Diagramm zeichnen:**
 
@@ -84,7 +84,7 @@ class Design(_Model):      components: list[Component] (min 1); interfaces: list
 
 ## Prüfung (`lifecycle.check_design(design, requirements)`)
 
-Fehler (Freigabe gesperrt, Claude bekommt den Entwurf zurück):
+Fehler (Freigabe gesperrt, der Agent bekommt den Entwurf zurück):
 
 1. Doppelte IDs bei Bausteinen, Schnittstellen, Abläufen; doppelte Feldnamen je Eingabe bzw.
    Ausgabe; doppelte Fehlercodes je Schnittstelle.
@@ -110,7 +110,7 @@ Warnungen (Freigabe möglich):
 Geprüft wird gegen die Anforderungen, wie sie in `vorhaben.json` stehen, ob freigegeben oder
 nicht (wie Batch 1 gegen den Auftrag, wie er gerade steht). Regel 6 gilt also auch für nicht
 freigegebene Anforderungen; dass sie nicht freigegeben sind, sagt der Hinweis im Panel
-„Grundlage“. `run_design` schickt Claude dieselben Anforderungen. *(Entscheidung des
+„Grundlage“. `run_design` schickt dem Agenten dieselben Anforderungen. *(Entscheidung des
 Entwerfenden, nach dem Muster von Batch 1.)*
 
 ## Agent
@@ -118,7 +118,7 @@ Entwerfenden, nach dem Muster von Batch 1.)*
 - `lifecycle.run_design(project, charter, requirements, …)` mit Werkzeug `submit_entwurf`,
   noun „Entwurf“, Prompt `prompts/entwurf.md`, Log-Präfix `entwurf`; `tracking.AGENTS` um
   `entwurf` ergänzen. Nutzt `agent.run_submission`.
-- An Claude gehen Idee, Termine, Auftrag, Anforderungen. Keine Teamdaten.
+- An den Agenten gehen Idee, Termine, Auftrag, Anforderungen. Keine Teamdaten.
 - Der Prompt verlangt: Rollen aus den Beteiligten des Auftrags, kurze IDs (`B1`, `S1`, `A1`),
   einfache Typen (`Text`, `Zahl`, `Ganzzahl`, `Datum`, `Uhrzeit`, `JaNein`, `Liste[X]`, oder
   ein Baustein-Objekt), höchstens etwa 8 Abläufe.
@@ -142,7 +142,7 @@ Menügruppe „Vorbereiten“ nach Anforderungen, Symbol `:material/account_tree
 Anforderungen-Seite:
 
 1. Grundlage: Hinweis, wenn Anforderungen fehlen oder nicht freigegeben sind (Soft Gate).
-2. Entwurf von Claude (Ersetzen-Checkbox wie bisher).
+2. Entwurf vom Agenten (Ersetzen-Checkbox wie bisher).
 3. Bausteine: vier Tabellen in `st.tabs`: Bausteine, Schnittstellen (Eingabe/Ausgabe als
    `name: Typ, name?: Typ`; `?` = optional; Fehler als `409 Raum belegt; 404 Raum unbekannt`),
    Abläufe (ID, Titel, Anforderungen), Schritte (Ablauf, Von, An, Art, Schnittstelle, Text;
@@ -173,7 +173,7 @@ Lade-, Leer- und Fehlerzustände wie auf den Seiten aus Batch 1.
 ## Annahmen
 
 - Rollen stehen als Bausteine im Entwurf, damit sie im Diagramm erscheinen; sie werden nicht
-  automatisch aus dem Auftrag übernommen, Claude schlägt sie vor.
+  automatisch aus dem Auftrag übernommen, der Agent schlägt sie vor.
 
 ## Bekannte Grenzen
 

@@ -1040,7 +1040,7 @@ def forecast(tracking: Tracking, today: date, reassign: dict[str, str] | None = 
         update={"start_date": max(today, project.start_date), "deadline": date.max}
     )
     # Scheduled like any plan: the Planung says the same about the rest when it is
-    # loaded there ("Rest mit Claude umplanen").
+    # loaded there ("Rest mit dem Agenten umplanen").
     expected = check_plan(rest, tracking.team, open_end, dates_only=True)
     if expected.errors:
         return Forecast(
@@ -1340,7 +1340,7 @@ def status_report(
         steps = "\n".join(
             f"- **{_md(step.task_id)}:** {_md(step.action)}" for step in summary.next_steps
         )
-        note = "*Vorschlag des Durchführungs-Agenten (Claude), von der Projektleitung zu prüfen.*"
+        note = "*Vorschlag des Durchführungs-Agenten, von der Projektleitung zu prüfen.*"
         # The summary keeps its paragraphs; only links, images and tags are made inert.
         text = "\n\n".join(filter(None, [_inert(summary.summary), steps, note]))
     count = {status: sum(t.status == status for t in tasks) for status in STATUSES}
@@ -1444,12 +1444,12 @@ def control_document(
             for m in report.measures
         )
         table = (
-            "| Aufgaben | Maßnahme | Erwartete Wirkung (Claude) | Nachgerechnet (Python) |\n"
+            "| Aufgaben | Maßnahme | Erwartete Wirkung (Agent) | Nachgerechnet (Python) |\n"
             f"|---|---|---|---|\n{measures}"
             if report.measures
             else "Keine Gegenmaßnahmen vorgeschlagen."
         )
-        note = "*Vorschlag des Kontroll-Agenten (Claude), von der Projektleitung zu prüfen.*"
+        note = "*Vorschlag des Kontroll-Agenten, von der Projektleitung zu prüfen.*"
         judgement = "\n\n".join([f"**Bewertung:** {report.assessment}", findings, table, note])
     return _fill(
         "kontrollbericht.md",

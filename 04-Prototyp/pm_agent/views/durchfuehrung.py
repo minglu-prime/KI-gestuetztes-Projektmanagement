@@ -41,7 +41,7 @@ state = st.session_state
 
 st.header("Durchführung")
 st.caption(
-    "Fortschritt erfassen, den Stand von Claude zusammenfassen lassen und Projektdokumente aus "
+    "Fortschritt erfassen, den Stand vom Agenten zusammenfassen lassen und Projektdokumente aus "
     "Vorlagen füllen. Alle Zahlen rechnet Python aus dem übernommenen Plan und deinen Angaben."
 )
 tracking = adopted_project()
@@ -156,23 +156,23 @@ with st.container(border=True, key="panel-agent"):
     heading(
         "smart_toy",
         "Durchführungs-Agent",
-        claude="schreibt einen Vorschlag",
+        agent="schreibt einen Vorschlag",
         python="prüft ihn",
         du="entscheidest, was gilt",
     )
     st.caption(
-        "Claude schlägt aus Plan und gespeichertem Fortschritt die Zusammenfassung und die "
+        "Der Agent schlägt aus Plan und gespeichertem Fortschritt die Zusammenfassung und die "
         "nächsten Schritte für den Statusbericht vor. Python nimmt den Vorschlag nur an, wenn "
         "jede Aufgabe im Verzug einen nächsten Schritt hat. Was davon gilt, entscheidest du."
     )
     agreed = consent("consent_durchfuehrung")
     if st.button(
-        "Zusammenfassung mit Claude vorschlagen",
+        "Zusammenfassung mit dem Agenten vorschlagen",
         icon=":material/play_arrow:",
         disabled=not agreed,
     ):
         proposed = run_with_progress(
-            "Claude schreibt die Zusammenfassung …",
+            "Der Agent schreibt die Zusammenfassung …",
             lambda on_round: followup.run_status_summary(tracking, date.today(), on_round=on_round),
         )
         if proposed is not None:

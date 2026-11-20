@@ -53,51 +53,50 @@ zehn Phasen und wie sie zusammenhängen in `04-Prototyp/pm_agent/docs/lebenszykl
 ## Stand am 20.11.2026
 
 - **Seiten.** Neun Schritte, vom Projektauftrag bis zum Abschluss; Betrieb und der nächste
-  Durchlauf sind Reiter im Abschluss. Das Menü gruppiert nach Phase (Vorbereiten, Umsetzen),
-  nicht danach, wo ein Agent arbeitet. `main` nach PR 62, 626 Tests, CI grün.
-- **Modell.** Die Agenten rufen die OpenAI API auf (Chat Completions, eigene Schleife in
-  `agent._run`, Werkzeuge als `tools.Tool`). Das Paket `anthropic` ist entfernt.
-- **Echte Läufe.** Gegen die OpenAI-Schnittstelle lief bisher nur die Planung (20.11.2026,
-  `gpt-6-sol` an einem kompatiblen Endpunkt: 3 Runden, 38 s, Plan ohne Fehler). Alle übrigen
-  Agenten liefen zuletzt am 18.11.2026 gegen die Claude API, also vor dem Wechsel. Noch nie
-  live gelaufen: eine Abwesenheit, die der Agent beim Umplanen einträgt (`set_absence`).
+  Durchlauf sind Reiter im Abschluss. Das Menü gruppiert nach Phase (Vorbereiten, Umsetzen).
+- **Modell.** Die Agenten rufen die OpenAI Responses API auf (eigene Schleife in
+  `agent._run`, Werkzeuge als `tools.Tool`, Reasoning `medium`). Das Paket `anthropic` ist
+  entfernt. Die Oberfläche nennt den Akteur „der Agent“, nicht mehr „Claude“; eine Quellregel
+  in `tests/test_source_rules.py` hält das fest (Kommentare und Docstrings dürfen es noch
+  anders nennen).
+- **Echte Läufe am 20.11.2026** (Endpunkt der Hochschule, `gpt-6-sol`): alle elf Agenten liefen
+  je einmal ohne Fehler, auch die Abwesenheit aus einem Wunsch (`set_absence` trug Clara vom
+  7. bis 11.12. ein). Ein Lauf des KI-Labs mit KI-Antwort ebenfalls. Die Läufe gingen in einen
+  Temp-Ordner, `data/` blieb unberührt.
+- **KI-Lab.** Liest `OPENAI_BASE_URL`, das Modell aus `PM_MODEL` oder ersatzweise
+  `PM_AGENT_MODEL` und schickt Reasoning (`PM_LAB_REASONING_EFFORT`, Standard `medium`).
 
 ## Zugang zum Modell (lokal, nicht im Repository)
 
-`04-Prototyp/pm_agent/.env` enthält vier Einstellungen; die Werte nicht ausgeben:
+`04-Prototyp/pm_agent/.env`; die Werte nicht ausgeben:
 
-- `OPENAI_API_KEY`: Schlüssel eines OpenAI-kompatiblen Dienstes der Hochschule, kein
-  Schlüssel von api.openai.com. Ohne `OPENAI_BASE_URL` antwortet OpenAI mit 401.
+- `OPENAI_API_KEY`: Schlüssel eines OpenAI-kompatiblen Dienstes der Hochschule (KI:connect),
+  kein Schlüssel von api.openai.com. Ohne `OPENAI_BASE_URL` antwortet OpenAI mit 401.
 - `OPENAI_BASE_URL`: Adresse dieses Dienstes.
 - `PM_AGENT_MODEL`: die Modell-ID der Schnittstelle (klein, mit Bindestrichen), nicht der
   Anzeigename. Welche es gibt, sagt `OpenAI().models.list()`. Kein Standard im Code.
-- `PM_AGENT_REASONING_EFFORT=none`: Das gewählte Modell nimmt Werkzeuge in Chat Completions
-  nur so an (sonst 400). Die Schnittstelle `/v1/responses` nimmt Werkzeuge mit Reasoning;
-  der Dienst unterstützt sie (einmal geprüft), die Schleife nutzt sie noch nicht.
+- Optional `PM_AGENT_REASONING_EFFORT` (Standard `medium`), `PM_LAB_REASONING_EFFORT`.
 
 Ein Wert mit Leerzeichen bricht das Einlesen der Datei durch `uv run --env-file .env` ab.
-Der echte Test: `uv run --env-file .env pytest tests/test_agent_live.py` (verbraucht
-Kontingent, nur auf Wort der Projektleitung).
+Echter Test: `uv run --env-file .env pytest tests/test_agent_live.py` (verbraucht Kontingent,
+nur auf Wort der Projektleitung). Chat Completions nimmt bei diesem Modell Werkzeuge nur mit
+`reasoning_effort` „none“ an; deshalb Responses.
 
 ## Offen, in dieser Reihenfolge sinnvoll
 
-1. **„Claude“ in der Oberfläche.** Seiten, Meldungen, Tests und Dokumente nennen das Modell
-   weiter „Claude“ (rund 350 Stellen), obwohl ein anderes Modell arbeitet. Die Projektleitung
-   hat noch nicht entschieden, wie es heißen soll. Vorher fragen; dann in eigenen PRs unter
-   etwa 800 Zeilen.
-2. **Übrige Agenten live prüfen** (Projektauftrag, Anforderungen, Entwurf, Testplan, Plan im
-   Gespräch ändern, Durchführung, Kontrolle, Lessons Learned). Die Prompts sind unverändert
-   und waren für Claude geschrieben.
-3. **Reasoning.** Mit „none“ plant das Modell ohne Nachdenken. Für größere Projekte auf
-   `/v1/responses` umstellen oder es als zweite Schnittstelle anbieten.
-4. **Zustimmungstexte.** Sie nennen die „OpenAI API“; mit `OPENAI_BASE_URL` gehen die Daten an
+1. **Vergleich mit Versuchspersonen im KI-Lab.** Der „Freeze“ des Protokolls verlangt eine
+   datierte Modell-Snapshot-ID (Name endet auf `YYYY-MM-DD`, `ki_lab/lab.py`, `freeze`).
+   `gpt-6-sol` hat keine; mit ihm geht der Pilot, die formale Studie nicht. Entweder ein
+   datiertes Modell wählen oder mit der Projektleitung entscheiden, wie die Studie ohne Freeze
+   belegt wird (das ist eine Studienentscheidung, nicht meine).
+2. **Prompts.** Sie sind für Claude geschrieben und mit dem neuen Modell nur je einmal
+   gelaufen. Qualität der Ergebnisse (nicht nur: Prüfung bestanden) beurteilen.
+3. **Zustimmungstexte.** Sie nennen die „OpenAI API“; mit `OPENAI_BASE_URL` gehen die Daten an
    den dort eingetragenen Dienst.
-5. **Vergleich mit Versuchspersonen im KI-Lab.** Das Lab ruft `/v1/responses` bei
-   api.openai.com direkt auf (`ki_lab/lab.py`, ohne `OPENAI_BASE_URL`); mit dem Schlüssel der
-   Hochschule läuft es so nicht. Ein erfolgreicher KI-Aufruf des Labs steht noch aus.
-6. **Arbeit der Gruppe außerhalb des Prototyps:** die Ordner `01-Projektplanung`,
+4. **Arbeit der Gruppe außerhalb des Prototyps:** die Ordner `01-Projektplanung`,
    `02-Recherche`, `03-Experiment` und `05-Ergebnisse` sind leer.
-7. Kleineres: Prüfung in Firefox und Safari; die drei Reiter des Abschlusses bei 375 px.
+5. Kleineres: Prüfung in Firefox und Safari; die drei Reiter des Abschlusses bei 375 px;
+   englische Kommentare und Docstrings sagen noch „Claude“.
 
 ## Lokaler Stand dieses Rechners
 

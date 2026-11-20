@@ -88,7 +88,7 @@ def button(at, label):
 
 def test_without_project_and_consent_planning_is_blocked(app):
     assert not app.exception
-    assert button(app, "Plan mit Claude erstellen").disabled
+    assert button(app, "Plan mit dem Agenten erstellen").disabled
     infos = [i.value for i in app.info]
     assert any("Projektidee und Deadline (Schritt 2)" in i for i in infos)
     assert any("Noch kein Plan" in i for i in infos)
@@ -108,7 +108,7 @@ def test_a_plan_from_the_agent_is_checked_shown_and_exported(app, monkeypatch):
 
     monkeypatch.setattr(agent, "run_planning", fake_run)
     at = fill_project(app)
-    button(at, "Plan mit Claude erstellen").click()
+    button(at, "Plan mit dem Agenten erstellen").click()
     at.run()
 
     assert not at.exception
@@ -137,7 +137,7 @@ def test_the_status_strip_says_what_the_planning_still_needs(app, monkeypatch):
 
     monkeypatch.setattr(agent, "run_planning", planned)
     at = fill_project(app)
-    button(at, "Plan mit Claude erstellen").click()
+    button(at, "Plan mit dem Agenten erstellen").click()
     at.run()
 
     for text in ["✓ Zustimmung<", "✓ Projekt<", "✓ Plan geprüft, 1 Warnung<"]:
@@ -170,7 +170,7 @@ def test_the_planung_says_what_is_next_and_opens_that_step(app, monkeypatch):
     at = fill_project(at)
     assert "Schritt 3" in now(at)
     monkeypatch.setattr(agent, "run_planning", planned)
-    button(at, "Plan mit Claude erstellen").click()
+    button(at, "Plan mit dem Agenten erstellen").click()
     at = at.run()
     assert "übernimm" in now(at) and "Schritt 6" in now(at)
 
@@ -183,7 +183,7 @@ def with_plan(app, monkeypatch):
     """The Planung page with a plan from the agent, and an agent that doubles task A on request."""
     monkeypatch.setattr(agent, "run_planning", planned)
     at = fill_project(app)
-    button(at, "Plan mit Claude erstellen").click()
+    button(at, "Plan mit dem Agenten erstellen").click()
     at.run()
 
     def replanned(project, team, plan, wish, on_round=None):
@@ -250,7 +250,7 @@ def test_a_change_asked_from_claude_is_shown_as_differences_before_it_counts(wit
     assert "A · Datenmodell: 8 h → 16 h" in texts
     assert "Planende: 11.11.2026 → 12.11.2026 (1 Arbeitstag später)" in texts
     # The round is shown while Claude works: its words and what it changed in the plan.
-    assert "Claude: Ich verdopple die Schätzung." in [c.value for c in at.caption]
+    assert "Agent: Ich verdopple die Schätzung." in [c.value for c in at.caption]
     assert {m.label: m.value for m in at.metric}["Planende"] == "11.11.2026"  # not taken yet
     assert at.chat_input(key="wish").disabled  # decide on the open proposal first
 
@@ -322,7 +322,7 @@ def test_a_table_nobody_touched_never_counts_as_edited(app, monkeypatch):
     shuffled = Plan.model_validate(data)
     monkeypatch.setattr(agent, "run_planning", lambda project, team, on_round=None: shuffled)
     at = fill_project(app)
-    button(at, "Plan mit Claude erstellen").click()
+    button(at, "Plan mit dem Agenten erstellen").click()
     at.run()
     at = at.run()  # the table has been drawn once
 
@@ -349,7 +349,7 @@ def test_checking_an_untouched_table_keeps_an_open_proposal(app, monkeypatch):
         lambda project, team, plan, wish, on_round=None: Replan(doubled, []),
     )
     at = fill_project(app)
-    button(at, "Plan mit Claude erstellen").click()
+    button(at, "Plan mit dem Agenten erstellen").click()
     at.run()
     at = at.chat_input(key="wish").set_value(WISH).run()
     assert at.session_state["proposal"] is not None
@@ -470,13 +470,15 @@ def test_without_consent_claude_is_not_asked_to_change_the_plan(with_plan):
 
 def test_a_failing_change_shows_the_reason_and_no_proposal(with_plan, monkeypatch):
     def failing(project, team, plan, wish, on_round=None):
-        raise PlanningError("Claude hat nach 10 Runden noch keinen gültigen Plan.")
+        raise PlanningError("Der Agent hat nach 10 Runden noch keinen gültigen Plan.")
 
     monkeypatch.setattr(agent, "run_replanning", failing)
     at = with_plan.chat_input(key="wish").set_value(WISH).run()
 
     assert not at.exception
-    assert [e.value for e in at.error] == ["Claude hat nach 10 Runden noch keinen gültigen Plan."]
+    assert [e.value for e in at.error] == [
+        "Der Agent hat nach 10 Runden noch keinen gültigen Plan."
+    ]
     assert at.session_state["proposal"] is None
     assert "Übernehmen" not in [b.label for b in at.button]
 
@@ -488,7 +490,7 @@ def test_an_absence_in_the_team_table_moves_the_plan(local, monkeypatch):
     monkeypatch.setattr(agent, "run_planning", lambda project, team, on_round=None: PLAN)
     at = AppTest.from_file(str(SITE.parent / PLANUNG), default_timeout=30).run()
     at = fill_project(at)
-    button(at, "Plan mit Claude erstellen").click()
+    button(at, "Plan mit dem Agenten erstellen").click()
     at.run()
 
     assert not at.exception
@@ -501,7 +503,7 @@ def test_free_days_of_the_project_move_the_plan(app, monkeypatch):
     monkeypatch.setattr(agent, "run_planning", lambda project, team, on_round=None: PLAN)
     at = fill_project(app)
     at.text_input(key="free_days").input("09.11.2026").run()
-    button(at, "Plan mit Claude erstellen").click()
+    button(at, "Plan mit dem Agenten erstellen").click()
     at.run()
 
     assert not at.exception
@@ -512,7 +514,7 @@ def test_free_days_of_the_project_move_the_plan(app, monkeypatch):
     at.text_input(key="free_days").input("Weihnachten").run()
     assert not at.exception
     assert any("'Weihnachten' nicht lesbar" in e.value for e in at.error)
-    assert button(at, "Plan mit Claude erstellen").disabled
+    assert button(at, "Plan mit dem Agenten erstellen").disabled
     # Step 3 says what is in the way, not that idea and deadline were missing.
     assert any("lesbare freie Tage (Schritt 2)" in i.value for i in at.info)
 
@@ -540,7 +542,7 @@ def test_an_agent_error_is_shown_to_the_project_lead(app, monkeypatch):
 
     monkeypatch.setattr(agent, "run_planning", failing_run)
     at = fill_project(app)
-    button(at, "Plan mit Claude erstellen").click()
+    button(at, "Plan mit dem Agenten erstellen").click()
     at.run()
 
     assert not at.exception
@@ -578,7 +580,7 @@ def test_the_site_says_that_it_is_german(site):
 def test_the_startseite_introduces_the_roles_the_agent_pages_mark(site):
     flow = next(h.value for h in site.html if 'class="flow"' in h.value)
     # The same chips as on the agent pages, in the order of the work.
-    marks = ['class="role claude"', 'class="role python"', 'class="role du"']
+    marks = ['class="role agent"', 'class="role python"', 'class="role du"']
     assert all(m in flow for m in marks)
     assert flow.index(marks[0]) < flow.index(marks[1]) < flow.index(marks[2])
 
@@ -639,7 +641,7 @@ def test_startseite_and_ueber_uns_describe_all_three_agents(site):
     about = " ".join(m.value for m in site.switch_page("views/ueber_uns.py").run().markdown)
     assert "ohne LLM" not in start and "ohne LLM" not in about
     assert "Planungsagenten" not in start
-    assert "Python rechnet, Claude bewertet" in tiles
+    assert "Python rechnet, der Agent bewertet" in tiles
 
 
 def test_project_and_team_survive_a_visit_to_another_page(site):
@@ -660,7 +662,7 @@ def test_project_and_team_survive_a_visit_to_another_page(site):
     assert at.date_input(key="deadline").value == PROJECT.deadline
     assert at.checkbox(key="consent").value is True
     assert list(at.session_state["team_df"]["Name"]) == ["Anna", "Ben"]
-    assert not button(at, "Plan mit Claude erstellen").disabled
+    assert not button(at, "Plan mit dem Agenten erstellen").disabled
 
 
 @pytest.fixture
@@ -693,7 +695,7 @@ def flow_site(site, monkeypatch):
 
 def adopt_from_planning(at):
     at = fill_project(at.switch_page(PLANUNG).run())
-    button(at, "Plan mit Claude erstellen").click()
+    button(at, "Plan mit dem Agenten erstellen").click()
     at.run()
     button(at, "Plan als Projekt übernehmen").click()
     at.run()
@@ -978,7 +980,7 @@ def test_an_adopted_project_with_progress_requires_explicit_overwrite(flow_site,
     at = at.switch_page(PLANUNG).run()
     replacement = Plan.model_validate(plan_input(hours=12))
     monkeypatch.setattr(agent, "run_planning", lambda *args, **kwargs: replacement)
-    button(at, "Plan mit Claude erstellen").click()
+    button(at, "Plan mit dem Agenten erstellen").click()
     at.run()
     assert not at.exception
     assert at.session_state["plan"] == replacement
@@ -1016,7 +1018,7 @@ def test_a_plan_with_errors_cannot_be_adopted(app, monkeypatch):
     broken = Plan.model_validate(plan_input(member="Zoe"))
     monkeypatch.setattr(agent, "run_planning", lambda project, team, on_round=None: broken)
     at = fill_project(app)
-    button(at, "Plan mit Claude erstellen").click()
+    button(at, "Plan mit dem Agenten erstellen").click()
     at.run()
 
     assert button(at, "Plan als Projekt übernehmen").disabled
@@ -1119,10 +1121,10 @@ def test_each_part_of_an_agent_page_says_who_does_it(tracked):
     at = tracked.switch_page("views/kontrolle.py").run()
     roles = [h.value for h in at.html if 'class="roles"' in h.value]
     # The agent: Claude proposes, Python checks, the project lead decides. In that order.
-    agent_roles = next(r for r in roles if "CLAUDE" in r)
-    assert agent_roles.index("CLAUDE") < agent_roles.index("PYTHON") < agent_roles.index("DU")
+    agent_roles = next(r for r in roles if "AGENT" in r)
+    assert agent_roles.index("AGENT") < agent_roles.index("PYTHON") < agent_roles.index("DU")
     # The numbers are Python's alone.
-    assert any("PYTHON" in r and "CLAUDE" not in r and "DU" not in r for r in roles)
+    assert any("PYTHON" in r and "AGENT" not in r and "DU" not in r for r in roles)
 
 
 def test_without_a_project_durchfuehrung_and_kontrolle_lead_to_the_planung(site):
@@ -1175,7 +1177,7 @@ def test_the_rest_of_the_project_goes_from_kontrolle_into_the_planung(site):
     tracking.save(tracking.apply_rows(tracking.load(), [{"ID": "A", "Status": "fertig"}]))
 
     at = site.switch_page("views/kontrolle.py").run()
-    button(at, "Rest mit Claude umplanen").click()
+    button(at, "Rest mit dem Agenten umplanen").click()
     at.run()
 
     assert not at.exception and not at.error
@@ -1242,7 +1244,7 @@ def test_a_damaged_project_is_replaced_only_when_confirmed(flow_site):
     at, _ = flow_site
     tracking.PROJECT_FILE.write_text("{kaputt", encoding="utf-8")
     at = fill_project(at.switch_page(PLANUNG).run())
-    button(at, "Plan mit Claude erstellen").click()
+    button(at, "Plan mit dem Agenten erstellen").click()
     at.run()
     assert any("konnte nicht gelesen werden" in e.value for e in at.error)
     assert button(at, "Plan als Projekt übernehmen").disabled
@@ -1338,7 +1340,7 @@ def test_the_execution_agent_needs_consent_and_its_proposal_goes_into_the_report
 
     monkeypatch.setattr(followup, "run_status_summary", proposing)
     at = tracked.switch_page("views/durchfuehrung.py").run()
-    start = "Zusammenfassung mit Claude vorschlagen"
+    start = "Zusammenfassung mit dem Agenten vorschlagen"
     assert button(at, start).disabled
     assert any("Noch nicht erstellt. Der Durchführungs-Agent" in m.value for m in at.markdown)
 
@@ -1351,7 +1353,7 @@ def test_the_execution_agent_needs_consent_and_its_proposal_goes_into_the_report
     texts = [m.value for m in at.markdown]
     assert "Beide Aufgaben sind im Verzug." in texts
     assert "- **A:** Anna klärt das Schema bis Montag." in texts
-    assert any("*Vorschlag des Durchführungs-Agenten (Claude)" in t for t in texts)
+    assert any("*Vorschlag des Durchführungs-Agenten" in t for t in texts)
 
 
 def test_the_control_agent_shows_assessment_findings_and_measures(tracked, monkeypatch):
@@ -1370,11 +1372,11 @@ def test_the_control_agent_shows_assessment_findings_and_measures(tracked, monke
     )
     monkeypatch.setattr(followup, "run_control_report", lambda *args, **kwargs: report)
     at = tracked.switch_page("views/kontrolle.py").run()
-    assert button(at, "Stand mit Claude bewerten").disabled
+    assert button(at, "Stand mit dem Agenten bewerten").disabled
 
     at.checkbox(key="consent_kontrolle").check()
     at.run()
-    button(at, "Stand mit Claude bewerten").click()
+    button(at, "Stand mit dem Agenten bewerten").click()
     at.run()
 
     assert not at.exception and not at.error
@@ -1385,12 +1387,12 @@ def test_the_control_agent_shows_assessment_findings_and_measures(tracked, monke
     assert first == {
         "Aufgaben": "B",
         "Maßnahme": "Anna beginnt B.",
-        "Erwartete Wirkung (Claude)": "Verzug sinkt.",
+        "Erwartete Wirkung (Agent)": "Verzug sinkt.",
         "Nachgerechnet (Python)": "Keine Umverteilung: nicht nachrechenbar",
     }
     # B is Anna's already: Python finds that giving it to her changes nothing, whatever
     # Claude expected.
-    assert second["Erwartete Wirkung (Claude)"] == "B wird früher fertig."
+    assert second["Erwartete Wirkung (Agent)"] == "B wird früher fertig."
     assert second["Nachgerechnet (Python)"].startswith("Das voraussichtliche Ende bleibt der ")
 
 
@@ -1408,8 +1410,8 @@ def test_text_from_claude_shows_no_image_or_link_on_the_pages(tracked, monkeypat
     monkeypatch.setattr(followup, "run_control_report", lambda *args, **kwargs: report)
     shown = []
     for page, consent, start in [
-        ("durchfuehrung", "consent_durchfuehrung", "Zusammenfassung mit Claude vorschlagen"),
-        ("kontrolle", "consent_kontrolle", "Stand mit Claude bewerten"),
+        ("durchfuehrung", "consent_durchfuehrung", "Zusammenfassung mit dem Agenten vorschlagen"),
+        ("kontrolle", "consent_kontrolle", "Stand mit dem Agenten bewerten"),
     ]:
         at = tracked.switch_page(f"views/{page}.py").run()
         at.checkbox(key=consent).check()
@@ -1456,7 +1458,7 @@ def test_a_failing_agent_shows_the_reason_and_no_result(tracked, monkeypatch):
     at = tracked.switch_page("views/kontrolle.py").run()
     at.checkbox(key="consent_kontrolle").check()
     at.run()
-    button(at, "Stand mit Claude bewerten").click()
+    button(at, "Stand mit dem Agenten bewerten").click()
     at.run()
 
     assert not at.exception
@@ -1490,7 +1492,7 @@ def test_a_charter_from_claude_is_saved_as_draft_and_approved_by_the_lead(site, 
     monkeypatch.setattr(lifecycle, "run_charter", drafted)
     at = enter_project(site.switch_page("views/auftrag.py").run())
     at.checkbox(key="charter_consent").check().run()
-    button(at, "Projektauftrag mit Claude entwerfen").click()
+    button(at, "Projektauftrag mit dem Agenten entwerfen").click()
     at = at.run()
     assert not at.exception and not at.error
     saved = lifecycle.load()
@@ -1550,7 +1552,7 @@ def test_an_agent_error_on_the_auftrag_is_shown(site, monkeypatch):
     monkeypatch.setattr(lifecycle, "run_charter", failing)
     at = enter_project(site.switch_page("views/auftrag.py").run())
     at.checkbox(key="charter_consent").check().run()
-    button(at, "Projektauftrag mit Claude entwerfen").click()
+    button(at, "Projektauftrag mit dem Agenten entwerfen").click()
     at = at.run()
     assert not at.exception
     # Unescaped for the page: the underscores may come escaped for Markdown.
@@ -1601,7 +1603,7 @@ def test_requirements_from_claude_are_checked_against_the_charter(site, monkeypa
     lifecycle.save(with_charter())
     at = site.switch_page("views/anforderungen.py").run()
     at.checkbox(key="requirements_consent").check().run()
-    button(at, "Anforderungen mit Claude entwerfen").click()
+    button(at, "Anforderungen mit dem Agenten entwerfen").click()
     at = at.run()
     assert not at.exception and not at.error
     assert lifecycle.load().requirements == NEEDS
@@ -1706,7 +1708,7 @@ def test_without_an_approved_charter_the_requirements_say_so(site, monkeypatch):
     at = site.switch_page("views/anforderungen.py").run()
     assert any("nicht freigegeben" in w.value for w in at.warning)
     at.checkbox(key="requirements_consent").check().run()
-    button(at, "Anforderungen mit Claude entwerfen").click()
+    button(at, "Anforderungen mit dem Agenten entwerfen").click()
     at = at.run()
     # Claude works from the charter as it stands, approved or not.
     assert seen == [CHARTER]
@@ -1715,7 +1717,7 @@ def test_without_an_approved_charter_the_requirements_say_so(site, monkeypatch):
 def test_without_project_data_the_requirements_lead_to_the_auftrag(site):
     at = site.switch_page("views/anforderungen.py").run()
     assert not at.exception
-    assert button(at, "Anforderungen mit Claude entwerfen").disabled
+    assert button(at, "Anforderungen mit dem Agenten entwerfen").disabled
     # The top says what is missing: the idea. No box below offers the switched-off draft.
     assert any("Noch keine Projektidee" in i.value for i in at.info)
 
@@ -1783,7 +1785,7 @@ def test_approved_requirements_reach_agent_and_check(app, monkeypatch):
 
     monkeypatch.setattr(agent, "run_planning", planning)
     at = fill_project(app.run())
-    button(at, "Plan mit Claude erstellen").click()
+    button(at, "Plan mit dem Agenten erstellen").click()
     at = at.run()
     assert not at.exception
     assert seen == {"requirements": NEEDS.items, "covered": frozenset()}
@@ -1801,7 +1803,7 @@ def test_without_approval_the_planung_works_as_before_and_says_so(app, monkeypat
     lifecycle.save(with_charter().model_copy(update={"requirements": NEEDS}))  # a draft
     monkeypatch.setattr(agent, "run_planning", planned)  # the old signature
     at = fill_project(app.run())
-    button(at, "Plan mit Claude erstellen").click()
+    button(at, "Plan mit dem Agenten erstellen").click()
     at = at.run()
     assert not at.exception and not at.error
     assert not any("Anforderung" in w.value for w in at.warning)
@@ -1838,7 +1840,7 @@ def test_the_rest_does_not_ask_for_requirements_that_are_done(site, monkeypatch)
     tracking.save(tracking.apply_rows(tracking.load(), [{"ID": "A", "Status": "fertig"}]))
 
     at = site.switch_page("views/kontrolle.py").run()
-    button(at, "Rest mit Claude umplanen").click()
+    button(at, "Rest mit dem Agenten umplanen").click()
     at.run()
     at = at.switch_page(PLANUNG).run()
     assert at.session_state["covered"] == frozenset({"R1"})
@@ -1855,7 +1857,7 @@ def test_the_rest_does_not_ask_for_requirements_that_are_done(site, monkeypatch)
     monkeypatch.setattr(agent, "run_planning", planning)
     at.checkbox(key="consent").check()
     at = at.run()
-    button(at, "Plan mit Claude erstellen").click()
+    button(at, "Plan mit dem Agenten erstellen").click()
     at = at.run()
     assert seen == [frozenset({"R1"})]
     assert at.session_state["covered"] == frozenset({"R1"})
@@ -1930,12 +1932,12 @@ def design_tables(at):
 def test_without_requirements_the_design_page_leads_to_them(site):
     at = site.switch_page("views/entwurf.py").run()
     assert not at.exception
-    assert button(at, "Entwurf mit Claude entwerfen").disabled
+    assert button(at, "Entwurf mit dem Agenten entwerfen").disabled
     lifecycle.save(with_charter())
     at = site.switch_page("views/entwurf.py").run()
     assert any("Noch keine Anforderungen" in i.value for i in at.info)
     at.checkbox(key="design_consent").check().run()
-    assert not button(at, "Entwurf mit Claude entwerfen").disabled
+    assert not button(at, "Entwurf mit dem Agenten entwerfen").disabled
 
 
 def test_a_design_from_claude_is_drawn_checked_and_approved(site, monkeypatch):
@@ -1949,7 +1951,7 @@ def test_a_design_from_claude_is_drawn_checked_and_approved(site, monkeypatch):
     approve_needs()
     at = site.switch_page("views/entwurf.py").run()
     at.checkbox(key="design_consent").check().run()
-    button(at, "Entwurf mit Claude entwerfen").click()
+    button(at, "Entwurf mit dem Agenten entwerfen").click()
     at = at.run()
     assert not at.exception and not at.error
     assert lifecycle.load().design == design()
@@ -1992,7 +1994,7 @@ def test_the_planner_gets_the_design_only_while_it_is_approved(app, monkeypatch)
 
     monkeypatch.setattr(agent, "run_planning", planning)
     at = fill_project(app.run())
-    button(at, "Plan mit Claude erstellen").click()
+    button(at, "Plan mit dem Agenten erstellen").click()
     at = at.run()
     assert "✓ Entwurf: freigegeben<" in chips(at)
 
@@ -2002,7 +2004,7 @@ def test_the_planner_gets_the_design_only_while_it_is_approved(app, monkeypatch)
     )
     lifecycle.save(lifecycle.load().model_copy(update={"requirements": changed}))
     at = at.run()
-    button(at, "Plan mit Claude erstellen").click()
+    button(at, "Plan mit dem Agenten erstellen").click()
     at = at.run()
     assert not at.exception
     assert seen == [design(), None]
@@ -2031,7 +2033,7 @@ def test_the_planung_shows_the_demos_of_the_plan(app, monkeypatch):
     )
     monkeypatch.setattr(agent, "run_planning", lambda *args, **kwargs: with_demo)
     at = fill_project(app.run())
-    button(at, "Plan mit Claude erstellen").click()
+    button(at, "Plan mit dem Agenten erstellen").click()
     at = at.run()
     assert not at.exception
     (demos,) = [d.value for d in at.dataframe if "Demo" in d.value.columns]
@@ -2116,7 +2118,7 @@ def test_test_cases_from_claude_are_checked_and_approved(site, monkeypatch):
     lifecycle.save(lifecycle.load().model_copy(update={"design": design()}))
     at = site.switch_page("views/testplan.py").run()
     at.checkbox(key="cases_consent").check().run()
-    button(at, "Testfälle mit Claude entwerfen").click()
+    button(at, "Testfälle mit dem Agenten entwerfen").click()
     at = at.run()
     assert not at.exception and not at.error
     assert lifecycle.load().cases == cases()
@@ -2214,7 +2216,7 @@ def test_the_closing_page_takes_decisions_and_lessons(site, monkeypatch):
     assert any("lässt sich abschließen" in s.value for s in at.success)
 
     at.checkbox(key="consent_abschluss").check().run()
-    button(at, "Lessons Learned mit Claude entwerfen").click()
+    button(at, "Lessons Learned mit dem Agenten entwerfen").click()
     at = at.run()
     assert tracking.load().lessons == drafted.items
     assert not at.exception
@@ -2378,10 +2380,10 @@ def test_the_startseite_leads_to_the_test_page_for_open_defects(tracked):
 @pytest.mark.parametrize(
     ("page", "label", "key"),
     [
-        ("auftrag", "Projektauftrag mit Claude entwerfen", "charter_consent"),
-        ("anforderungen", "Anforderungen mit Claude entwerfen", "requirements_consent"),
-        ("entwurf", "Entwurf mit Claude entwerfen", "design_consent"),
-        ("testplan", "Testfälle mit Claude entwerfen", "cases_consent"),
+        ("auftrag", "Projektauftrag mit dem Agenten entwerfen", "charter_consent"),
+        ("anforderungen", "Anforderungen mit dem Agenten entwerfen", "requirements_consent"),
+        ("entwurf", "Entwurf mit dem Agenten entwerfen", "design_consent"),
+        ("testplan", "Testfälle mit dem Agenten entwerfen", "cases_consent"),
     ],
 )
 def test_lifecycle_drafting_requires_transfer_confirmation(site, page, label, key):
@@ -2404,7 +2406,7 @@ def test_draft_cannot_overwrite_a_project_changed_during_the_call(site, monkeypa
     monkeypatch.setattr(lifecycle, "run_requirements", draft)
     at = site.switch_page("views/anforderungen.py").run()
     at.checkbox(key="requirements_consent").check().run()
-    button(at, "Anforderungen mit Claude entwerfen").click()
+    button(at, "Anforderungen mit dem Agenten entwerfen").click()
     at = at.run()
     assert not at.exception
     assert lifecycle.load() == newer
@@ -2534,7 +2536,7 @@ def test_slow_lessons_draft_preserves_newer_manual_notes(site, monkeypatch):
     monkeypatch.setattr(closing, "run_lessons", propose)
     at = site.switch_page("views/abschluss.py").run()
     at.checkbox(key="consent_abschluss").check().run()
-    button(at, "Lessons Learned mit Claude entwerfen").click().run()
+    button(at, "Lessons Learned mit dem Agenten entwerfen").click().run()
     assert not at.exception
     assert tracking.load().lessons == [newer]
     assert any("inzwischen geändert" in error.value for error in at.error)
@@ -2595,7 +2597,7 @@ def test_without_a_project_idea_no_page_offers_the_claude_draft(site):
         assert not at.exception
         infos = [i.value for i in at.info]
         assert any("Noch keine Projektidee" in i for i in infos), page
-        assert not any("von Claude entwerfen" in i for i in infos), page
+        assert not any("vom Agenten entwerfen" in i for i in infos), page
 
 
 def test_with_an_adopted_project_the_planung_does_not_call_the_plan_open(tracked):

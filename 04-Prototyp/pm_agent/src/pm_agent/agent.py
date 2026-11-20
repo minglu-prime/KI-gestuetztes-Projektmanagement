@@ -234,50 +234,36 @@ def _run(
             "OpenAI-Modells in 04-Prototyp/pm_agent/.env ein und starte mit --env-file .env."
         )
     by_name = {tool.name: tool for tool in tools}
-    # Not sent unless set: models differ in what they take (see .env.example).
-    effort = os.environ.get("PM_AGENT_REASONING_EFFORT")
-    effort = {"reasoning_effort": effort} if effort else {}
-    # The whole history goes along in every request. Chat completions are not kept on the
-    # server unless asked for (`store`), so no copy with team data stays there.
-    messages: list[dict[str, Any]] = [
-        {"role": "system", "content": system},
-        {"role": "user", "content": request},
-    ]
+    # Responses API: function tools work together with reasoning, which the planning needs.
+    # The whole history goes along in every request (store=False: nothing is kept on the
+    # server). The model's own output items go back with the answers, reasoning included.
+    items: list[dict[str, Any]] = [{"role": "user", "content": request}]
+    base = {
+        "model": model,
+        "instructions": system,
+        "tools": [tool.definition() for tool in tools],
+        "reasoning": {"effort": _effort()},
+        "store": False,
+        "include": ["reasoning.encrypted_content"],
+        "max_output_tokens": 16_000,
+    }
     said = ""
     for _ in range(MAX_ROUNDS):
-        completion = client.chat.completions.create(
-            model=model,
-            messages=messages,
-            tools=[tool.definition() for tool in tools],
-            **effort,
-        )
-        choice = completion.choices[0]
-        calls = [(call, _arguments(call)) for call in choice.message.tool_calls or []]
-        rounds.append(_round(completion, calls))
-        raise_for_stop_reason(choice.finish_reason, choice.message.refusal)
-        said = choice.message.content or ""
-        messages.append(
-            {
-                "role": "assistant",
-                "content": choice.message.content,
-                "tool_calls": [
-                    {
-                        "id": call.id,
-                        "type": "function",
-                        "function": {
-                            "name": call.function.name,
-                            "arguments": call.function.arguments,
-                        },
-                    }
-                    for call, _ in calls
-                ],
-            }
-        )
-        for call, data in calls:
-            content, is_error = _call(by_name.get(call.function.name), data)
-            messages.append({"role": "tool", "tool_call_id": call.id, "content": content})
+        response = client.responses.create(input=items, **base)
+        calls = [
+            (item, _arguments(item)) for item in response.output if item.type == "function_call"
+        ]
+        rounds.append(_round(response, calls))
+        raise_for_stop_reason(_stop_reason(response), _refusal(response))
+        said = response.output_text or ""
+        items += [item.model_dump(exclude_none=True) for item in response.output]
+        for item, data in calls:
+            content, is_error = _call(by_name.get(item.name), data)
+            items.append(
+                {"type": "function_call_output", "call_id": item.call_id, "output": content}
+            )
             rounds[-1]["tool_results"].append(
-                {"tool": call.function.name, "is_error": is_error, "content": content}
+                {"tool": item.name, "is_error": is_error, "content": content}
             )
         on_round(rounds[-1])
         accepted = result()
@@ -285,17 +271,40 @@ def _run(
             return accepted
         if not calls:  # an answer in words: nothing to correct, the model has stopped
             raise AgentError(
-                f"Claude hat aufgehört, ohne einen {noun} einzureichen. {said}".rstrip()
+                f"Der Agent hat aufgehört, ohne einen {noun} einzureichen. {said}".rstrip()
             )
-    raise AgentError(f"Claude hat nach {MAX_ROUNDS} Runden noch keinen gültigen {noun}.")
+    raise AgentError(f"Der Agent hat nach {MAX_ROUNDS} Runden noch keinen gültigen {noun}.")
+
+
+def _effort() -> str:
+    """Reasoning effort. Default medium; PM_AGENT_REASONING_EFFORT overrides it."""
+    return os.environ.get("PM_AGENT_REASONING_EFFORT") or "medium"
+
+
+def _stop_reason(response: Any) -> str:
+    """`completed`, or why the reply stopped early: "length" or "content_filter"."""
+    if response.status == "incomplete" and response.incomplete_details:
+        reason = response.incomplete_details.reason or ""
+        return "length" if reason == "max_output_tokens" else reason
+    return response.status or ""
+
+
+def _refusal(response: Any) -> str | None:
+    """What the model said when it declined, if it did."""
+    for item in response.output:
+        if item.type == "message":
+            for part in item.content:
+                if part.type == "refusal":
+                    return part.refusal
+    return None
 
 
 def _arguments(call: Any) -> Any:
     """The input of a tool call. The API sends it as JSON text; text that is none stays text."""
     try:
-        return json.loads(call.function.arguments)
+        return json.loads(call.arguments)
     except ValueError:
-        return call.function.arguments
+        return call.arguments
 
 
 def _call(tool: Tool | None, data: Any) -> tuple[str, bool]:
@@ -330,33 +339,34 @@ def raise_for_stop_reason(stop_reason: str | None, refusal: str | None) -> None:
     """Replies that cannot lead to a result. `refusal` is what the model said when it declined."""
     if stop_reason == "content_filter" or refusal:
         why = f": {refusal.rstrip('.')}" if refusal else ""
-        raise AgentError(f"Claude hat die Anfrage abgelehnt{why}. Formuliere die Projektidee um.")
+        raise AgentError(
+            f"Der Agent hat die Anfrage abgelehnt{why}. Formuliere die Projektidee um."
+        )
     if stop_reason == "length":
         raise AgentError(
-            "Die Antwort von Claude wurde abgeschnitten, weil sie zu lang war. "
+            "Die Antwort vom Agenten wurde abgeschnitten, weil sie zu lang war. "
             "Beschreibe das Projekt knapper oder plane es in Teilen."
         )
 
 
 def _model() -> str:
-    """PM_AGENT_MODEL, or the model the KI-Lab uses (PM_MODEL): one setting serves both."""
     return os.environ.get("PM_AGENT_MODEL") or os.environ.get("PM_MODEL") or ""
 
 
-def _round(completion: Any, calls: list[tuple[Any, Any]]) -> dict[str, Any]:
+def _round(response: Any, calls: list[tuple[Any, Any]]) -> dict[str, Any]:
     """What the model did in one reply, in the shape the logs have had from the start
     (`input_tokens`, `output_tokens`), so that earlier logs and new ones read alike."""
-    choice, usage = completion.choices[0], completion.usage
+    usage = response.usage
     return {
-        "model": completion.model,
-        "stop_reason": choice.finish_reason,
+        "model": response.model,
+        "stop_reason": _stop_reason(response),
         "usage": (
-            {"input_tokens": usage.prompt_tokens, "output_tokens": usage.completion_tokens}
+            {"input_tokens": usage.input_tokens, "output_tokens": usage.output_tokens}
             if usage
             else {}
         ),
-        "text": choice.message.content or "",
-        "tool_calls": [{"name": call.function.name, "input": data} for call, data in calls],
+        "text": response.output_text or "",
+        "tool_calls": [{"name": item.name, "input": data} for item, data in calls],
         "tool_results": [],
     }
 

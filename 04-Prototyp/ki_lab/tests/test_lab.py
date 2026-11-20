@@ -229,3 +229,71 @@ class LabTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class EndpointTests(unittest.TestCase):
+    """The lab sends its AI requests to the OpenAI Responses API, or to another endpoint of
+    the same kind when OPENAI_BASE_URL is set (the school's KI:connect, for example)."""
+
+    def _post(self, environ):
+        import io
+        import json
+        from unittest.mock import MagicMock
+
+        from lab import call_model
+
+        seen = {}
+        reply = {'status': 'completed', 'model': 'm', 'id': 'r', 'output': [
+            {'type': 'message', 'content': [{'type': 'output_text', 'text': 'ok'}]}]}
+
+        def fake_urlopen(request, timeout=None):
+            seen['url'] = request.full_url
+            seen['body'] = json.loads(request.data)
+            handle = MagicMock()
+            handle.__enter__.return_value = io.BytesIO(json.dumps(reply).encode())
+            handle.__exit__.return_value = False
+            return handle
+
+        with patch.dict('os.environ', environ, clear=False), \
+                patch('lab.urllib.request.urlopen', side_effect=fake_urlopen):
+            call_model('key', 'gpt-x', [{'role': 'user', 'content': 'hi'}])
+        return seen
+
+    def test_default_endpoint_is_openai(self):
+        env = {'OPENAI_BASE_URL': ''}
+        self.assertEqual(self._post(env)['url'], 'https://api.openai.com/v1/responses')
+
+    def test_base_url_from_setting_is_used_for_requests_and_settings(self):
+        seen = self._post({'OPENAI_BASE_URL': 'https://chat.example.edu/api/v1/'})
+        self.assertEqual(seen['url'], 'https://chat.example.edu/api/v1/responses')
+
+
+class ReasoningTests(EndpointTests):
+    def test_reasoning_is_requested_and_recorded_in_the_protocol(self):
+        seen = self._post({'PM_LAB_REASONING_EFFORT': ''})
+        self.assertEqual(seen['body']['reasoning'], {'effort': 'medium'})
+        seen = self._post({'PM_LAB_REASONING_EFFORT': 'high'})
+        self.assertEqual(seen['body']['reasoning'], {'effort': 'high'})
+        with tempfile.TemporaryDirectory() as tmp, \
+                patch.dict('os.environ', {'PM_LAB_REASONING_EFFORT': 'high'}):
+            lab = Lab(Path(tmp) / 'lab.db', model='m', api_key='')
+            try:
+                self.assertEqual(lab.config()['reasoning_effort'], 'high')
+            finally:
+                lab.close()
+
+
+class ModelSettingTests(unittest.TestCase):
+    def _model(self, environ):
+        with tempfile.TemporaryDirectory() as tmp, patch.dict('os.environ', environ, clear=False):
+            lab = Lab(Path(tmp) / 'lab.db', api_key='')
+            try:
+                return lab.model
+            finally:
+                lab.close()
+
+    def test_the_model_of_the_agents_serves_the_lab_too(self):
+        # One .env serves both programs: PM_MODEL wins, PM_AGENT_MODEL is the fallback.
+        self.assertEqual(self._model({'PM_MODEL': 'a', 'PM_AGENT_MODEL': 'b'}), 'a')
+        self.assertEqual(self._model({'PM_MODEL': '', 'PM_AGENT_MODEL': 'b'}), 'b')
+        self.assertEqual(self._model({'PM_MODEL': '', 'PM_AGENT_MODEL': ''}), '')

@@ -45,15 +45,13 @@ class Tool:
         return self.run(**data)
 
     def definition(self) -> dict[str, Any]:
-        """The tool as the OpenAI chat completions API takes it. Not "strict": that mode
-        allows no optional fields, and each tool validates its input itself."""
+        """The tool as the OpenAI Responses API takes it. Not "strict": that mode allows no
+        optional fields, and each tool validates its input itself."""
         return {
             "type": "function",
-            "function": {
-                "name": self.name,
-                "description": self.description,
-                "parameters": self.input_schema.model_json_schema(),
-            },
+            "name": self.name,
+            "description": self.description,
+            "parameters": self.input_schema.model_json_schema(),
         }
 
 

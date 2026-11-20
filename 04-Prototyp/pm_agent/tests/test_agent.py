@@ -6,9 +6,13 @@ from pm_agent.agent import PlanningError, raise_for_stop_reason
 @pytest.mark.parametrize(
     "stop_reason, category, message",
     [
-        ("length", None, "Die Antwort von Claude wurde abgeschnitten"),
-        ("content_filter", None, r"Claude hat die Anfrage abgelehnt\."),
-        ("stop", "Das kann ich nicht.", r"Claude hat die Anfrage abgelehnt: Das kann ich nicht\."),
+        ("length", None, "Die Antwort vom Agenten wurde abgeschnitten"),
+        ("content_filter", None, r"Der Agent hat die Anfrage abgelehnt\."),
+        (
+            "stop",
+            "Das kann ich nicht.",
+            r"Der Agent hat die Anfrage abgelehnt: Das kann ich nicht\.",
+        ),
     ],
 )
 def test_a_reply_that_cannot_lead_to_a_plan_is_an_error(stop_reason, category, message):

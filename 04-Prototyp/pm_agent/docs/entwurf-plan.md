@@ -120,7 +120,7 @@ All paths below are relative to `04-Prototyp/pm_agent`. Run commands there.
   - draft with a monkeypatched `lifecycle.run_design` returning the Task 2 fixture → four tables filled, diagram panel shows one `st.html` containing `<svg`;
   - editing the steps table to break the direction → error shown, approve disabled; fixing it → approve → chip `Entwurf` `freigegeben`;
   - `steps(at)` on any phase page has 6 entries with `Entwurf` third.
-- [ ] **Steps 2–4:** FAIL → build the page after `views/anforderungen.py` (panels Grundlage, Entwurf von Claude, Bausteine in `st.tabs(["Bausteine","Schnittstellen","Abläufe","Schritte"])` with one save button, Diagramme with `st.selectbox` over flows, Freigabe, Dokument) → PASS.
+- [ ] **Steps 2–4:** FAIL → build the page after `views/anforderungen.py` (panels Grundlage, Entwurf vom Agenten, Bausteine in `st.tabs(["Bausteine","Schnittstellen","Abläufe","Schritte"])` with one save button, Diagramme with `st.selectbox` over flows, Freigabe, Dokument) → PASS.
 - [ ] **Step 5: Commit** `feat(site): page Entwurf`.
 
 ### Task 7: Planning gets the approved design

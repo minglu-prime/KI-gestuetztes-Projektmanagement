@@ -9,11 +9,11 @@ Jede Phase besteht aus denselben drei Teilen. So muss man das System nur einmal 
 
 | Teil | Wer | Was |
 |---|---|---|
-| Ergebnis | **CLAUDE** entwirft | ein festes Datenformat (pydantic), eingereicht über ein Werkzeug (`tools.Submission`) |
-| Prüfung | **PYTHON** prüft | feste Regeln, vor allem: Lässt sich jedes Ergebnis auf das Ergebnis der Phase davor zurückführen? Was nicht passt, geht mit Begründung an Claude zurück. |
+| Ergebnis | **AGENT** entwirft | ein festes Datenformat (pydantic), eingereicht über ein Werkzeug (`tools.Submission`) |
+| Prüfung | **PYTHON** prüft | feste Regeln, vor allem: Lässt sich jedes Ergebnis auf das Ergebnis der Phase davor zurückführen? Was nicht passt, geht mit Begründung an den Agenten zurück. |
 | Freigabe | **DU** entscheidest | die Projektleitung ändert das Ergebnis und gibt es frei. Ändert sich danach etwas davor, gilt die Freigabe nicht mehr („seit der Freigabe geändert“). |
 
-Fakten trägt der Mensch ein: Termine, Team, Fortschritt, Testergebnisse, Störungen. Claude
+Fakten trägt der Mensch ein: Termine, Team, Fortschritt, Testergebnisse, Störungen. Der Agent
 schreibt Entwürfe und Bewertungen, rechnet aber nie selbst. Jede Zahl rechnet Python.
 
 Die Freigaben sind **weich**: Eine Phase darf übersprungen werden. Der Projektpfad über jeder
@@ -26,7 +26,7 @@ arbeitet ohne sie (zum Beispiel plant die Planung ohne Anforderungen wie bisher)
 |---|---|---|---|---|
 | 1 | Projektauftrag | Ziel, Nutzen, Umfang und Nicht-Umfang, Beteiligte als Rollen, Erfolgskriterien K1 …, Rahmenbedingungen | eindeutige IDs der Erfolgskriterien | umgesetzt |
 | 2 | Anforderungen (PRD) | Anforderungen R1 … mit User Story, Priorität Muss/Soll/Kann, Akzeptanzkriterien R1.1 …, zugehörigen Erfolgskriterien | jedes Erfolgskriterium abgedeckt; nur bekannte genannt; mindestens eine Muss-Anforderung | umgesetzt |
-| 3 | Entwurf | Komponenten, Schnittstellen (Anbieter, Nutzer, Eingabe, Ausgabe, Fehler), Abläufe als Schritte | jeder Beteiligte eines Ablaufs ist eine bekannte Komponente; jede Schnittstelle kommt in einem Ablauf vor; jede Muss-Anforderung hat einen Ablauf. Das Sequenzdiagramm zeichnet Python aus den Schritten, nicht Claude. | umgesetzt (Design: [entwurf-design.md](entwurf-design.md)) |
+| 3 | Entwurf | Komponenten, Schnittstellen (Anbieter, Nutzer, Eingabe, Ausgabe, Fehler), Abläufe als Schritte | jeder Beteiligte eines Ablaufs ist eine bekannte Komponente; jede Schnittstelle kommt in einem Ablauf vor; jede Muss-Anforderung hat einen Ablauf. Das Sequenzdiagramm zeichnet Python aus den Schritten, nicht der Agent. | umgesetzt (Design: [entwurf-design.md](entwurf-design.md)) |
 | 4 | Planung | Aufgaben mit Aufwand, Zuweisung, Abhängigkeiten und den Anforderungen, denen sie dienen; je Projektwoche ein vorführbares Ergebnis | unbekannte Anforderung = Fehler; Anforderung ohne Aufgabe = Warnung; dazu Termine, Auslastung, Puffer; jede Projektwoche mit Arbeit hat eine Demo, deren Aufgaben bis Freitag fertig sind (Warnungen) | umgesetzt |
 | 5 | Durchführung | Status, Fertigdatum, Ist-Stunden, Rest je Aufgabe; Statusbericht | jede Aufgabe im Verzug hat einen nächsten Schritt | umgesetzt |
 | 6 | Kontrolle und Wochenrückblick | Plan/Ist, Prognose, Earned Value, Stand je Anforderung; Wochenrückblick: Demo gezeigt?, Ursache von Fehlern, Maßnahme | jede Aufgabe im Verzug hat eine Gegenmaßnahme; jede ausgefallene Demo eine Maßnahme | umgesetzt ([woche-design.md](woche-design.md)) |
@@ -65,14 +65,14 @@ anderer Prüfung.
 sequenceDiagram
   actor Du as DU (Projektleitung)
   participant Seite as Seite Anforderungen
-  participant Claude as CLAUDE
+  participant Agent as AGENT
   participant Python as PYTHON
   participant Datei as data/vorhaben.json
-  Du->>Seite: „Anforderungen mit Claude entwerfen“
-  Seite->>Claude: Idee, Termine, Projektauftrag
+  Du->>Seite: „Anforderungen mit dem Agenten entwerfen“
+  Seite->>Agent: Idee, Termine, Projektauftrag
   loop bis die Prüfung annimmt (höchstens 10 Runden)
-    Claude->>Python: submit_anforderungen(Entwurf)
-    Python-->>Claude: abgelehnt: „K2 deckt keine Anforderung ab“
+    Agent->>Python: submit_anforderungen(Entwurf)
+    Python-->>Agent: abgelehnt: „K2 deckt keine Anforderung ab“
   end
   Python-->>Seite: angenommen
   Seite->>Datei: Entwurf speichern

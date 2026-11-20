@@ -154,7 +154,7 @@ def test_the_agents_summary_goes_into_the_status_report_marked_as_a_proposal(tra
     report = status_report(tracking, evaluate(tracking, today=date(2026, 11, 12)), summary)
 
     assert "A ist fertig, B ist im Verzug.\n\n- **B:** Anna schließt die API" in report
-    assert "*Vorschlag des Durchführungs-Agenten (Claude)" in report
+    assert "*Vorschlag des Durchführungs-Agenten" in report
     assert "Noch nicht erstellt" not in report
 
 
@@ -662,7 +662,7 @@ def test_the_control_document_takes_the_hourly_rate_and_the_agents_report(two_pe
         "| Y | Ben übernimmt Y. | Zwei Tage gewonnen. | Voraussichtliches Ende 17.11.2026 "
         "statt 19.11.2026 (2 Arbeitstage früher) |" in text
     )
-    assert "*Vorschlag des Kontroll-Agenten (Claude), von der Projektleitung zu prüfen.*" in text
+    assert "*Vorschlag des Kontroll-Agenten, von der Projektleitung zu prüfen.*" in text
     assert "$" not in text
 
 
@@ -871,7 +871,7 @@ def test_the_status_report_says_who_does_what_in_the_next_five_workdays(tracking
 
 
 def test_the_forecast_and_the_rest_in_the_planung_end_on_the_same_day(tmp_path):
-    # "Rest mit Claude umplanen" loads the rest into the Planung. What the Planung says
+    # "Rest mit dem Agenten umplanen" loads the rest into the Planung. What the Planung says
     # about it, untouched, is what the forecast said on the Kontrolle page.
     ben = Member(name="Ben", skills={"SQL": 3}, hours_per_week=40)
     plan = Plan.model_validate(

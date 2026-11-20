@@ -5,11 +5,10 @@ Planungsphase von Softwareprojekten: Aufgaben zerlegen, Aufwand schätzen, nach 
 Verfügbarkeit zuweisen, Terminplan und Risiken ableiten. Die Projektleitung prüft und
 entscheidet.
 
-Stand: alle Schritte vom Projektauftrag bis zur Iteration als eigene Seiten, jeder mit Claude
+Stand: alle Schritte vom Projektauftrag bis zur Iteration als eigene Seiten, jeder mit dem Agenten
 als Vorschlag, deterministischer Prüfung und Entscheidung der Projektleitung. Alle Agenten liefen
 am 18.11.2026 einmal ohne Fehler gegen die Claude API. Seit dem 20.11.2026 rufen sie die
-OpenAI API auf (Chat Completions); gegen einen kompatiblen Endpunkt lief bisher nur die Planung
-(20.11.2026). Das KI-Lab (Vergleichsexperiment,
+OpenAI Responses API auf; gegen einen kompatiblen Endpunkt lief am selben Tag jeder Agent einmal. Das KI-Lab (Vergleichsexperiment,
 `../ki_lab`) ist eingebettet.
 
 ## Oberfläche
@@ -29,15 +28,15 @@ Das Menü links:
 | Seite | Inhalt |
 |---|---|
 | Startseite | Überblick, Stand des übernommenen Projekts und Prognose seines Endes |
-| Vorbereiten · Projektauftrag | Idee und Termine eintragen; Claude entwirft Ziel, Nutzen, Umfang, Beteiligte (als Rollen), Erfolgskriterien und Rahmenbedingungen; Python prüft; die Projektleitung ändert und gibt frei; als Markdown herunterladen |
-| Vorbereiten · Anforderungen | Claude entwirft User Stories mit Priorität (Muss, Soll, Kann) und Akzeptanzkriterien aus dem Projektauftrag; Python prüft, dass jedes Erfolgskriterium eine Anforderung hat; Bearbeiten in einer Tabelle, Freigabe, Markdown |
-| Vorbereiten · Entwurf | Claude entwirft Bausteine (Rollen, Komponenten, Fremdsysteme), Schnittstellen mit typisierten Feldern und Fehlercodes und die Abläufe zwischen ihnen; Python prüft jeden Schritt gegen seine Schnittstelle und dass jede Muss-Anforderung einen Ablauf hat, und zeichnet daraus die Sequenzdiagramme; vier Tabellen, Freigabe, Markdown mit Mermaid-Diagrammen |
-| Vorbereiten · Testplan | Claude entwirft Testfälle aus den Akzeptanzkriterien (feste IDs R1.1 …) und den Schnittstellen; Python prüft, dass jedes Kriterium einer Muss-Anforderung einen Testfall hat, und meldet Schnittstellen und Fehlercodes ohne Test; Freigabe, Markdown |
-| Umsetzen · Planung | Plan mit Claude erstellen, prüfen, anpassen, exportieren, als Projekt übernehmen; je Projektwoche eine Demo, die Python gegen den Zeitplan prüft |
-| Umsetzen · Durchführung | Wer in den nächsten fünf Arbeitstagen womit beginnt (aus der Prognose); Status, Fertigdatum, Ist-Stunden und geschätzten Rest je Aufgabe erfassen, mit dem voraussichtlichen Ende je Aufgabe; Claude schlägt Zusammenfassung und nächste Schritte vor; Statusbericht und Arbeitspaketbeschreibungen aus Vorlagen (`src/pm_agent/templates`) |
+| Vorbereiten · Projektauftrag | Idee und Termine eintragen; der Agent entwirft Ziel, Nutzen, Umfang, Beteiligte (als Rollen), Erfolgskriterien und Rahmenbedingungen; Python prüft; die Projektleitung ändert und gibt frei; als Markdown herunterladen |
+| Vorbereiten · Anforderungen | Der Agent entwirft User Stories mit Priorität (Muss, Soll, Kann) und Akzeptanzkriterien aus dem Projektauftrag; Python prüft, dass jedes Erfolgskriterium eine Anforderung hat; Bearbeiten in einer Tabelle, Freigabe, Markdown |
+| Vorbereiten · Entwurf | Der Agent entwirft Bausteine (Rollen, Komponenten, Fremdsysteme), Schnittstellen mit typisierten Feldern und Fehlercodes und die Abläufe zwischen ihnen; Python prüft jeden Schritt gegen seine Schnittstelle und dass jede Muss-Anforderung einen Ablauf hat, und zeichnet daraus die Sequenzdiagramme; vier Tabellen, Freigabe, Markdown mit Mermaid-Diagrammen |
+| Vorbereiten · Testplan | Der Agent entwirft Testfälle aus den Akzeptanzkriterien (feste IDs R1.1 …) und den Schnittstellen; Python prüft, dass jedes Kriterium einer Muss-Anforderung einen Testfall hat, und meldet Schnittstellen und Fehlercodes ohne Test; Freigabe, Markdown |
+| Umsetzen · Planung | Plan mit dem Agenten erstellen, prüfen, anpassen, exportieren, als Projekt übernehmen; je Projektwoche eine Demo, die Python gegen den Zeitplan prüft |
+| Umsetzen · Durchführung | Wer in den nächsten fünf Arbeitstagen womit beginnt (aus der Prognose); Status, Fertigdatum, Ist-Stunden und geschätzten Rest je Aufgabe erfassen, mit dem voraussichtlichen Ende je Aufgabe; der Agent schlägt Zusammenfassung und nächste Schritte vor; Statusbericht und Arbeitspaketbeschreibungen aus Vorlagen (`src/pm_agent/templates`) |
 | Umsetzen · Test | Ergebnisse je Testfall eintragen; jeder fehlgeschlagene Fall braucht einen Fehler (Schwere, Ursache, Aufgabe); ein Fehler öffnet seine Aufgabe auf Knopfdruck wieder |
-| Umsetzen · Kontrolle | Wochen-Demos mit Rückblick (gezeigt?, was ging schief, Ursache, Maßnahme; offene Maßnahmen zum Abhaken); Plan/Ist-Vergleich, Verzug, Prognose des Endes (restliche Arbeit ab heute, mit den Aufgaben, die auf verspätete warten) und von dort der Weg zurück in die Planung: „Rest mit Claude umplanen“ lädt die unfertigen Aufgaben als Plan ab heute; Earned Value nach der 0/100-Methode (Planwert, Fertigstellungswert, Ist-Stunden, SPI, CPI); Kosten bei gesetztem Stundensatz; Claude bewertet den Stand und schlägt Gegenmaßnahmen vor, und wo eine Maßnahme Aufgaben umverteilt, rechnet Python ihre Wirkung auf die Prognose nach; Zeit und Token aller Agentenläufe; alles zusammen als Kontrollbericht aus einer Vorlage |
-| Umsetzen · Abschluss | Abnahme je Anforderung (Python schlägt aus Tests und Fehlern vor, die Projektleitung entscheidet; zurückgestellt nur mit Grund); Lessons Learned von Claude mit Bezug auf Fehler und Wochen; Abschlussbericht mit tatsächlichem Ende und den Aufgaben, die später fertig wurden als geplant. Reiter „Betrieb“ (optional): Betriebshandbuch je Baustein (Verantwortliche als Rolle, Bereitstellung, Überwachung, Rücknahme) und Störungen. Reiter „Nächster Durchlauf“: nächster Backlog mit Herkunft; ein neuer Durchlauf legt die Dateien unter `data/archiv/<Datum>` ab und beginnt ein Vorhaben mit dem Backlog |
+| Umsetzen · Kontrolle | Wochen-Demos mit Rückblick (gezeigt?, was ging schief, Ursache, Maßnahme; offene Maßnahmen zum Abhaken); Plan/Ist-Vergleich, Verzug, Prognose des Endes (restliche Arbeit ab heute, mit den Aufgaben, die auf verspätete warten) und von dort der Weg zurück in die Planung: „Rest mit dem Agenten umplanen“ lädt die unfertigen Aufgaben als Plan ab heute; Earned Value nach der 0/100-Methode (Planwert, Fertigstellungswert, Ist-Stunden, SPI, CPI); Kosten bei gesetztem Stundensatz; der Agent bewertet den Stand und schlägt Gegenmaßnahmen vor, und wo eine Maßnahme Aufgaben umverteilt, rechnet Python ihre Wirkung auf die Prognose nach; Zeit und Token aller Agentenläufe; alles zusammen als Kontrollbericht aus einer Vorlage |
+| Umsetzen · Abschluss | Abnahme je Anforderung (Python schlägt aus Tests und Fehlern vor, die Projektleitung entscheidet; zurückgestellt nur mit Grund); Lessons Learned vom Agenten mit Bezug auf Fehler und Wochen; Abschlussbericht mit tatsächlichem Ende und den Aufgaben, die später fertig wurden als geplant. Reiter „Betrieb“ (optional): Betriebshandbuch je Baustein (Verantwortliche als Rolle, Bereitstellung, Überwachung, Rücknahme) und Störungen. Reiter „Nächster Durchlauf“: nächster Backlog mit Herkunft; ein neuer Durchlauf legt die Dateien unter `data/archiv/<Datum>` ab und beginnt ein Vorhaben mit dem Backlog |
 | KI-Lab | startet den Studienserver aus `../ki_lab` und zeigt ihn eingebettet |
 | Über uns, Impressum | Projektkontext; Impressumsangaben trägt das Team noch ein |
 
@@ -47,7 +46,7 @@ Phase vor dem Plan, die nicht freigegeben ist (ein Entwurf, seit der Freigabe ge
 übersprungen, obwohl schon ein Projekt läuft), ist gestrichelt und sagt „nicht freigegeben“.
 Übersprungen werden darf sie: Die Planung arbeitet dann wie ohne Anforderungen bzw. ohne Entwurf. Mit einem übernommenen Projekt folgt eine
 Zeile „Jetzt dran“ mit einem Knopf zur passenden Seite. Jeder Abschnitt nennt, wer dort
-handelt: CLAUDE schlägt vor, PYTHON rechnet und prüft, DU trägst ein und entscheidest.
+handelt: AGENT schlägt vor, PYTHON rechnet und prüft, DU trägst ein und entscheidest.
 
 Durchführung und Kontrolle rechnen mit dem übernommenen Plan (`data/projekt.json`) und dem
 erfassten Fortschritt. Ein Logo erscheint oben rechts, sobald `assets/logo.svg` oder
@@ -70,15 +69,15 @@ Sechs Schritte als Reiter:
    in `data/team.json`. Ohne Zustimmung des Teams startet keine Planung.
 2. **Projekt**: Idee, Start, Deadline und, wenn es welche gibt, freie Tage für alle
    (Feiertage, eine Pause), an denen niemand eingeplant wird.
-3. **Planung**: Claude plant, jede Runde erscheint sofort. Alternativ einen protokollierten Lauf
-   aus `logs/` öffnen, ohne Claude erneut aufzurufen (z. B. für Vorführungen).
+3. **Planung**: Der Agent plant, jede Runde erscheint sofort. Alternativ einen protokollierten Lauf
+   aus `logs/` öffnen, ohne den Agenten erneut aufzurufen (z. B. für Vorführungen).
 4. **Ergebnis**: Planende, Fehler, Warnungen, Gantt-Diagramm, Auslastung, Begründungen, Risiken.
    „Aufgabe im Detail“ erklärt eine Aufgabe: warum diese Person, welche Skills sie dafür hat,
    was vorher fertig sein muss und was darauf wartet, wie viele Arbeitstage Puffer sie hat
    und wer im Team sie sonst übernehmen könnte.
-5. **Anpassen**: zwei Wege. Mit Claude: einen Wunsch oder eine Annahme eintippen oder einen
+5. **Anpassen**: zwei Wege. Mit dem Agenten: einen Wunsch oder eine Annahme eintippen oder einen
    der Vorschläge anklicken, die Python aus der Prüfung ableitet („Clara
-   übernimmt die Tests“, „Was, wenn das Backend doppelt so lange dauert?“); Claude ändert
+   übernimmt die Tests“, „Was, wenn das Backend doppelt so lange dauert?“); der Agent ändert
    den Plan, Python prüft ihn und zeigt die Unterschiede zum bisherigen Plan, erst
    „Übernehmen“ macht ihn gültig. Von Hand: Tabelle ändern und erneut prüfen, ohne LLM.
 6. **Export**: Markdown oder CSV. Jeder Export wird mit Dauer und Änderungen in `logs/runs.csv`
@@ -88,7 +87,7 @@ Sechs Schritte als Reiter:
    beiseitegelegt, und eine neue beginnt. Ein Plan ohne Fehler lässt sich hier als Projekt
    übernehmen. Hat das bisher übernommene Projekt schon Fortschritt, wählt die Projektleitung:
    verwerfen, oder als frühere Arbeit behalten. Behalten passt zum Rest des Projekts, den die
-   Seite Kontrolle mit „Rest mit Claude umplanen“ lädt: Fertige Aufgaben und die gebuchten
+   Seite Kontrolle mit „Rest mit dem Agenten umplanen“ lädt: Fertige Aufgaben und die gebuchten
    Stunden begonnener Aufgaben bleiben in allen Kennzahlen und Berichten; eine begonnene
    Aufgabe geht im neuen Plan „in Arbeit“ weiter, ihr gebuchter Teil zählt als fertig, sobald
    sie fertig ist. Steht eine fertige Aufgabe wieder im Plan, lehnt das Übernehmen ab: Sie
@@ -96,9 +95,9 @@ Sechs Schritte als Reiter:
 
 ## Agenten
 
-Alle Agenten laufen in derselben Schleife (`run_agent` in `src/pm_agent/agent.py`): Claude
-entwirft ein Ergebnis, ein Werkzeug prüft es deterministisch, Claude korrigiert, bis das
-Einreichen-Werkzeug es annimmt. Liegt nach 10 Runden kein gültiges Ergebnis vor, hört Claude
+Alle Agenten laufen in derselben Schleife (`run_agent` in `src/pm_agent/agent.py`): Der Agent
+entwirft ein Ergebnis, ein Werkzeug prüft es deterministisch, der Agent korrigiert, bis das
+Einreichen-Werkzeug es annimmt. Liegt nach 10 Runden kein gültiges Ergebnis vor, hört der Agent
 ohne Ergebnis auf oder wird eine Antwort abgeschnitten oder abgelehnt, bricht der Agent mit
 einer `AgentError` ab. Jeder Lauf wird in `logs/` protokolliert.
 
@@ -117,7 +116,7 @@ Anforderung ohne Aufgabe oder Aufgaben ohne Anforderung als Warnung. Wie das gan
 Vorgehen von der Idee bis zur nächsten Iteration gedacht ist, beschreibt
 [docs/lebenszyklus.md](docs/lebenszyklus.md). Ist ein Entwurf freigegeben, bekommt der
 Planungs-Agent dessen Bausteine und Schnittstellen als Grundlage; geprüft wird dagegen nicht.
-Die Sequenzdiagramme zeichnet `src/pm_agent/diagram.py`, nie Claude.
+Die Sequenzdiagramme zeichnet `src/pm_agent/diagram.py`, nie der Agent.
 
 Die Agenten für Durchführung und Kontrolle bekommen die fertig berechneten Kennzahlen und
 rechnen nicht selbst. Sie sind ein Gerüst: Weitere Werkzeuge (zum Beispiel eine
@@ -125,9 +124,8 @@ Umplanung zum Durchrechnen) kommen in `followup.py` neben das Einreichen-Werkzeu
 
 Zugang: `.env.example` nach `.env` kopieren, `OPENAI_API_KEY` und das Modell in
 `PM_AGENT_MODEL` eintragen (kein Standard; ohne den Wert gilt `PM_MODEL` des KI-Labs). Ein
-anderer OpenAI-kompatibler Endpunkt lässt sich mit `OPENAI_BASE_URL` setzen; verlangt ein Modell
-dort `reasoning_effort`, steht der Wert in `PM_AGENT_REASONING_EFFORT`. Die Seiten nennen
-das Modell weiter „Claude“, nach dem Modell, mit dem die Website entstand.
+anderer OpenAI-kompatibler Endpunkt lässt sich mit `OPENAI_BASE_URL` setzen; das Reasoning (Standard `medium`)
+steht in `PM_AGENT_REASONING_EFFORT`.
 
 ## Entwicklung
 

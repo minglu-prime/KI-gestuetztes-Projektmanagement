@@ -3,7 +3,7 @@
 Stand des Projekts, Zusammenarbeit mit der Projektleitung, Zugang zum Modell und offene
 Arbeit stehen in `CLAUDE.md` (gilt für jeden Coding-Agenten, nicht nur für Claude).
 
-- **Projektphasen und Berechnungen.** Claude liefert strukturierte Vorschläge. Python prüft
+- **Projektphasen und Berechnungen.** der Agent liefert strukturierte Vorschläge. Python prüft
   und berechnet. Die Projektleitung entscheidet. Änderungen an Terminen, Aufwand oder
   Anforderungsbezügen anhand eines Falls über Planung, Durchführung, Kontrolle und die
   betroffenen Exporte prüfen. Bei Neuplanung Kalender, stabile IDs, frühere Arbeit und
