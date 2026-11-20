@@ -157,7 +157,7 @@ def test_a_lesson_draft_that_misses_a_defect_goes_back_to_claude(api, project, t
     assert closing.run_lessons(tracking, DAY, log_dir=tmp_path) == full
     sent = json.dumps(requests[0], ensure_ascii=False)
     assert "Schema" in sent and "hours_per_week" not in sent and "Anna" not in sent
-    assert "F1" in json.dumps(requests[1]["messages"][-1], ensure_ascii=False)
+    assert "F1" in json.dumps(requests[1]["input"][-1], ensure_ascii=False)
     assert read_log(tmp_path, "lessons")["outcome"] == "lessons learned"
 
 

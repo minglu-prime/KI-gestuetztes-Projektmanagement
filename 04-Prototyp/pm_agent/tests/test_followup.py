@@ -128,11 +128,11 @@ def test_a_rejected_status_summary_goes_back_to_claude_until_it_is_accepted(
     assert summary == StatusSummary.model_validate(SUMMARY)
     assert [r["tool_results"][0]["is_error"] for r in seen] == [True, False]
     # Claude gets the plan, the progress and the numbers, and the rule it broke.
-    assert '"im_verzug": [\n      "B"' in requests[0]["messages"][1]["content"]
+    assert '"im_verzug": [\n      "B"' in requests[0]["input"][0]["content"]
     assert "studentischen Projektgruppe während der Durchführung" in json.dumps(
-        requests[0]["messages"][0]["content"], ensure_ascii=False
+        requests[0]["instructions"], ensure_ascii=False
     )
-    rejection = requests[1]["messages"][-1]["content"]
+    rejection = requests[1]["input"][-1]["output"]
     assert "Statusbericht abgelehnt" in json.dumps(rejection, ensure_ascii=False)
     assert "Aufgabe 'B' ist im Verzug" in json.dumps(rejection, ensure_ascii=False)
 
@@ -150,7 +150,7 @@ def test_the_control_agent_returns_the_report_its_check_accepts(api, tracking, t
     report = run_control_report(tracking, TODAY, log_dir=tmp_path)
 
     assert report == ControlReport.model_validate(REPORT)
-    assert [tool["function"]["name"] for tool in requests[0]["tools"]] == ["submit_control"]
+    assert [tool["name"] for tool in requests[0]["tools"]] == ["submit_control"]
     log = read_log(tmp_path, "kontrolle")
     assert (log["outcome"], log["result"]["assessment"]) == ("kontrollbericht", "gefährdet")
 
@@ -177,7 +177,7 @@ def test_input_that_does_not_parse_is_rejected_with_the_field(api, tracking, tmp
 
     run_control_report(tracking, TODAY, log_dir=tmp_path)
 
-    rejection = json.dumps(requests[1]["messages"][-1]["content"], ensure_ascii=False)
+    rejection = json.dumps(requests[1]["input"][-1]["output"], ensure_ascii=False)
     assert "Kontrollbericht abgelehnt" in rejection
     assert "Ungültige Eingabe bei assessment" in rejection
 
@@ -218,7 +218,7 @@ def test_a_reassignment_to_someone_outside_the_team_goes_back_to_claude(api, tra
     report = run_control_report(tracking, TODAY, log_dir=tmp_path)
 
     assert report.measures[0].reassign_to is None
-    rejection = requests[1]["messages"][-1]["content"]
+    rejection = requests[1]["input"][-1]["output"]
     assert "an 'Zoe' geben, diese Person ist nicht im Team" in json.dumps(
         rejection, ensure_ascii=False
     )

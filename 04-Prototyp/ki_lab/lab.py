@@ -29,6 +29,10 @@ def canonical(value):
     return json.dumps(value, ensure_ascii=False, sort_keys=True)
 
 
+# Reasoning tokens count against this limit, so it leaves room for the thinking.
+MAX_OUTPUT_TOKENS = 8000
+
+
 def _round_deadline(state, round_):
     limit = state['config'].get('limit_seconds', _LEGACY_LIMIT)
     if type(limit) is not int or limit <= 0:
@@ -36,9 +40,22 @@ def _round_deadline(state, round_):
     return round_['started_at'] + limit
 
 
+def responses_url():
+    """The Responses endpoint: OpenAI's, or another OpenAI-compatible service that the
+    OPENAI_BASE_URL setting names (the school's KI:connect, for example)."""
+    base = os.environ.get('OPENAI_BASE_URL') or 'https://api.openai.com/v1'
+    return base.rstrip('/') + '/responses'
+
+
+def reasoning_effort():
+    """How much the model thinks before it answers (PM_LAB_REASONING_EFFORT, default medium)."""
+    return os.environ.get('PM_LAB_REASONING_EFFORT') or 'medium'
+
+
 def call_model(api_key, model, messages):
-    payload = {'model': model, 'input': messages, 'store': False, 'max_output_tokens': 3500}
-    request = urllib.request.Request('https://api.openai.com/v1/responses',
+    payload = {'model': model, 'input': messages, 'store': False,
+               'reasoning': {'effort': reasoning_effort()}, 'max_output_tokens': MAX_OUTPUT_TOKENS}
+    request = urllib.request.Request(responses_url(),
         data=json.dumps(payload).encode(), headers={'Authorization': 'Bearer ' + api_key,
                                                   'Content-Type': 'application/json'})
     try:
@@ -69,7 +86,8 @@ class Lab:
         self.db.commit()
         self.lock = threading.RLock()
         self.clock = clock
-        self.model = model if model is not None else os.environ.get('PM_MODEL', '')
+        self.model = model if model is not None else (
+            os.environ.get('PM_MODEL') or os.environ.get('PM_AGENT_MODEL') or '')
         self.api_key = api_key if api_key is not None else os.environ.get('OPENAI_API_KEY', '')
         self.materials = json.loads((ROOT / 'cases.json').read_text(encoding='utf-8'))
         self.prompt = (ROOT / 'prompt.txt').read_text(encoding='utf-8')
@@ -81,8 +99,9 @@ class Lab:
         return {'case_version': self.materials['version'],
                 'materials_sha256': hashlib.sha256(canonical(self.materials).encode()).hexdigest(),
                 'prompt_sha256': hashlib.sha256(self.prompt.encode()).hexdigest(),
-                'model': self.model, 'api': 'https://api.openai.com/v1/responses',
-                'max_output_tokens': 3500, 'limit_seconds': LIMIT, 'protocol_version': '1.0'}
+                'model': self.model, 'api': responses_url(),
+                'max_output_tokens': MAX_OUTPUT_TOKENS, 'reasoning_effort': reasoning_effort(),
+                'limit_seconds': LIMIT, 'protocol_version': '1.0'}
 
     def freeze(self, attestation):
         if not self.api_key or not re.search(r'\d{4}-\d{2}-\d{2}$', self.model):

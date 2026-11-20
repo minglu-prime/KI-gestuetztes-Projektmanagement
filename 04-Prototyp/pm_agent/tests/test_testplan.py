@@ -144,7 +144,7 @@ def test_a_test_plan_that_misses_a_muss_criterion_goes_back_to_claude(api, tmp_p
     assert result == cases()
     sent = json.dumps(requests[0], ensure_ascii=False)
     assert "Buchung anlegen" in sent and "hours_per_week" not in sent
-    assert "'R1.1'" in json.dumps(requests[1]["messages"][-1], ensure_ascii=False)
+    assert "'R1.1'" in json.dumps(requests[1]["input"][-1], ensure_ascii=False)
     assert read_log(tmp_path, "testplan")["outcome"] == "testplan"
     assert [(r["Agent"], r["Ergebnis"]) for r in agent_runs(tmp_path)] == [("Testplan", "Testplan")]
 

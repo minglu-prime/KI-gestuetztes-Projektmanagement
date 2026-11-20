@@ -203,8 +203,8 @@ def test_a_rejected_charter_goes_back_to_claude(api, tmp_path):
     ]
     result = lifecycle.run_charter(PROJECT, log_dir=tmp_path)
     assert result == charter()
-    assert PROJECT.idea in json.dumps(requests[0]["messages"], ensure_ascii=False)
-    rejection = requests[1]["messages"][-1]["content"]
+    assert PROJECT.idea in json.dumps(requests[0]["input"], ensure_ascii=False)
+    rejection = requests[1]["input"][-1]["output"]
     assert "'K1' ist mehrfach vergeben" in json.dumps(rejection, ensure_ascii=False)
     log = read_log(tmp_path, "auftrag")
     assert log["outcome"] == "projektauftrag" and log["result"] == charter().model_dump(mode="json")
@@ -224,7 +224,7 @@ def test_requirements_that_miss_a_criterion_are_rejected(api, tmp_path):
     assert result == requirements()
     # Claude works from the charter, and learns which success criterion is not covered.
     assert "Doppelbuchungen sind ausgeschlossen" in json.dumps(requests[0], ensure_ascii=False)
-    assert "'K2'" in json.dumps(requests[1]["messages"][-1], ensure_ascii=False)
+    assert "'K2'" in json.dumps(requests[1]["input"][-1], ensure_ascii=False)
     assert read_log(tmp_path, "anforderungen")["outcome"] == "anforderungskatalog"
 
 
@@ -554,7 +554,7 @@ def test_a_design_that_misses_a_muss_requirement_goes_back_to_claude(api, tmp_pa
     sent = json.dumps(requests[0], ensure_ascii=False)
     assert "Stornieren" in sent and "hours_per_week" not in sent  # no team data
     assert "'R2' (Stornieren) hat keinen Ablauf" in json.dumps(
-        requests[1]["messages"][-1], ensure_ascii=False
+        requests[1]["input"][-1], ensure_ascii=False
     )
     assert read_log(tmp_path, "entwurf")["outcome"] == "entwurf"
     assert [(r["Agent"], r["Ergebnis"]) for r in agent_runs(tmp_path)] == [("Entwurf", "Entwurf")]
