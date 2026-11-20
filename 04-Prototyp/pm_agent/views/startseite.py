@@ -97,7 +97,10 @@ with st.container(key="project"):
 
 with st.container(key="lifecycle"):
     st.subheader("Der ganze Ablauf")
-    st.caption("Elf Schritte, wie im Menü. Schritte vor der Planung dürfen übersprungen werden.")
+    st.caption(
+        "Alle Schritte in der Reihenfolge des Menüs. Schritte vor der Planung dürfen "
+        "übersprungen werden."
+    )
     with st.container(horizontal=True, key="steps"):
         for number, (key, name, hint) in enumerate(JOURNEY, start=1):
             with st.container(border=True, key=f"tile-{key}"):

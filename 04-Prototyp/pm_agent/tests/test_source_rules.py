@@ -74,7 +74,7 @@ def test_the_readme_names_every_page_of_the_menu():
     # PR 19, 35, 49 and 54 brought the Startseite or the docs up to pages added before.
     titles = re.findall(r'st\.Page\("[^"]+", title="([^"]+)"', (ROOT / "app.py").read_text("utf-8"))
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    # A first cell names one or more pages: "Agenten · Test", "Über uns, Impressum".
+    # A first cell names one or more pages: "Umsetzen · Test", "Über uns, Impressum".
     first_cells = [line.split("|")[1] for line in readme.splitlines() if line.startswith("| ")]
     named = {name.strip() for cell in first_cells for name in re.split("[·,]", cell)}
     assert len(titles) > 10
@@ -165,3 +165,13 @@ def test_numbers_to_fill_in_follow_the_language_of_the_browser():
             ):
                 bare.append(f"{path.name}:{node.lineno}")
     assert not bare, bare
+
+
+def test_the_menu_groups_pages_by_phase():
+    # "Agenten" held seven pages, three of them without an agent, while four pages with one
+    # stood under "Vorbereiten": the group said who acts, and said it wrongly.
+    source = (ROOT / "app.py").read_text(encoding="utf-8")
+    groups = re.findall(r'^    "([^"]*)": \[', source, flags=re.M)
+    assert groups == ["", "Vorbereiten", "Umsetzen", "Experiment", "Info"]
+    assert not (ROOT / "views" / "betrieb.py").exists()
+    assert not (ROOT / "views" / "iteration.py").exists()

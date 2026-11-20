@@ -24,14 +24,12 @@ MENU = {
         st.Page("views/entwurf.py", title="Entwurf", icon=":material/account_tree:"),
         st.Page("views/testplan.py", title="Testplan", icon=":material/rule:"),
     ],
-    "Agenten": [
+    "Umsetzen": [
         st.Page("views/planung.py", title="Planung", icon=":material/view_timeline:"),
         st.Page("views/durchfuehrung.py", title="Durchführung", icon=":material/task_alt:"),
         st.Page("views/testlauf.py", title="Test", icon=":material/bug_report:"),
         st.Page("views/kontrolle.py", title="Kontrolle", icon=":material/monitoring:"),
         st.Page("views/abschluss.py", title="Abschluss", icon=":material/flag_circle:"),
-        st.Page("views/betrieb.py", title="Betrieb", icon=":material/settings:"),
-        st.Page("views/iteration.py", title="Iteration", icon=":material/restart_alt:"),
     ],
     "Experiment": [st.Page("views/ki_lab.py", title="KI-Lab", icon=":material/science:")],
     "Info": [
