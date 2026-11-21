@@ -218,13 +218,23 @@ class LabTests(unittest.TestCase):
         self.assertIsNone(state['rounds'][1]['first_ai_draft'])
 
     def test_formal_freeze_and_model_drift(self):
+        # The study rule of 21.11.2026: no dated snapshot needed. The name of the model is
+        # frozen, each call records the model that answered (analysis: models_returned).
         self.lab.api_key = 'test-only'
-        self.lab.model = 'test-2026-01-01'
+        self.lab.model = 'gpt-6-sol'
         self.lab.freeze('TEST ONLY: controlled configuration attestation')
         token = self.lab.create(group=1, pilot=False, participant='P001')['token']
-        self.lab.model = 'test-2026-02-01'
+        self.lab.model = 'gpt-6-luna'
         with self.assertRaises(Problem):
             self.start(token)
+
+    def test_freeze_still_needs_a_key_and_a_model(self):
+        self.lab.api_key, self.lab.model = '', 'gpt-6-sol'
+        with self.assertRaises(Problem):
+            self.lab.freeze('TEST ONLY: controlled configuration attestation')
+        self.lab.api_key, self.lab.model = 'test-only', ''
+        with self.assertRaises(Problem):
+            self.lab.freeze('TEST ONLY: controlled configuration attestation')
 
 
 if __name__ == '__main__':

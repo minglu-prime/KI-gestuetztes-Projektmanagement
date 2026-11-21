@@ -99,11 +99,11 @@ nur auf Wort der Projektleitung). Chat Completions nimmt bei diesem Modell Werkz
 1. **Die Forschungsarbeit.** Alle Issues sind offen, die Ordner `01-Projektplanung`,
    `02-Recherche`, `03-Experiment` und `05-Ergebnisse` sind leer. Das Werkzeug ist weit, die
    Frage des Projekts („Was ändert KI im Projektmanagement?“) hat noch keine Daten.
-2. **KI-Lab für die formale Studie.** Der „Freeze“ des Protokolls verlangt eine datierte
-   Modell-Snapshot-ID (Name endet auf `YYYY-MM-DD`, `ki_lab/lab.py`, `freeze`). `gpt-6-sol` hat
-   keine: der Pilot geht, die formale Studie nicht. Bei KI:connect nach einem datierten Modell
-   fragen, sonst mit der Gruppe entscheiden, wie der feste Modellstand belegt wird. Das ist
-   eine Studienentscheidung, keine des Coding-Agenten.
+2. **KI-Lab für die formale Studie: erledigt am 21.11.2026.** Der Freeze verlangt keinen datierten
+   Snapshot mehr (Entscheidung E01 in `01-Projektplanung/entscheidungen.md`); jeder Aufruf speichert
+   das antwortende Modell, die Auswertung nennt es (`models_returned`). Echter Aufruf, Fehlerpfade
+   und die formale Kette sind in `04-Prototyp/ki_lab/VERIFIKATION.md` belegt. Offen bleibt nur, was
+   Menschen tun: Piloten, Rater, Teilnehmende (#7, #8, #10).
 3. **Vorhandene Vergleichsdaten auswerten.** Alle Agenten liefen je einmal mit Claude
    (18.11.2026) und mit `gpt-6-sol` (20.11.2026); die Protokolle liegen lokal in `logs/` (die vom
    20.11. im Unterordner `logs/gpt-6-sol-20261120/`). Vergleichbar: Runden, Ablehnungen durch
@@ -113,9 +113,9 @@ nur auf Wort der Projektleitung). Chat Completions nimmt bei diesem Modell Werkz
    Modell geprüft“ gibt Gruppe und Betreuung einen Bezugspunkt (öffentlich: nur auf Wort der
    Projektleitung).
 5. **Issues pflegen.** Zuständige eintragen; die Meilenstein-Issues in Aufgaben für einen Tag
-   zerlegen, damit morgens geplant und abends mit Nachweis geschlossen werden kann. #9 ist am
-   weitesten: echter KI-Aufruf und Browserprüfung haben jetzt Nachweise, das datierte Modell
-   fehlt noch.
+   zerlegen, damit morgens geplant und abends mit Nachweis geschlossen werden kann. #9 ist
+   technisch erfüllt (siehe `VERIFIKATION.md`) und kann auf Wort der Projektleitung geschlossen
+   werden.
 6. **Genauigkeit.** Die Zustimmungstexte nennen die „OpenAI API“, die Daten gehen aber an den
    Dienst in `OPENAI_BASE_URL` (KI:connect); für die Datenschutzangaben genau benennen. Die
    Prompts sind für Claude geschrieben und mit dem neuen Modell je einmal gelaufen: Qualität
