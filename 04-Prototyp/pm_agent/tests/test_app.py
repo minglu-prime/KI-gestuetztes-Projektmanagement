@@ -114,6 +114,8 @@ def test_a_plan_from_the_agent_is_checked_shown_and_exported(app, monkeypatch):
     assert not at.exception
     metrics = {m.label: m.value for m in at.metric}
     assert metrics == {"Planende": "11.11.2026", "Fehler": "0", "Warnungen": "1"}
+    # The result in one line above them: one warning to decide on.
+    assert 'class="verdict warn"' in verdict(at) and "1 Warnung: Task" in verdict(at)
     assert [w.value for w in at.warning] == [
         "Task 'A' braucht 'SQL', Anna hat diese Fähigkeit nicht angegeben"
     ]
@@ -1054,6 +1056,19 @@ def tracked(site):
     return site
 
 
+def verdict(at) -> str:
+    """The verdict line on top of a page (ui.verdict), as HTML; empty without one."""
+    return next((h.value for h in at.html if 'class="verdict' in h.value), "")
+
+
+def test_the_pages_of_a_project_open_with_its_forecast(tracked):
+    # The answer to "Do we make it?" stood in the middle of the Kontrolle, below four metrics.
+    for page in ("durchfuehrung", "kontrolle"):
+        at = tracked.switch_page(f"views/{page}.py").run()
+        assert not at.exception, page
+        assert "Prognose: Voraussichtliches Ende" in verdict(at), page
+
+
 def lines(boxes) -> list[str]:
     """The messages in alert boxes: several of one kind share a box as a list (ui.messages)."""
     return [line.removeprefix("- ") for box in boxes for line in box.value.splitlines()]
@@ -1348,8 +1363,7 @@ def test_kontrolle_offers_the_control_document(tracked, downloads):
 def test_the_startseite_says_where_the_project_is_heading(tracked):
     at = tracked.run()
     assert not at.exception
-    said = [c.value for c in at.caption] + [w.value for w in at.warning]
-    assert any(text.startswith("Prognose: Voraussichtliches Ende") for text in said)
+    assert "Prognose: Voraussichtliches Ende" in verdict(at)
     # And what to do about it: one of the two buttons is the recommended one (the line
     # "Als Nächstes": test_the_startseite_says_the_forecast_once).
     assert sorted(b.proto.type for b in at.button if b.label in WAYS_ON) == [
@@ -2266,7 +2280,7 @@ def test_the_closing_page_takes_decisions_and_lessons(site, monkeypatch):
         "keine Zeit",
     )
     assert at.text_input(key="signoff_reason").value == ""
-    assert any("lässt sich abschließen" in s.value for s in at.success)
+    assert "lässt sich abschließen" in verdict(at) and 'class="verdict ok"' in verdict(at)
 
     at.checkbox(key="consent_abschluss").check().run()
     button(at, "Lessons Learned mit dem Agenten entwerfen").click()
@@ -2408,7 +2422,7 @@ def test_the_operations_step_is_done_only_when_the_handbook_passes(tracked):
 def test_without_requirements_the_closing_page_does_not_call_the_project_closable(tracked):
     at = tracked.switch_page("views/abschluss.py").run()
     assert not at.exception
-    assert not any("lässt sich abschließen" in s.value for s in at.success)
+    assert "lässt sich abschließen" not in verdict(at)
     assert any("nichts abzunehmen" in w.value for w in at.warning)
 
 

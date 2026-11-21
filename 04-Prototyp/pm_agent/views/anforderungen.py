@@ -25,10 +25,12 @@ from pm_agent.ui import (
     kept_editor,
     messages,
     phase_chip,
+    phase_verdict,
     run_with_progress,
     saved_lifecycle,
     store,
     strip,
+    verdict,
 )
 from pm_agent.workbench import InputError
 
@@ -230,3 +232,11 @@ status.html(
         phase_chip("Anforderungen", requirements_state(life)),
     )
 )
+# The result on top, beside the chips: the findings of the check, or what the approval needs.
+shown = phase_verdict(
+    requirements_state(life),
+    check_requirements(life.requirements, life.charter) if life.requirements is not None else None,
+)
+if shown is not None:
+    with status:
+        verdict(*shown)

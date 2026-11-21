@@ -261,3 +261,14 @@ def test_no_page_shows_a_document_again_below_its_download():
         and str(node.args[0].value).startswith("Vorschau")
     ]
     assert found == []
+
+
+def test_every_page_with_a_check_opens_with_its_verdict():
+    # Errors and warnings stood below the tables they came from; the result was hard to find.
+    # A page that shows the findings of a check (ui.messages) says the result on top too.
+    missing = [
+        path.name
+        for path in (ROOT / "views").glob("*.py")
+        if "messages(" in (text := path.read_text(encoding="utf-8")) and "verdict(" not in text
+    ]
+    assert missing == []

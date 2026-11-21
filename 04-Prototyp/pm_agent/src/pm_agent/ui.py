@@ -17,8 +17,10 @@ from pm_agent.lifecycle import Lifecycle
 from pm_agent.models import Plan
 from pm_agent.tracking import (
     PART,
+    Forecast,
     Tracking,
     current_results,
+    forecast_text,
     has_progress,
     history_rows,
     load,
@@ -70,6 +72,62 @@ def messages(errors: Sequence[str], warnings: Sequence[str] = ()) -> None:
             show(as_text(items[0]))
         elif items:
             show("\n".join(f"- {as_text(item)}" for item in items))
+
+
+# The word before a verdict: the state is said, not shown by its colour alone.
+VERDICT_WORDS = {"bad": "Achtung", "warn": "Zu entscheiden", "ok": "In Ordnung"}
+
+
+def verdict(state: str, text: str) -> None:
+    """The result of a page in one line on top of it: red when it is bad (`state` "bad"),
+    golden when the project lead has to decide ("warn"), green when it is fine ("ok"). The
+    details follow below. `text` shows as written."""
+    st.html(
+        f'<p class="verdict {state}" role="status">'
+        f"<b>{VERDICT_WORDS[state]}:</b> {escape(text)}</p>"
+    )
+
+
+def check_verdict(errors: Sequence[str], warnings: Sequence[str], ok: str) -> tuple[str, str]:
+    """The verdict of a check: its first error or warning and how many there are; `ok`
+    without either. The full list stays below (`messages`)."""
+    for state, items, noun in (("bad", errors, "Fehler"), ("warn", warnings, "Warnung")):
+        if items:
+            plural = "en" if noun == "Warnung" and len(items) > 1 else ""
+            more = " …" if len(items) > 1 else ""
+            return state, f"{len(items)} {noun}{plural}: {items[0]}{more}"
+    return "ok", ok
+
+
+# A phase before the plan whose check finds nothing: what is still to do about it.
+PHASE_VERDICTS = {
+    "freigegeben": ("ok", "Geprüft ohne Befund und freigegeben."),
+    "entwurf": ("warn", "Geprüft ohne Befund, noch nicht freigegeben."),
+    "geändert": ("warn", "Seit der Freigabe geändert: prüfen und neu freigeben."),
+}
+
+
+def phase_verdict(phase: str, check: lifecycle.Check | None) -> tuple[str, str] | None:
+    """The verdict of a phase before the plan: the findings of its check first, then its
+    approval. None while the phase has nothing in it yet."""
+    if phase == "offen" or check is None:
+        return None
+    return check_verdict(*check, "") if any(check) else PHASE_VERDICTS[phase]
+
+
+def forecast_verdict(outlook: Forecast, deadline: datetime.date) -> tuple[str, str]:
+    """The forecast as a verdict: bad past the deadline or without a forecast, a warning
+    when the end moved later or no buffer is left, fine otherwise."""
+    said = forecast_text(outlook, deadline)
+    if outlook.end is None and not outlook.problem:
+        return "ok", said
+    if outlook.problem or outlook.deadline_gap > 0:
+        state = "bad"
+    elif outlook.shift > 0 or outlook.deadline_gap == 0:
+        state = "warn"
+    else:
+        state = "ok"
+    return state, f"Prognose: {said}."
 
 
 def saved_lifecycle() -> Lifecycle | None:

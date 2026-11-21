@@ -379,6 +379,26 @@
 }
 .chip-arrow { color: var(--muted); }
 
+/* ---- Verdict: the result of a page in one line, on top (ui.verdict) ---------------------- */
+
+/* Red when it is bad, golden when the project lead decides, green when it is fine. The word
+   in front says the state too. Text on its tint stays above 4.5 to 1. */
+.verdict {
+  margin: 4px 0 8px;
+  padding: 12px 16px;
+  border: 1px solid;
+  border-left-width: 6px;
+  border-radius: 10px;
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.verdict b { font-weight: 800; }
+.verdict.bad { color: #8f1d14; background: #fdecea; border-color: #c0392b; }
+.verdict.warn { color: #6a4510; background: #fdf3e1; border-color: #ba8d42; }
+.verdict.ok { color: #1d5a3f; background: #e3f1e6; border-color: #23654c; }
+
 /* ---- Tabs of a group (Vorbereiten, Kontrolle, Info) -------------------------------------- */
 
 /* The pages of one menu entry. This page has the green edge of the project path; the others

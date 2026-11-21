@@ -29,11 +29,13 @@ from pm_agent.ui import (
     as_text,
     chip,
     consent,
+    forecast_verdict,
     heading,
     history_table,
     kept_editor,
     run_with_progress,
     strip,
+    verdict,
 )
 from pm_agent.workbench import InputError
 
@@ -48,8 +50,10 @@ tracking = adopted_project()
 if tracking is None:
     st.stop()
 
-# Where the project stands, from the saved progress.
+# Where the project stands, from the saved progress: the forecast first.
 result = evaluate(tracking, date.today())
+outlook = forecast(tracking, date.today())
+verdict(*forecast_verdict(outlook, tracking.project.deadline))
 finished = sum(t.status == "fertig" for t in result.tasks)
 running = sum(t.status == "in Arbeit" for t in result.tasks)
 late = len(result.overdue)
@@ -73,7 +77,6 @@ with st.container(border=True, key="panel-ahead"):
         "Die nächsten fünf Arbeitstage",
         python="plant aus deinem Fortschritt voraus",
     )
-    outlook = forecast(tracking, date.today())
     ahead = week_ahead(tracking, date.today())
     demo = demo_this_week(tracking, date.today())
     if demo:

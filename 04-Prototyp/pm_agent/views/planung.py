@@ -37,6 +37,7 @@ from pm_agent.ui import (
     LEGEND,
     TASK_AXIS,
     as_text,
+    check_verdict,
     chip,
     heading,
     messages,
@@ -45,6 +46,7 @@ from pm_agent.ui import (
     roles,
     round_printer,
     strip,
+    verdict,
 )
 from pm_agent.workbench import (
     PLAN_COLUMNS,
@@ -554,13 +556,19 @@ with tabs[3]:
             f"Quelle: {state.source}"
             + (" · von der Projektleitung angepasst" if state.edited else "")
         )
+        # The result first: a missed deadline outweighs every other warning.
+        kinds = zip(result.warnings, result.warning_kinds, strict=True)
+        late = [warning for warning, kind in kinds if kind[0] == "late"]
+        end = result.end_date.strftime("%d.%m.%Y") if result.end_date else "–"
+        if late and not result.errors:
+            verdict("bad", late[0])
+        else:
+            fine = f"Planende {end}: keine Fehler, keine Warnungen."
+            verdict(*check_verdict(result.errors, result.warnings, fine))
         a, b, c = st.columns(3)
-        a.metric("Planende", result.end_date.strftime("%d.%m.%Y") if result.end_date else "–")
+        a.metric("Planende", end)
         b.metric("Fehler", len(result.errors))
         c.metric("Warnungen", len(result.warnings))
-        messages(result.errors, result.warnings)
-        if not result.errors and not result.warnings:
-            st.success("Die Prüfung meldet keine Fehler und keine Warnungen.")
 
         with st.container(border=True, key="panel-schedule"):
             heading("view_timeline", "Terminplan")
@@ -612,6 +620,8 @@ with tabs[3]:
                 )
             else:
                 st.info("Ohne fehlerfreien Plan gibt es keinen Terminplan.")
+        # Every finding, below the chart it is about.
+        messages(result.errors, result.warnings)
 
         with st.container(border=True, key="panel-load"):
             heading("groups", "Auslastung bis zur Deadline")

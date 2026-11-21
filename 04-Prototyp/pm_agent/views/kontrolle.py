@@ -40,12 +40,14 @@ from pm_agent.ui import (
     adopted_project,
     as_text,
     consent,
+    forecast_verdict,
     heading,
     history_table,
     messages,
     on_panel,
     roles,
     run_with_progress,
+    verdict,
 )
 from pm_agent.workbench import InputError
 
@@ -65,6 +67,8 @@ st.caption(
 tracking = adopted_project()
 if tracking is not None:
     result = evaluate(tracking, date.today())
+    outlook = forecast(tracking, date.today())
+    verdict(*forecast_verdict(outlook, tracking.project.deadline))
     st.subheader("Projektstand")
     st.html(roles(python="rechnet aus Plan und Fortschritt"))
     if not has_progress(tracking):
@@ -92,7 +96,6 @@ if tracking is not None:
 
     with st.container(border=True, key="panel-forecast"):
         heading("trending_up", "Prognose", python="rechnet")
-        outlook = forecast(tracking, date.today())
         if outlook.problem:
             st.error(
                 f"Die Prognose lässt sich nicht berechnen: {outlook.problem}. Prüfe Status und "

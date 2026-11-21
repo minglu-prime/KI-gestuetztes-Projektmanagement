@@ -49,6 +49,10 @@ Phase vor dem Plan, die nicht freigegeben ist (ein Entwurf, seit der Freigabe ge
 Zeile „Jetzt dran“ mit einem Knopf zur passenden Seite. Jeder Abschnitt nennt, wer dort
 handelt: AGENT schlägt vor, PYTHON rechnet und prüft, DU trägst ein und entscheidest.
 
+Darunter steht das Ergebnis der Seite in einer Zeile: rot mit „Achtung“, wenn etwas schiefgeht
+(Deadline verpasst, Fehler in der Prüfung), golden mit „Zu entscheiden“, grün mit „In Ordnung“
+(`ui.verdict`). Die Einzelheiten folgen darunter.
+
 Durchführung und Kontrolle rechnen mit dem übernommenen Plan (`data/projekt.json`) und dem
 erfassten Fortschritt. Ein Logo erscheint oben rechts, sobald `assets/logo.svg` oder
 `assets/logo.png` existiert.
