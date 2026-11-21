@@ -50,21 +50,43 @@ zehn Phasen und wie sie zusammenhängen in `04-Prototyp/pm_agent/docs/lebenszykl
 - **Windows.** Python öffnet keine Pfade der Form `/d/...`, `D:/...` verwenden. Für Umlaute in
   der Konsole `PYTHONIOENCODING=utf-8` setzen.
 
-## Stand am 20.11.2026
+## Stand am 21.11.2026
 
-- **Seiten.** Neun Schritte, vom Projektauftrag bis zum Abschluss; Betrieb und der nächste
-  Durchlauf sind Reiter im Abschluss. Das Menü gruppiert nach Phase (Vorbereiten, Umsetzen).
-- **Modell.** Die Agenten rufen die OpenAI Responses API auf (eigene Schleife in
-  `agent._run`, Werkzeuge als `tools.Tool`, Reasoning `medium`). Das Paket `anthropic` ist
-  entfernt. Die Oberfläche nennt den Akteur „der Agent“, nicht mehr „Claude“; eine Quellregel
-  in `tests/test_source_rules.py` hält das fest (Kommentare und Docstrings dürfen es noch
-  anders nennen).
-- **Echte Läufe am 20.11.2026** (Endpunkt der Hochschule, `gpt-6-sol`): alle elf Agenten liefen
-  je einmal ohne Fehler, auch die Abwesenheit aus einem Wunsch (`set_absence` trug Clara vom
-  7. bis 11.12. ein). Ein Lauf des KI-Labs mit KI-Antwort ebenfalls. Die Läufe gingen in einen
-  Temp-Ordner, `data/` blieb unberührt.
-- **KI-Lab.** Liest `OPENAI_BASE_URL`, das Modell aus `PM_MODEL` oder ersatzweise
-  `PM_AGENT_MODEL` und schickt Reasoning (`PM_LAB_REASONING_EFFORT`, Standard `medium`).
+- **Seiten.**
+  - Neun Schritte, vom Projektauftrag bis zum Abschluss.
+  - Das Menü hat acht Einträge: Startseite; Vorbereiten; Planung, Durchführung, Kontrolle, Abschluss; KI-Lab; Info.
+  - Die übrigen Seiten einer Gruppe sind im Menü verborgen (`st.Page(visibility="hidden")`) und erscheinen als Reiter oben auf der Seite (`ui.GROUPS`, `ui.group_tabs`):
+    - Vorbereiten: Projektauftrag, Anforderungen, Entwurf, Testplan
+    - Kontrolle: Test
+    - Info: Impressum
+  - Betrieb und nächster Durchlauf sind Reiter im Abschluss.
+- **Ergebnis zuerst.**
+  - Jede Seite mit einer Prüfung beginnt mit einer Ergebniszeile (`ui.verdict`): rot „Achtung“, golden „Zu entscheiden“, grün „In Ordnung“.
+  - Helfer: `check_verdict`, `phase_verdict`, `forecast_verdict`.
+  - Eine Quellregel verlangt sie überall, wo `messages(` steht.
+  - Die Runden eines Laufs stehen nur noch im Statuskasten (nach Erfolg zugeklappt).
+  - Markdown-Vorschauen unter Downloads sind entfernt (Quellregel).
+- **Modell.**
+  - Die Agenten rufen die OpenAI Responses API auf (eigene Schleife in `agent._run`, Werkzeuge als `tools.Tool`, Reasoning `medium`).
+  - Die Oberfläche sagt „der Agent“ (Quellregel).
+  - Freitexte der Agenten haben Längengrenzen: `tools.LIMITS`, etwa ein Satz, die Zusammenfassung 400 Zeichen. Jedes Einreichungswerkzeug schickt zu Langes zurück (`tools.too_long`); die Modelle nehmen längere Texte weiter an.
+  - Eingaben der Agenten vor und nach dem Plan schreiben Daten und Zahlen deutsch (`tracking.as_shown`, `key_figures`; Quellregel). Der Planungsagent behält ISO-Daten für `set_absence`.
+- **Echte Läufe am 21.11.2026** (Endpunkt der Hochschule, `gpt-6-sol`):
+  - Alle elf Agenten und das KI-Lab je einmal ohne Fehler, Auswertung in `03-Experiment/agentenlauf-2026-11-21/`.
+  - Mit den Grenzen lag kein Freitext darüber, und keiner ging wegen Länge zurück; die Texte sind 26 % kürzer als am 20.11.
+  - Danach Durchführung und Testplan nach der Datumskorrektur: keine ISO-Daten oder Dezimalpunkte mehr.
+  - `data/` blieb jeweils unberührt.
+- **KI-Lab.**
+  - Liest `OPENAI_BASE_URL`, das Modell aus `PM_MODEL` oder ersatzweise `PM_AGENT_MODEL`, Reasoning `PM_LAB_REASONING_EFFORT`.
+  - Der Freeze verlangt Key und Modellnamen, kein Datum (Entscheidung E01). Die Auswertung nennt die antwortenden Modelle (`models_returned`, `model_varies`).
+  - Issue #9 ist geschlossen, Nachweis in `04-Prototyp/ki_lab/VERIFIKATION.md`.
+  - Formale Fälle aus einer privaten Datei (#6): `PM_LAB_MATERIALS` oder `--materials`, gleiches Format wie `cases.json`, Prüfung beim Laden; der Freeze hält Version, Prüfsumme und Quelle (`öffentlich`/`privat`) fest. Die Fälle selbst schreibt die Gruppe.
+  - Einwilligungen nennen den Dienst, an den die Daten gehen: `ui.ai_service` (Host aus `OPENAI_BASE_URL`) auf den Seiten, der eingefrorene Endpunkt im Lab; eine Quellregel verbietet „an (die) OpenAI (API)“.
+- **Forschungsordner** (Entwürfe, von der Gruppe zu bestätigen):
+  - `01-Projektplanung/entscheidungen.md`: Entscheidungslog, E01; `agenda-entscheidungen.md`: alle offenen Entscheidungen der Gruppe als Agenda (#1).
+  - `02-Recherche/`: Baseline, KI-Lösungen, Chancen und Risiken; 20 Quellen, 13 im Volltext.
+  - `03-Experiment/`: Versuchsdesign, Pilot-Checkliste, Bewertungsrubrik, Teilnahmeinformation (#8), Durchführungsprotokoll (#10), Agentenlauf.
+  - `05-Ergebnisse/berichtsvorlage.md`.
 
 ## Zugang zum Modell (lokal, nicht im Repository)
 
@@ -82,58 +104,57 @@ Echter Test: `uv run --env-file .env pytest tests/test_agent_live.py` (verbrauch
 nur auf Wort der Projektleitung). Chat Completions nimmt bei diesem Modell Werkzeuge nur mit
 `reasoning_effort` „none“ an; deshalb Responses.
 
-## Projekt in Zahlen (20.11.2026, `main` nach PR 65)
+## Projekt in Zahlen (21.11.2026, `main` nach PR 78)
 
-- 284 Commits auf `main` (223 ohne Merges) seit dem 28.10.2026, 53 gemergte PRs, **0 Releases,
-  0 Tags**.
-- Fachcode rund 9 900 Zeilen Python (ohne Leerzeilen und Kommentare) mit 356 Funktionen:
-  `pm_agent` 9 260 Zeilen (Paket und Seiten), `ki_lab` 610. Dazu 9 Prompts, 8 Vorlagen, CSS.
-- 666 Tests (629 `pm_agent`, 37 `ki_lab`), alle ohne Netz; dazu ein Live-Test, der sich ohne
-  Schlüssel überspringt. CI: `pm-agent.yml` (Lint, Tests) und `static.yml` (README als Pages).
-- Läuft lokal als Streamlit-Seite: geprüft in Chrome, Firefox und WebKit (Playwright), je 1440 px
-  und 375 px. Nicht geprüft: Safari auf einem echten Mac, Edge. Kein öffentlicher Betrieb.
-- 11 Issues (#1–#11, Meilensteine M1–M4), alle offen, keines zugewiesen.
+- **Repository:** 309 Commits auf `main` (236 ohne Merges) seit dem 28.10.2026, 65 gemergte PRs, **0 Releases, 0 Tags**.
+- **Fachcode:** rund 10 070 Zeilen Python (ohne Leerzeilen und Kommentare).
+  - `pm_agent` 9 410 (Paket und Seiten)
+  - `ki_lab` 656
+  - dazu 9 Prompts, 8 Vorlagen, CSS
+- **Tests:** 692, alle ohne Netz (649 `pm_agent`, 43 `ki_lab`); dazu ein Live-Test, der sich ohne Schlüssel überspringt. CI: `pm-agent.yml` (Lint, Tests) und `static.yml` (README als Pages).
+- **Betrieb:** läuft lokal als Streamlit-Seite. Das Menü in 8 Einträgen ist in Chrome geprüft (1440 px und 375 px); Firefox und WebKit nur für den Stand vor dem 21.11. Kein öffentlicher Betrieb.
+- **Issues:** 11 (#1–#11, Meilensteine M1–M4).
+  - #9 geschlossen.
+  - #2–#5, #7 und #11 haben Entwürfe und einen Kommentar dazu.
+  - #1, #6, #8 und #10 liegen bei der Gruppe.
+  - Keines ist zugewiesen.
 
 ## Offen, nach Wirkung geordnet
 
-1. **Die Forschungsarbeit.** Alle Issues sind offen, die Ordner `01-Projektplanung`,
-   `02-Recherche`, `03-Experiment` und `05-Ergebnisse` sind leer. Das Werkzeug ist weit, die
-   Frage des Projekts („Was ändert KI im Projektmanagement?“) hat noch keine Daten.
-2. **KI-Lab für die formale Studie: erledigt am 21.11.2026.** Der Freeze verlangt keinen datierten
-   Snapshot mehr (Entscheidung E01 in `01-Projektplanung/entscheidungen.md`); jeder Aufruf speichert
-   das antwortende Modell, die Auswertung nennt es (`models_returned`). Echter Aufruf, Fehlerpfade
-   und die formale Kette sind in `04-Prototyp/ki_lab/VERIFIKATION.md` belegt. Offen bleibt nur, was
-   Menschen tun: Piloten, Rater, Teilnehmende (#7, #8, #10).
-3. **Vorhandene Vergleichsdaten auswerten.** Alle Agenten liefen je einmal mit Claude
-   (18.11.2026) und mit `gpt-6-sol` (20.11.2026); die Protokolle liegen lokal in `logs/` (die vom
-   20.11. im Unterordner `logs/gpt-6-sol-20261120/`). Vergleichbar: Runden, Ablehnungen durch
-   Python, Dauer, Token, Plan vor der Deadline. Für belastbare Aussagen je Agent mehrere Läufe
-   (z. B. fünf; kostet Kontingent, nur auf Wort der Projektleitung).
-4. **Einen Stand festhalten.** Es gibt kein Release. Ein `v0.1` mit „was geht, mit welchem
-   Modell geprüft“ gibt Gruppe und Betreuung einen Bezugspunkt (öffentlich: nur auf Wort der
-   Projektleitung).
-5. **Issues pflegen.** Zuständige eintragen; die Meilenstein-Issues in Aufgaben für einen Tag
-   zerlegen, damit morgens geplant und abends mit Nachweis geschlossen werden kann. #9 ist
-   technisch erfüllt (siehe `VERIFIKATION.md`) und kann auf Wort der Projektleitung geschlossen
-   werden.
-6. **Genauigkeit.** Die Zustimmungstexte nennen die „OpenAI API“, die Daten gehen aber an den
-   Dienst in `OPENAI_BASE_URL` (KI:connect); für die Datenschutzangaben genau benennen. Die
-   Prompts sind für Claude geschrieben und mit dem neuen Modell je einmal gelaufen: Qualität
-   der Ergebnisse lesen, nicht nur „Prüfung bestanden“.
-7. **Code, nicht dringend.** `views/planung.py` hat rund 1 190 Zeilen und ist am schwersten zu
-   ändern; teilen, wenn dort wieder gearbeitet wird. Englische Kommentare und Docstrings sagen
-   noch „Claude“. Die Prüfung in Firefox und WebKit lief nur lokal; sie könnte in die CI.
-8. **Betrieb, vorsichtig.** Die Seite läuft nur auf dem eigenen Rechner. Für die Gruppe auf
-   einem Server erst mit Anmeldung und geschütztem Schlüssel, sonst nutzt jeder das Kontingent.
+1. **Die Forschungsarbeit liegt bei der Gruppe.**
+   - Ausgangspunkt ist `01-Projektplanung/agenda-entscheidungen.md`: alle offenen Entscheidungen in der Reihenfolge, in der sie voneinander abhängen.
+   - Entwürfe prüfen und beschließen (#2–#5, #7, #11). Dabei die schweren Fehler aus `02-Recherche/baseline.md`, Abschnitt 5, und `03-Experiment/bewertungsrubrik.md` zu einer Liste machen.
+   - Dann folgen, in dieser Reihenfolge:
+     - Rollen und Termine (#1)
+     - private formale Fälle (#6)
+     - Piloten und Rater (#7)
+     - Teilnehmende (#8)
+     - Erhebung (#10)
+     - Bericht (#11)
+   - Daten zur Frage des Projekts gibt es noch nicht.
+2. **Teilnahmeinformation fertig machen (#8).** Die Einwilligungen nennen seit PR 77 den richtigen Dienst. In `03-Experiment/teilnahmeinformation.md` fehlen noch Kontakt, Löschdatum und Name des Dienstes. Die Einwilligung zu Zitaten fragt das Lab nicht ab: auf Papier einholen oder im Lab ergänzen (Agenda M2).
+3. **Mehrere Läufe je Agent.** Ein Lauf je Agent und Tag reicht nicht für Aussagen über Runden, Token oder Dauer. `03-Experiment/agentenlauf-2026-11-21/run_agents.py` wiederholt den Lauf (kostet Kontingent, nur auf Wort der Projektleitung).
+4. **Agenten fachlich.**
+   - Bei einer Abwesenheit trägt die Umplanung sie ein, verteilt aber keine Aufgabe um: Das Ende rückt hinter die Deadline (21.11.: 24.12.2026). Prompt `replanning.md` oder eine Warnung prüfen.
+   - Die neue Zusammenfassung der Durchführung nennt das Ende nur als „nach der Deadline“, ohne Datum.
+5. **Einen Stand festhalten.** Es gibt kein Release. Ein `v0.1` mit „was geht, mit welchem Modell geprüft“ (öffentlich: nur auf Wort der Projektleitung).
+6. **Issues pflegen.** Zuständige eintragen; die Meilenstein-Issues in Aufgaben für einen Tag zerlegen.
+7. **Code, nicht dringend.**
+   - `views/planung.py` (rund 1 200 Zeilen) teilen, wenn dort wieder gearbeitet wird.
+   - Englische Kommentare und Docstrings sagen noch „Claude“.
+   - Auf einer verborgenen Seite (z. B. Entwurf) ist im Menü kein Eintrag hervorgehoben.
+   - Firefox und WebKit nach den Menü-Änderungen erneut prüfen, gern in der CI.
+8. **Betrieb, vorsichtig.** Die Seite läuft nur auf dem eigenen Rechner. Für die Gruppe auf einem Server erst mit Anmeldung und geschütztem Schlüssel, sonst nutzt jeder das Kontingent.
 
 ## Lokaler Stand dieses Rechners
 
-- `data/` enthält ein erfundenes Beispielprojekt (Team Anna, Ben, Clara) mit freigegebenem
-  Projektauftrag, Anforderungen, Entwurf und Testplan aus den Läufen vom 18.11.2026.
-- `logs/` enthält die Protokolle der echten Läufe: mit Claude (11. bis 18.11.2026) und mit
-  `gpt-6-sol` (20.11.2026, Unterordner `gpt-6-sol-20261120/`). Nicht im Repository.
-- `.claude/` (nicht im Repository): `launch.json` für den Entwicklungsserver und der Skill
-  `sibling-fix` für Fehlerbehebungen.
-- Entfernte Branches außer `main`: `feat/polish` (zusammengeführt, bleibt auf Wunsch),
-  `feat/pm-experiment-lab` (PR 12) und `test/planning-execution-control-flow` (Teammitglied):
-  die letzten beiden nicht anfassen.
+- `data/` enthält ein erfundenes Beispielprojekt (Team Anna, Ben, Clara) mit freigegebenem Projektauftrag, Anforderungen, Entwurf und Testplan aus den Läufen vom 18.11.2026.
+- `logs/` enthält die Protokolle der echten Läufe. Nichts davon ist im Repository.
+  - mit Claude: 11. bis 18.11.2026
+  - mit `gpt-6-sol`: `gpt-6-sol-20261120/`, `lauf-20261121/` (alle Agenten und KI-Lab) und `check-20261121/` (Durchführung und Testplan nach der Datumskorrektur)
+- `.claude/` (nicht im Repository): `launch.json` für den Entwicklungsserver und der Skill `sibling-fix` für Fehlerbehebungen. `.claude/` steht zusätzlich in `.git/info/exclude`, weil das Wurzelverzeichnis keine `.gitignore` hat (eine eigene würde mit PR 12 kollidieren).
+- Entfernte Branches außer `main`:
+  - `feat/polish`: zusammengeführt, bleibt auf Wunsch
+  - `feat/pm-experiment-lab`: PR 12
+  - `test/planning-execution-control-flow`: Teammitglied
+  - Die letzten beiden nicht anfassen. Alle anderen Branches dieser Arbeit sind gelöscht.
