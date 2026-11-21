@@ -238,9 +238,9 @@ Einzelheiten zu Seiten, Agenten und Entwicklung:
 
 | Ordner | Inhalt | Stand |
 |---|---|---|
-| [`01-Projektplanung`](01-Projektplanung) | Projektplan und [Entscheidungen](01-Projektplanung/entscheidungen.md) der Gruppe | Entscheidungslog begonnen (E01, 21.11.2026) |
+| [`01-Projektplanung`](01-Projektplanung) | Projektplan, [Entscheidungen](01-Projektplanung/entscheidungen.md) und [offene Entscheidungen als Agenda](01-Projektplanung/agenda-entscheidungen.md) | Entscheidungslog begonnen (E01, 21.11.2026); Agenda als Entwurf |
 | `02-Recherche` | Recherche zu KI im Projektmanagement | noch leer |
-| [`03-Experiment`](03-Experiment) | Aufbau und Daten der Versuche: [Versuchsdesign](03-Experiment/versuchsdesign.md), [Pilot-Checkliste](03-Experiment/pilot-checkliste.md), [Bewertungsrubrik](03-Experiment/bewertungsrubrik.md) | Entwürfe, von der Gruppe zu bestätigen; erster Agentenlauf (21.11.2026) |
+| [`03-Experiment`](03-Experiment) | Aufbau und Daten der Versuche: [Versuchsdesign](03-Experiment/versuchsdesign.md), [Pilot-Checkliste](03-Experiment/pilot-checkliste.md), [Bewertungsrubrik](03-Experiment/bewertungsrubrik.md), [Teilnahmeinformation](03-Experiment/teilnahmeinformation.md), [Durchführungsprotokoll](03-Experiment/durchfuehrungsprotokoll.md) | Entwürfe, von der Gruppe zu bestätigen; erster Agentenlauf (21.11.2026) |
 | [`04-Prototyp/pm_agent`](04-Prototyp/pm_agent) | die Website mit allen Schritten vom Projektauftrag bis zur Iteration | in Arbeit |
 | [`04-Prototyp/ki_lab`](04-Prototyp/ki_lab) | Studienserver für den Vergleich ohne und mit KI | in Arbeit |
 | [`05-Ergebnisse`](05-Ergebnisse) | Auswertung und Bericht: [Berichtsvorlage](05-Ergebnisse/berichtsvorlage.md) | Vorlage als Entwurf; noch keine Ergebnisse |
