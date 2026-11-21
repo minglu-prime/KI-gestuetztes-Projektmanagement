@@ -272,3 +272,31 @@ def test_every_page_with_a_check_opens_with_its_verdict():
         if "messages(" in (text := path.read_text(encoding="utf-8")) and "verdict(" not in text
     ]
     assert missing == []
+
+
+def test_what_the_agents_read_has_its_dates_and_numbers_written_the_german_way():
+    # The agents repeat numbers and dates as they get them: "Fortschritt bei 0.0" in the
+    # status report, "2026-12-10" in the steps of a test case. The input of an agent before
+    # or after the plan goes through tracking.as_shown. (The planning agent keeps ISO dates:
+    # it sends them back in set_absence. Lessons keep the weeks for their refs.)
+    unshown = []
+    for name in ("lifecycle.py", "followup.py"):
+        tree = ast.parse((ROOT / "src" / "pm_agent" / name).read_text(encoding="utf-8"))
+        for function in ast.walk(tree):
+            if not isinstance(function, ast.FunctionDef) or not (
+                function.name.startswith("run_") or function.name == "facts"
+            ):
+                continue
+            for call in ast.walk(function):
+                if (
+                    isinstance(call, ast.Call)
+                    and isinstance(call.func, ast.Attribute)
+                    and call.func.attr == "dumps"
+                    and not (
+                        call.args
+                        and isinstance(call.args[0], ast.Call)
+                        and getattr(call.args[0].func, "id", "") == "as_shown"
+                    )
+                ):
+                    unshown.append(f"{name}:{call.lineno}")
+    assert unshown == []

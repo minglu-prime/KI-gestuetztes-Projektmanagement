@@ -917,6 +917,30 @@ def hours_text(value: float) -> str:
     return f"{round(value, 1) + 0.0:.1f}".removesuffix(".0").replace(".", ",")
 
 
+def key_figures(evaluation: "Evaluation") -> dict[str, str]:
+    """The numbers of the project the way the reports write them, for the agents: they repeat
+    a number as they get it ("Fortschritt bei 0.0" went into a status report)."""
+    return {
+        "planstunden": f"{hours_text(evaluation.planned_hours)} h",
+        "ist_stunden": f"{hours_text(evaluation.actual_hours)} h",
+        "fortschritt": percent(evaluation.progress),
+    }
+
+
+def as_shown(value: Any) -> Any:
+    """`value` (dicts, lists, dates, numbers) for the input of an agent, written the German
+    way: dates as 20.11.2026, decimals with a comma. Whole numbers, texts and IDs stay."""
+    if isinstance(value, dict):
+        return {key: as_shown(item) for key, item in value.items()}
+    if isinstance(value, list | tuple):
+        return [as_shown(item) for item in value]
+    if isinstance(value, date):
+        return f"{value:%d.%m.%Y}"
+    if isinstance(value, float):
+        return hours_text(value)
+    return value
+
+
 def signed_hours(value: float) -> str:
     """A deviation in hours, with its sign: +2, -1,5, +0. Sums of floats leave noise such as
     2.8e-17; hours_text rounds it away."""

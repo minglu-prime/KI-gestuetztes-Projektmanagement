@@ -20,9 +20,12 @@ from pm_agent.tracking import (
     Evaluation,
     Forecast,
     Tracking,
+    as_shown,
     evaluate,
     forecast,
+    key_figures,
     requirement_progress,
+    signed_hours,
 )
 
 
@@ -151,23 +154,22 @@ def check_report(
 
 
 def facts(tracking: Tracking, evaluation: Evaluation) -> str:
-    """What both agents get: the plan, the progress and the computed numbers, as JSON."""
+    """What both agents get: the plan, the progress and the computed numbers, as JSON. Dates
+    and numbers come as the reports write them (`as_shown`): the agents repeat them."""
     plan = {t.id: t for t in tracking.plan.tasks}
     outlook = forecast(tracking, evaluation.today)
     data = {
-        "projekt": tracking.project.model_dump(mode="json"),
-        "stand": evaluation.today.isoformat(),
+        "projekt": tracking.project.model_dump(),
+        "stand": evaluation.today,
         "kennzahlen": {
-            "planstunden": evaluation.planned_hours,
-            "ist_stunden": evaluation.actual_hours,
-            "fortschritt": round(evaluation.progress, 3),
-            "abweichung_fertiger_aufgaben": evaluation.finished_deviation,
+            **key_figures(evaluation),
+            "abweichung_fertiger_aufgaben": f"{signed_hours(evaluation.finished_deviation)} h",
             "im_verzug": [t.id for t in evaluation.overdue],
         },
         # If the remaining work starts today. Negative days after the deadline are buffer.
         "prognose": {
-            "geplantes_ende": outlook.planned_end.isoformat(),
-            "voraussichtliches_ende": outlook.end.isoformat() if outlook.end else None,
+            "geplantes_ende": outlook.planned_end,
+            "voraussichtliches_ende": outlook.end,
             "arbeitstage_spaeter_als_geplant": outlook.shift,
             "arbeitstage_nach_der_deadline": outlook.deadline_gap,
             "haelt_auf": outlook.blocked,
@@ -176,9 +178,6 @@ def facts(tracking: Tracking, evaluation: Evaluation) -> str:
         "aufgaben": [
             {
                 **asdict(t),
-                "planned_start": t.planned_start.isoformat(),
-                "planned_end": t.planned_end.isoformat(),
-                "finished_on": t.finished_on.isoformat() if t.finished_on else None,
                 "depends_on": plan[t.id].depends_on,
                 "requirement_ids": plan[t.id].requirement_ids,
             }
@@ -186,14 +185,14 @@ def facts(tracking: Tracking, evaluation: Evaluation) -> str:
         ],
         # Work done under earlier plans, in the numbers above. "finished": False is the
         # booked part of a task whose rest is in "aufgaben".
-        "frueher": [e.model_dump(mode="json") for e in evaluation.history],
+        "frueher": [e.model_dump() for e in evaluation.history],
         "je_person": evaluation.by_member,
         # Empty when no approved requirements were adopted with the plan.
         "je_anforderung": requirement_progress(tracking),
-        "team": [m.model_dump(mode="json") for m in tracking.team],
+        "team": [m.model_dump() for m in tracking.team],
         "risiken": tracking.plan.risks,
     }
-    return json.dumps(data, ensure_ascii=False, indent=2)
+    return json.dumps(as_shown(data), ensure_ascii=False, indent=2)
 
 
 def _run(
