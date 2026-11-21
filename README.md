@@ -240,7 +240,7 @@ Einzelheiten zu Seiten, Agenten und Entwicklung:
 |---|---|---|
 | `01-Projektplanung` | Projektplan der Gruppe | noch leer |
 | `02-Recherche` | Recherche zu KI im Projektmanagement | noch leer |
-| `03-Experiment` | Aufbau und Daten des Vergleichs | noch leer |
+| [`03-Experiment`](03-Experiment) | Aufbau und Daten der Versuche | erster Agentenlauf (21.11.2026) |
 | [`04-Prototyp/pm_agent`](04-Prototyp/pm_agent) | die Website mit allen Schritten vom Projektauftrag bis zur Iteration | in Arbeit |
 | [`04-Prototyp/ki_lab`](04-Prototyp/ki_lab) | Studienserver für den Vergleich ohne und mit KI | in Arbeit |
 | `05-Ergebnisse` | Auswertung und Bericht | noch leer |
