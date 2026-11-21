@@ -48,6 +48,9 @@ from pm_agent.ui import (
     strip,
     verdict,
 )
+from pm_agent.ui import (
+    consent as ask_consent,
+)
 from pm_agent.workbench import (
     PLAN_COLUMNS,
     RUNS_CSV,
@@ -391,10 +394,9 @@ with tabs[0]:
             )
         else:
             st.success(f"Gespeichert in {place} (lokal, nicht im Repository).")
-    consent = st.checkbox(
-        "Alle eingetragenen Personen haben zugestimmt, dass ihre Angaben (Name, Skills, Stunden, "
-        "Notiz) zur Planung an die OpenAI API gesendet werden.",
-        key="consent",
+    consent = ask_consent(
+        "consent",
+        "ihre Angaben (Name, Skills, Stunden, Notiz) zur Planung",
         persist_state="session",
     )
     next_step("Weiter zum Projekt", STEPS[1], bool(team) and consent, "to_project")

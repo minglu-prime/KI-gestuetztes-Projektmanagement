@@ -86,6 +86,17 @@ def button(at, label):
     return next(b for b in at.button if b.label == label)
 
 
+def test_the_consent_names_the_service_the_data_really_goes_to(site, monkeypatch):
+    # The pages said "an die OpenAI API"; with OPENAI_BASE_URL the data go to another service
+    # (the school's endpoint). Consent has to name the one that receives them.
+    monkeypatch.setenv("OPENAI_BASE_URL", "https://ki.beispiel.test/v1")
+    for path, key in [(PLANUNG, "consent"), ("views/auftrag.py", "charter_consent")]:
+        label = site.switch_page(path).run().checkbox(key=key).label
+        assert "ki.beispiel.test" in label and "OpenAI" not in label, path
+    monkeypatch.delenv("OPENAI_BASE_URL")
+    assert "api.openai.com" in site.switch_page(PLANUNG).run().checkbox(key="consent").label
+
+
 def test_without_project_and_consent_planning_is_blocked(app):
     assert not app.exception
     assert button(app, "Plan mit dem Agenten erstellen").disabled

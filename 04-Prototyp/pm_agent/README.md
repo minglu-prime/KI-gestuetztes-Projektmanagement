@@ -157,8 +157,10 @@ Das Repository ist öffentlich. Teamdaten (`data/`, auch Projektauftrag, Anforde
 ausgeschlossen. Für Projektauftrag, Anforderungen und Entwurf gehen nur Idee, Termine und die
 Texte von Auftrag und Anforderungen an die API, keine Angaben zum Team; Beteiligte stehen dort als Rollen.
 
-Der Agent schickt Projektidee und Teamdaten (Namen, Skills, Wochenstunden, Notizen) an die
-OpenAI API. Teammitglieder müssen vorher zustimmen.
+Der Agent schickt Projektidee und Teamdaten (Namen, Skills, Wochenstunden, Notizen) an den
+KI-Dienst in `OPENAI_BASE_URL` (in diesem Projekt der Endpunkt der Hochschule; ohne die Variable
+die OpenAI API). Teammitglieder müssen vorher zustimmen; die Zustimmung nennt den Dienst
+(`ui.ai_service`).
 
 Das KI-Lab speichert Sitzungen in `../ki_lab/data/` (ebenfalls ausgeschlossen) und schickt in
-KI-Runden Fallmaterial, Entwurf und Frage an OpenAI.
+KI-Runden Fallmaterial, Entwurf und Frage an denselben Dienst; die Einwilligung im Lab nennt ihn.

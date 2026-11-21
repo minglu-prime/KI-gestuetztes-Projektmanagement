@@ -283,7 +283,9 @@ Was der Prototyp bewusst vereinfacht:
 Das Repository ist öffentlich. Teamdaten (`data/`), Protokolle (`logs/`), Sitzungen des KI-Labs
 und `.env` bleiben lokal und sind per `.gitignore` ausgeschlossen.
 
-Die Agenten schicken Projektidee und Teamdaten (Namen, Skills, Wochenstunden, Notizen) an die
-OpenAI API, das KI-Lab schickt in KI-Runden Fallmaterial, Entwurf und Frage ebenfalls an OpenAI. Die
-Website verlangt deshalb vor jedem Aufruf die Bestätigung, dass alle Personen zugestimmt haben.
+Die Agenten schicken Projektidee und Teamdaten (Namen, Skills, Wochenstunden, Notizen) an den
+KI-Dienst in `OPENAI_BASE_URL` (in diesem Projekt der OpenAI-kompatible Endpunkt der Hochschule),
+das KI-Lab schickt in KI-Runden Fallmaterial, Entwurf und Frage an denselben Dienst. Die Website
+verlangt deshalb vor jedem Aufruf die Bestätigung, dass alle Personen zugestimmt haben; der Text
+nennt den Dienst.
 Die Namen der Gruppe stehen erst im Repository, wenn alle zugestimmt haben.

@@ -30,6 +30,13 @@ formale Studie verlangt Key und Modell und hält den Modellnamen fest; ein datie
 nicht nötig (Studienregel vom 21.11.2026, `01-Projektplanung/entscheidungen.md`). Jeder Aufruf
 speichert das Modell, das geantwortet hat; die Auswertung nennt sie (`models_returned`).
 
+Die formalen Fälle (Issue #6) gehören nicht ins öffentliche Repository. Das Lab liest sie aus
+einer privaten Datei im selben Format wie `cases.json` (Fälle A und B, Übung, Version):
+`PM_LAB_MATERIALS=private/formal.json` oder `--materials` bei `server.py` und `manage.py`. Ohne
+Angabe gelten die öffentlichen Demofälle. `private/` ist per `.gitignore` ausgeschlossen. Fehlt die
+Datei oder fehlt ihr ein Feld, startet das Lab nicht und nennt den Grund. Der Freeze hält Version,
+Prüfsumme und Quelle (`öffentlich`/`privat`) fest, nicht den Pfad.
+
 Studienleitung (Einladungen, Export, Auswertung): `python manage.py --help`.
 
 ## Tests

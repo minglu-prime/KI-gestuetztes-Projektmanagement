@@ -6,7 +6,7 @@ import streamlit as st
 
 from pm_agent import lab_server
 from pm_agent.lab_server import LabError
-from pm_agent.ui import as_text, heading
+from pm_agent.ui import ai_service, as_text, heading
 
 st.header("KI-Lab")
 st.caption(
@@ -79,6 +79,6 @@ else:
 
 st.caption(
     "Daten: Sitzungen und Antworten liegen lokal in 04-Prototyp/ki_lab/data/lab.db und nicht im "
-    "Repository. In KI-Runden gehen Fallmaterial, Entwurf und Frage an OpenAI; das Lab fragt "
-    "vorher nach der Einwilligung."
+    f"Repository. In KI-Runden gehen Fallmaterial, Entwurf und Frage an {ai_service()}; das Lab "
+    "fragt vorher nach der Einwilligung."
 )

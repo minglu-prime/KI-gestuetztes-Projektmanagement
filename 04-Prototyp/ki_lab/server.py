@@ -124,10 +124,15 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='KI · PM Lab — lokaler Studienserver')
     parser.add_argument('--port', type=int, default=8874)
     parser.add_argument('--db', default=str(ROOT / 'data' / 'lab.db'))
+    parser.add_argument('--materials', default=None, metavar='DATEI',
+                        help='privates Fallmaterial (sonst PM_LAB_MATERIALS, sonst cases.json)')
     parser.add_argument('--allow-frame', action='append', default=[], metavar='ORIGIN',
                         help='lokale Seite, die das Lab einbetten darf, z. B. http://localhost:8501')
     args = parser.parse_args()
-    lab = Lab(args.db)
+    try:
+        lab = Lab(args.db, materials=args.materials)
+    except Problem as exc:  # missing or malformed case file: say why and stop
+        parser.error(str(exc))
     try:
         server = make_server(lab, args.port, args.allow_frame)
     except ValueError as exc:

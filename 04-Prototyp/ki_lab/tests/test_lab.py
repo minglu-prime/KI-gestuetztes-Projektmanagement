@@ -237,6 +237,63 @@ class LabTests(unittest.TestCase):
             self.lab.freeze('TEST ONLY: controlled configuration attestation')
 
 
+
+class MaterialsTests(unittest.TestCase):
+    """Issue #6: the formal cases stay out of the public repository. The lab reads them from a
+    private file (PM_LAB_MATERIALS or materials=), checks its shape and freezes its checksum."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.folder = Path(self.tmp.name)
+        import json
+        from lab import ROOT
+        self.public = json.loads((ROOT / 'cases.json').read_text(encoding='utf-8'))
+        private = json.loads(json.dumps(self.public))
+        private['version'] = 'formal-1'
+        private['cases']['A']['title'] = 'Privater Fall A'
+        self.private = self.folder / 'private.json'
+        self.private.write_text(json.dumps(private, ensure_ascii=False), encoding='utf-8')
+
+    def open(self, **kwargs):
+        lab = Lab(self.folder / 'lab.db', model='m', api_key='', **kwargs)
+        self.addCleanup(lab.close)
+        return lab
+
+    def test_without_a_private_file_the_public_cases_are_used(self):
+        with patch.dict('os.environ', {'PM_LAB_MATERIALS': ''}):
+            lab = self.open()
+        self.assertEqual(lab.materials, self.public)
+        self.assertEqual(lab.config()['materials_source'], 'öffentlich')
+
+    def test_a_private_file_replaces_the_cases_and_changes_the_frozen_configuration(self):
+        public = self.open(materials='').config()
+        lab = self.open(materials=str(self.private))
+        self.assertEqual(lab.materials['cases']['A']['title'], 'Privater Fall A')
+        config = lab.config()
+        self.assertEqual((config['case_version'], config['materials_source']), ('formal-1', 'privat'))
+        self.assertNotEqual(config['materials_sha256'], public['materials_sha256'])
+        self.assertNotIn(str(self.folder), json_text(config))  # no local path in exports
+
+    def test_the_environment_names_the_private_file(self):
+        with patch.dict('os.environ', {'PM_LAB_MATERIALS': str(self.private)}):
+            self.assertEqual(self.open().materials['version'], 'formal-1')
+
+    def test_a_missing_or_broken_file_stops_the_lab_with_a_reason(self):
+        with self.assertRaises(Problem) as missing:
+            self.open(materials=str(self.folder / 'fehlt.json'))
+        self.assertIn('nicht gefunden', str(missing.exception))
+        broken = self.folder / 'kaputt.json'
+        broken.write_text('{"version": "x", "cases": {"A": {}}}', encoding='utf-8')
+        with self.assertRaises(Problem) as invalid:
+            self.open(materials=str(broken))
+        self.assertIn('Fallmaterial ungültig', str(invalid.exception))
+
+
+def json_text(value):
+    import json
+    return json.dumps(value, ensure_ascii=False)
+
 if __name__ == '__main__':
     unittest.main()
 

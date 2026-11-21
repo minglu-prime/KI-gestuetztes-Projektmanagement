@@ -1,10 +1,12 @@
 """Streamlit pieces that several pages share."""
 
 import datetime
+import os
 import re
 from collections.abc import Callable, Sequence
 from html import escape
 from typing import Any, TypeVar
+from urllib.parse import urlsplit
 
 import altair as alt
 import pandas as pd
@@ -446,13 +448,23 @@ def strip(*chips: str) -> str:
 TEAM_DATA = "ihre Angaben (Name, Skills, Stunden, Aufgaben, Notizen)"
 
 
-def consent(key: str, data: str = TEAM_DATA) -> bool:
-    """Consent before an agent sends what people wrote or are to Claude. `data` names what
-    goes: by default the project with its people (Durchführung, Kontrolle)."""
+def ai_service() -> str:
+    """The service the agents send their data to, as consent has to name it: the host of
+    OPENAI_BASE_URL (the school's endpoint), or OpenAI's own API without it. Read when called,
+    like the OpenAI client reads it."""
+    host = urlsplit(os.environ.get("OPENAI_BASE_URL", "")).hostname
+    return f"den KI-Dienst {host or 'api.openai.com'}"
+
+
+def consent(key: str, data: str = TEAM_DATA, **checkbox: Any) -> bool:
+    """Consent before an agent sends what people wrote or are to the model. `data` names what
+    goes: by default the project with its people (Durchführung, Kontrolle). `checkbox` goes on
+    to st.checkbox (the Planung keeps its consent for the session)."""
     return st.checkbox(
-        f"Alle Personen im Projekt haben zugestimmt, dass {data} an die OpenAI API "
+        f"Alle Personen im Projekt haben zugestimmt, dass {data} an {ai_service()} "
         "gesendet werden.",
         key=key,
+        **checkbox,
     )
 
 
