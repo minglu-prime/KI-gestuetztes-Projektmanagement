@@ -125,6 +125,32 @@ def test_a_plan_from_the_agent_is_checked_shown_and_exported(app, monkeypatch):
     assert "angepasst" not in " ".join(c.value for c in at.caption)
 
 
+def test_the_rounds_of_a_run_are_shown_once(app, monkeypatch):
+    # The status box of the run listed the rounds, and an open box below listed them again.
+    def one_round(project, team, on_round=None):
+        accepted = {"tool": "submit_plan", "is_error": False, "content": "Plan angenommen."}
+        on_round({"tool_results": [accepted]})
+        return PLAN
+
+    monkeypatch.setattr(agent, "run_planning", one_round)
+    at = fill_project(app)
+    button(at, "Plan mit dem Agenten erstellen").click()
+    at.run()
+    assert not at.exception
+    logs = [e for e in at.expander if e.label.startswith("So ist der Plan entstanden")]
+    assert logs == []
+    # On the next run the status box is gone: the rounds stay at hand, folded.
+    at.run()
+    (log,) = [e for e in at.expander if e.label.startswith("So ist der Plan entstanden")]
+    assert not log.proto.expanded
+
+
+def test_a_change_proposal_shows_its_changes_without_the_rounds(with_plan):
+    at = with_plan.chat_input(key="wish").set_value(WISH).run()
+    assert not at.exception
+    assert not [e for e in at.expander if e.label.startswith("So ist der Agent vorgegangen")]
+
+
 def chips(at):
     """The status strip above the steps, as plain text."""
     strip = next(h.value for h in at.html if 'class="chips"' in h.value)  # first of the page
@@ -249,8 +275,6 @@ def test_a_change_asked_from_claude_is_shown_as_differences_before_it_counts(wit
     texts = " ".join(m.value for m in at.markdown)
     assert "A · Datenmodell: 8 h → 16 h" in texts
     assert "Planende: 11.11.2026 → 12.11.2026 (1 Arbeitstag später)" in texts
-    # The round is shown while Claude works: its words and what it changed in the plan.
-    assert "Agent: Ich verdopple die Schätzung." in [c.value for c in at.caption]
     assert {m.label: m.value for m in at.metric}["Planende"] == "11.11.2026"  # not taken yet
     assert at.chat_input(key="wish").disabled  # decide on the open proposal first
 
@@ -870,7 +894,6 @@ def test_nonzero_progress_survives_reopen_and_reaches_control_and_documents(flow
         {"ID": "B", "Status": "in Arbeit", "Ist (h)": 4, "Notiz": "Integration läuft"},
     ]
     report = downloads["Statusbericht als Markdown herunterladen"]
-    assert report.strip() in [m.value for m in at.markdown]  # preview strips outer whitespace
     for text in [
         "**Stand:** 12.11.2026",
         "- Fortschritt: 33 %",
@@ -884,7 +907,6 @@ def test_nonzero_progress_survives_reopen_and_reaches_control_and_documents(flow
 
     next(r for r in at.radio if r.label == "Vorlage").set_value("Arbeitspaketbeschreibungen").run()
     packages = downloads["Arbeitspaketbeschreibungen als Markdown herunterladen"]
-    assert packages.strip() in [m.value for m in at.markdown]
     for text in [
         "**Projekt:** Raumbuchung für Lerngruppen",
         "## A · Datenmodell",
@@ -1304,10 +1326,23 @@ def test_kontrolle_takes_an_empty_record_for_no_export_yet(tracked):
     assert "Noch kein Plan exportiert." in [c.value for c in at.caption]
 
 
-def test_kontrolle_offers_the_control_document(tracked):
+@pytest.fixture
+def downloads(monkeypatch):
+    """What each download button of a page hands out, by its label."""
+    download_button, handed = st.download_button, {}
+
+    def capture(label, data, **kwargs):
+        handed[label] = data
+        return download_button(label, data, **kwargs)
+
+    monkeypatch.setattr(st, "download_button", capture)
+    return handed
+
+
+def test_kontrolle_offers_the_control_document(tracked, downloads):
     at = tracked.switch_page("views/kontrolle.py").run()
     assert not at.exception
-    assert any(m.value.startswith("# Kontrollbericht") for m in at.markdown)
+    assert downloads["Kontrollbericht als Markdown herunterladen"].startswith("# Kontrollbericht")
 
 
 def test_the_startseite_says_where_the_project_is_heading(tracked):
@@ -1342,7 +1377,7 @@ def test_kontrolle_forecasts_the_end_from_the_recorded_progress(tracked):
 
 
 def test_the_execution_agent_needs_consent_and_its_proposal_goes_into_the_report(
-    tracked, monkeypatch
+    tracked, monkeypatch, downloads
 ):
     summary = StatusSummary(
         summary="Beide Aufgaben sind im Verzug.",
@@ -1359,7 +1394,8 @@ def test_the_execution_agent_needs_consent_and_its_proposal_goes_into_the_report
     at = tracked.switch_page("views/durchfuehrung.py").run()
     start = "Zusammenfassung mit dem Agenten vorschlagen"
     assert button(at, start).disabled
-    assert any("Noch nicht erstellt. Der Durchführungs-Agent" in m.value for m in at.markdown)
+    report = "Statusbericht als Markdown herunterladen"
+    assert "Noch nicht erstellt. Der Durchführungs-Agent" in downloads[report]
 
     at.checkbox(key="consent_durchfuehrung").check()
     at.run()
@@ -1370,7 +1406,7 @@ def test_the_execution_agent_needs_consent_and_its_proposal_goes_into_the_report
     texts = [m.value for m in at.markdown]
     assert "Beide Aufgaben sind im Verzug." in texts
     assert "- **A:** Anna klärt das Schema bis Montag." in texts
-    assert any("*Vorschlag des Durchführungs-Agenten" in t for t in texts)
+    assert "*Vorschlag des Durchführungs-Agenten" in downloads[report]
 
 
 def test_the_control_agent_shows_assessment_findings_and_measures(tracked, monkeypatch):
@@ -2590,13 +2626,13 @@ def test_iteration_confirmation_cannot_archive_a_replacement_project(site, tmp_p
     assert not at.checkbox(key="next_run_sure").value
 
 
-def test_the_report_previews_are_folded_like_on_the_other_pages(tracked):
-    # Open, the report repeated the tables above it and doubled the length of the page.
+def test_the_reports_are_downloads_and_not_shown_again_on_the_page(tracked):
+    # A preview repeated the tables above it and doubled the length of the page.
     for page, title in [("durchfuehrung", "Statusbericht"), ("kontrolle", "Kontrollbericht")]:
         at = tracked.switch_page(f"views/{page}.py").run()
         assert not at.exception
-        previews = [e for e in at.expander if e.label == "Vorschau"]
-        assert any(title in m.value for e in previews for m in e.markdown), page
+        assert not [e for e in at.expander if e.label.startswith("Vorschau")], page
+        assert not any(m.value.startswith(f"# {title}") for m in at.markdown), page
 
 
 def test_the_startseite_shows_the_progress_once(tracked):

@@ -15,7 +15,7 @@ keinen Diagrammcode.
 - `kind`: `Rolle` (wer das System benutzt, wie die Beteiligten im Projektauftrag, keine
   Namen), `Komponente` (ein Teil, den das Team baut) oder `Fremdsystem` (etwas, das es schon
   gibt, zum Beispiel der Hochschul-Login).
-- `purpose`: ein Satz, wofür der Baustein da ist.
+- `purpose`: ein Satz (höchstens 160 Zeichen), wofür der Baustein da ist.
 
 `interfaces`: die Schnittstellen. Jede hat:
 

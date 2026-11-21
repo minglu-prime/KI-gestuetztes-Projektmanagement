@@ -6,10 +6,10 @@ Textteil des Statusberichts vor; die Projektleitung prüft ihn und entscheidet.
 
 ## Inhalt
 
-- `summary`: drei bis fünf Sätze für die Betreuung. Wo steht das Projekt, was ist erreicht,
+- `summary`: höchstens drei kurze Sätze (400 Zeichen) für die Betreuung. Wo steht das Projekt, was ist erreicht,
   was ist kritisch? Nenne Zahlen nur so, wie sie in den Kennzahlen stehen. Rechne nicht selbst.
 - `next_steps`: konkrete nächste Schritte, je mit der `task_id` der Aufgabe und einer `action`,
-  die sagt, wer was bis wann tut.
+  die in einem Satz (höchstens 160 Zeichen) sagt, wer was bis wann tut.
 
 ## Regeln
 

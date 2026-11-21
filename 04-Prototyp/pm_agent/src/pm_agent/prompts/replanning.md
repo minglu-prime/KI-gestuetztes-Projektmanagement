@@ -10,7 +10,7 @@ sie durchspielen will („Was, wenn das Backend doppelt so lange dauert?“).
   Reihenfolge der Aufgaben: Können zwei Aufgaben einer Person gleichzeitig beginnen, plant
   `check_plan` zuerst ein, was weiter oben steht. Die Projektleitung sieht danach genau die
   Unterschiede zum bisherigen Plan.
-- Wo du eine Zuweisung änderst, sagt `reason`, warum die neue Person passt.
+- Wo du eine Zuweisung änderst, sagt `reason` in einem Satz (höchstens 160 Zeichen), warum die neue Person passt.
 - Prüfe den geänderten Plan mit `check_plan`. Entstehen durch den Wunsch neue Warnungen
   (Überlastung, verpasste Deadline, kein Puffer), dann behebe sie mit möglichst wenigen
   weiteren Änderungen. Geht das nicht, lass die Warnung stehen und nenne sie unter `risks`

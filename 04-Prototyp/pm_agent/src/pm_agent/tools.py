@@ -152,10 +152,11 @@ class PlanningTools:
 
     def _submit(self, /, **plan: Any) -> str:
         parsed, result = self._review(plan)
-        if result.errors:
+        errors = (too_long(parsed) if parsed else []) + result.errors
+        if errors:
             raise ToolError(
                 "Plan abgelehnt. Behebe diese Fehler und reiche ihn erneut ein:\n"
-                + "\n".join(f"- {error}" for error in result.errors)
+                + "\n".join(f"- {error}" for error in errors)
             )
         self.plan = parsed
         return "Plan angenommen."
@@ -227,6 +228,37 @@ def invalid_input(err: ValidationError) -> list[str]:
     return messages
 
 
+# The longest a free text of the agent may be, in characters: about one sentence, the
+# summary three. The project lead reads every one of them. Only what the agent submits is
+# held to this (`too_long`); the models take longer texts, so files saved before still load.
+LIMITS = {
+    "reason": 160,
+    "purpose": 160,
+    "action": 160,
+    "effect": 160,
+    "observation": 200,
+    "advice": 200,
+    "description": 240,
+    "summary": 400,
+}
+
+
+def too_long(value: Any, where: str = "") -> list[str]:
+    """Every text in `value` (a model, list or text) longer than its limit in LIMITS."""
+    if isinstance(value, BaseModel):
+        return [
+            message
+            for name in type(value).model_fields
+            for message in too_long(getattr(value, name), f"{where}.{name}" if where else name)
+        ]
+    if isinstance(value, list):
+        return [m for i, item in enumerate(value) for m in too_long(item, f"{where}.{i}")]
+    limit = LIMITS.get(where.rsplit(".", 1)[-1])
+    if isinstance(value, str) and limit is not None and len(value) > limit:
+        return [f"Zu lang bei {where}: {len(value)} Zeichen, höchstens {limit} Zeichen. Kürze."]
+    return []
+
+
 class Submission(Generic[T]):
     """One submit tool. It accepts a result only if it parses and `check` finds no error;
     otherwise Claude gets the reasons and corrects the result. `result` is set on acceptance."""
@@ -248,7 +280,7 @@ class Submission(Generic[T]):
     def _submit(self, /, **data: Any) -> str:
         try:
             parsed = self.schema.model_validate(data)
-            errors = self.check(parsed)
+            errors = too_long(parsed) + self.check(parsed)
         except ValidationError as err:
             errors = invalid_input(err)
         if errors:

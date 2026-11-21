@@ -248,8 +248,6 @@ if life.design is not None and life.project is not None:
             icon=":material/download:",
         )
         st.caption("Die Diagramme stehen als Mermaid im Dokument; GitHub zeigt sie als Bild.")
-        with st.expander("Vorschau"):
-            st.markdown(document)
 
 status.html(
     strip(

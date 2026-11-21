@@ -206,8 +206,6 @@ with st.container(border=True, key="panel-documents"):
         mime="text/markdown",
         icon=":material/download:",
     )
-    with st.expander("Vorschau"):
-        st.markdown(text)
 
 if st.button("Weiter zur Kontrolle", icon=":material/arrow_forward:"):
     st.switch_page("views/kontrolle.py")

@@ -221,7 +221,5 @@ if life.charter is not None and life.project is not None:
             file_name="projektauftrag.md",
             icon=":material/download:",
         )
-        with st.expander("Vorschau"):
-            st.markdown(document)
 
 status.html(strip(phase_chip("Projektauftrag", charter_state(life))))

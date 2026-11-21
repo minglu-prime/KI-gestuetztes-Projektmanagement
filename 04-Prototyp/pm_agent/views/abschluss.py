@@ -232,8 +232,6 @@ with closing_tab:
             file_name="abschlussbericht.md",
             icon=":material/download:",
         )
-        with st.expander("Vorschau"):
-            st.markdown(document)
 
 with operations_tab:
     st.caption(
