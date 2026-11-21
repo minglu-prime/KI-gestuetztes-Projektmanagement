@@ -98,7 +98,7 @@ with st.container(key="project"):
 with st.container(key="lifecycle"):
     st.subheader("Der ganze Ablauf")
     st.caption(
-        "Alle Schritte in der Reihenfolge des Menüs. Schritte vor der Planung dürfen "
+        "Alle Schritte in der Reihenfolge des Projektpfads. Schritte vor der Planung dürfen "
         "übersprungen werden."
     )
     with st.container(horizontal=True, key="steps"):

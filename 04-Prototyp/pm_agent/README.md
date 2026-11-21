@@ -23,7 +23,8 @@ Oberfläche ist damit unter `http://localhost:8501` erreichbar, auch wenn `strea
 die Skriptdatei aus einem anderen Verzeichnis aufruft. Der obige Befehl verwendet den
 Projektordner für `uv` und die relative Datei `.env`.
 
-Das Menü links:
+Das Menü links hat acht Einträge. Vorbereiten, Kontrolle und Info fassen mehrere Seiten
+zusammen: Sie stehen als Reiter oben auf der Seite (`ui.GROUPS`). Die Seiten:
 
 | Seite | Inhalt |
 |---|---|
@@ -34,11 +35,11 @@ Das Menü links:
 | Vorbereiten · Testplan | Der Agent entwirft Testfälle aus den Akzeptanzkriterien (feste IDs R1.1 …) und den Schnittstellen; Python prüft, dass jedes Kriterium einer Muss-Anforderung einen Testfall hat, und meldet Schnittstellen und Fehlercodes ohne Test; Freigabe, Markdown |
 | Umsetzen · Planung | Plan mit dem Agenten erstellen, prüfen, anpassen, exportieren, als Projekt übernehmen; je Projektwoche eine Demo, die Python gegen den Zeitplan prüft |
 | Umsetzen · Durchführung | Wer in den nächsten fünf Arbeitstagen womit beginnt (aus der Prognose); Status, Fertigdatum, Ist-Stunden und geschätzten Rest je Aufgabe erfassen, mit dem voraussichtlichen Ende je Aufgabe; der Agent schlägt Zusammenfassung und nächste Schritte vor; Statusbericht und Arbeitspaketbeschreibungen aus Vorlagen (`src/pm_agent/templates`) |
-| Umsetzen · Test | Ergebnisse je Testfall eintragen; jeder fehlgeschlagene Fall braucht einen Fehler (Schwere, Ursache, Aufgabe); ein Fehler öffnet seine Aufgabe auf Knopfdruck wieder |
+| Umsetzen · Kontrolle · Test | Ergebnisse je Testfall eintragen; jeder fehlgeschlagene Fall braucht einen Fehler (Schwere, Ursache, Aufgabe); ein Fehler öffnet seine Aufgabe auf Knopfdruck wieder |
 | Umsetzen · Kontrolle | Wochen-Demos mit Rückblick (gezeigt?, was ging schief, Ursache, Maßnahme; offene Maßnahmen zum Abhaken); Plan/Ist-Vergleich, Verzug, Prognose des Endes (restliche Arbeit ab heute, mit den Aufgaben, die auf verspätete warten) und von dort der Weg zurück in die Planung: „Rest mit dem Agenten umplanen“ lädt die unfertigen Aufgaben als Plan ab heute; Earned Value nach der 0/100-Methode (Planwert, Fertigstellungswert, Ist-Stunden, SPI, CPI); Kosten bei gesetztem Stundensatz; der Agent bewertet den Stand und schlägt Gegenmaßnahmen vor, und wo eine Maßnahme Aufgaben umverteilt, rechnet Python ihre Wirkung auf die Prognose nach; Zeit und Token aller Agentenläufe; alles zusammen als Kontrollbericht aus einer Vorlage |
 | Umsetzen · Abschluss | Abnahme je Anforderung (Python schlägt aus Tests und Fehlern vor, die Projektleitung entscheidet; zurückgestellt nur mit Grund); Lessons Learned vom Agenten mit Bezug auf Fehler und Wochen; Abschlussbericht mit tatsächlichem Ende und den Aufgaben, die später fertig wurden als geplant. Reiter „Betrieb“ (optional): Betriebshandbuch je Baustein (Verantwortliche als Rolle, Bereitstellung, Überwachung, Rücknahme) und Störungen. Reiter „Nächster Durchlauf“: nächster Backlog mit Herkunft; ein neuer Durchlauf legt die Dateien unter `data/archiv/<Datum>` ab und beginnt ein Vorhaben mit dem Backlog |
 | KI-Lab | startet den Studienserver aus `../ki_lab` und zeigt ihn eingebettet |
-| Über uns, Impressum | Projektkontext; Impressumsangaben trägt das Team noch ein |
+| Info · Über uns, Impressum | Projektkontext; Impressumsangaben trägt das Team noch ein |
 
 Über jeder Seite einer Phase steht der Projektpfad Auftrag → Anforderungen → Entwurf →
 Planen → Ausführen → Prüfen: Was erledigt ist, trägt ein Häkchen, die aktuelle Seite ist umrandet. Eine

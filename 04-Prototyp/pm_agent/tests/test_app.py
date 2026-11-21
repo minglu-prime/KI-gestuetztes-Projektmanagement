@@ -1042,6 +1042,23 @@ def journey(at):
     return next((h.value for h in at.html if 'class="journey"' in h.value), None)
 
 
+def test_a_page_of_a_group_links_the_other_pages_of_its_group_as_tabs(site):
+    # Only the first page of a group is in the menu; the rest are reached by these tabs.
+    for path, here, others in [
+        ("views/entwurf.py", "Entwurf", ["auftrag", "anforderungen", "testplan"]),
+        ("views/testlauf.py", "Test", ["kontrolle"]),
+        ("views/impressum.py", "Impressum", ["ueber_uns"]),
+    ]:
+        at = site.switch_page(path).run()
+        assert not at.exception, path
+        assert [link.proto.page for link in at.page_link][: len(others)] == others, path
+        tabs = next(h.value for h in at.html if 'class="group-tab here"' in h.value)
+        assert f'aria-current="page">{here}<' in tabs, path
+    # A page outside the groups has no tabs.
+    at = site.switch_page(PLANUNG).run()
+    assert not any('class="group-tab' in h.value for h in at.html)
+
+
 def test_every_agent_page_shows_the_project_path_with_the_page_marked(site):
     for path, step in [
         ("views/auftrag.py", "Projektauftrag"),

@@ -379,6 +379,28 @@
 }
 .chip-arrow { color: var(--muted); }
 
+/* ---- Tabs of a group (Vorbereiten, Kontrolle, Info) -------------------------------------- */
+
+/* The pages of one menu entry. This page has the green edge of the project path; the others
+   are plain links. They wrap on a phone instead of scrolling sideways. */
+[class*="st-key-group-tabs"] { flex-wrap: wrap; row-gap: 4px; }
+[class*="st-key-group-tabs"] [data-testid="stPageLink-NavLink"],
+.group-tab {
+  display: inline-block;
+  border: 1px solid var(--line);
+  background: #fff;
+  border-radius: 20px;
+  padding: 4px 12px;
+  font-size: 14px;
+}
+[class*="st-key-group-tabs"] [data-testid="stPageLink-NavLink"] p { color: var(--ink); font-size: 14px; }
+.group-tab.here {
+  border-color: var(--green);
+  box-shadow: inset 0 0 0 1px var(--green);
+  color: var(--ink);
+  font-weight: 600;
+}
+
 /* ---- Project path and roles (every agent page) ------------------------------------------ */
 
 /* Planen, Ausführen, Prüfen: done in mint with a tick, next with a golden edge, this page
