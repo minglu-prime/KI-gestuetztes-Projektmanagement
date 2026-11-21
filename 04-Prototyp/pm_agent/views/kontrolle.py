@@ -550,8 +550,6 @@ if tracking is not None:
             mime="text/markdown",
             icon=":material/download:",
         )
-        with st.expander("Vorschau"):
-            st.markdown(document)
 
 with st.container(border=True, key="panel-effort"):
     heading("timer", "Aufwand der Agenten", python="zählt aus den Protokollen")

@@ -198,8 +198,6 @@ if life.cases is not None and life.project is not None:
             file_name="testplan.md",
             icon=":material/download:",
         )
-        with st.expander("Vorschau"):
-            st.markdown(document)
 
 status.html(
     strip(

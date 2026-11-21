@@ -462,7 +462,8 @@ def run_with_progress(label: str, run: Callable[[Callable[[dict[str, Any]], None
         status.update(
             label=f"Kein Ergebnis nach {rounds} Runden" if failure else "Vorschlag angenommen",
             state="error" if failure else "complete",
-            expanded=True,
+            # Folded once accepted: the result below is what counts, the rounds are a detail.
+            expanded=bool(failure),
         )
     # The message goes below the box: a collapsed status would hide it.
     if failure:

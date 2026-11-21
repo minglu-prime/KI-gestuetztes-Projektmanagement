@@ -474,12 +474,14 @@ with tabs[2]:
         ]
         if missing:
             st.info("Für die Planung fehlt noch: " + ", ".join(missing) + ".")
-        if st.button(
+        # The status box of a run lists its rounds; the folded log below is for later runs.
+        ran_now = st.button(
             "Plan mit dem Agenten erstellen",
             type="primary",
             icon=":material/play_arrow:",
             disabled=bool(missing),
-        ):
+        )
+        if ran_now:
             rounds = []
             with st.status("Der Agent plant …", expanded=True) as status:
                 st.caption(BUSY_HINT)
@@ -526,10 +528,10 @@ with tabs[2]:
                 "Lauf öffnen", icon=":material/folder_open:", on_click=open_run, args=(chosen,)
             )
 
-    if state.rounds:
-        # Open by default: how the plan came about is part of the result, not a detail.
+    if state.rounds and not ran_now:
+        # Folded: the result is the plan in step 4; how it came about is a detail.
         title = f"So ist der Plan entstanden ({state.source}, {len(state.rounds)} Runden)"
-        with st.expander(title, expanded=True), st.container(key="rounds-log"):
+        with st.expander(title), st.container(key="rounds-log"):
             show_logged_round = round_printer(state.rounds_start)
             for record in state.rounds:
                 show_logged_round(record)
@@ -950,16 +952,6 @@ with tabs[4]:
                         st.button(
                             "Verwerfen", icon=":material/close:", on_click=decide, args=(False,)
                         )
-                    if proposal["rounds"]:
-                        title = f"So ist der Agent vorgegangen ({len(proposal['rounds'])} Runden)"
-                        # Open: how Claude got there belongs to the proposal.
-                        with (
-                            st.expander(title, expanded=True),
-                            st.container(key="rounds-proposal"),
-                        ):
-                            show_proposal_round = round_printer(proposal["basis"])
-                            for record in proposal["rounds"]:
-                                show_proposal_round(record)
 
             # The input comes last, below the conversation. Its callback hands the wish to
             # the run that follows, which answers it above.
@@ -1131,8 +1123,6 @@ with tabs[5]:
                 else:
                     st.success("Übernommen. Weiter auf den Seiten Durchführung und Kontrolle.")
 
-        with st.expander("Vorschau Markdown"):
-            st.markdown(to_markdown(project, state.plan, result, needs))
 
 # Where the planning stands, above the steps.
 try:

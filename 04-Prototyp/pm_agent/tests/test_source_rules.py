@@ -245,3 +245,19 @@ def test_the_menu_shows_one_entry_per_group_and_hides_the_rest():
     hidden = {slug for slug, _, hidden in entries if hidden}
     rest = {slug for pages in GROUPS.values() for slug, _ in pages[1:]}
     assert hidden == rest
+
+
+def test_no_page_shows_a_document_again_below_its_download():
+    # A "Vorschau" under each download repeated the tables above it, on seven pages.
+    found = [
+        f"{path.name}:{node.lineno}"
+        for path in (ROOT / "views").glob("*.py")
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8")))
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "expander"
+        and node.args
+        and isinstance(node.args[0], ast.Constant)
+        and str(node.args[0].value).startswith("Vorschau")
+    ]
+    assert found == []
