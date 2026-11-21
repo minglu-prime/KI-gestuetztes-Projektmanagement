@@ -9,32 +9,34 @@ from pathlib import Path
 
 import streamlit as st
 
-from pm_agent.ui import PAGES, journey
+from pm_agent.ui import PAGES, group_tabs, journey
 
 ROOT = Path(__file__).parent
 
 st.set_page_config(page_title="PM-Agent", page_icon=":material/view_timeline:", layout="wide")
 state = st.session_state
 
+# One entry per group: the first page of a group stands for it, the other pages of the group
+# are hidden here and open as tabs on top of the page (ui.GROUPS, ui.group_tabs).
 MENU = {
-    "": [st.Page("views/startseite.py", title="Startseite", icon=":material/home:")],
-    "Vorbereiten": [
-        st.Page("views/auftrag.py", title="Projektauftrag", icon=":material/flag:"),
-        st.Page("views/anforderungen.py", title="Anforderungen", icon=":material/checklist:"),
-        st.Page("views/entwurf.py", title="Entwurf", icon=":material/account_tree:"),
-        st.Page("views/testplan.py", title="Testplan", icon=":material/rule:"),
+    "": [
+        st.Page("views/startseite.py", title="Startseite", icon=":material/home:"),
+        st.Page("views/auftrag.py", title="Vorbereiten", icon=":material/flag:"),
+        st.Page("views/anforderungen.py", title="Anforderungen", visibility="hidden"),
+        st.Page("views/entwurf.py", title="Entwurf", visibility="hidden"),
+        st.Page("views/testplan.py", title="Testplan", visibility="hidden"),
     ],
     "Umsetzen": [
         st.Page("views/planung.py", title="Planung", icon=":material/view_timeline:"),
         st.Page("views/durchfuehrung.py", title="Durchführung", icon=":material/task_alt:"),
-        st.Page("views/testlauf.py", title="Test", icon=":material/bug_report:"),
         st.Page("views/kontrolle.py", title="Kontrolle", icon=":material/monitoring:"),
+        st.Page("views/testlauf.py", title="Test", visibility="hidden"),
         st.Page("views/abschluss.py", title="Abschluss", icon=":material/flag_circle:"),
     ],
-    "Experiment": [st.Page("views/ki_lab.py", title="KI-Lab", icon=":material/science:")],
-    "Info": [
-        st.Page("views/ueber_uns.py", title="Über uns", icon=":material/groups:"),
-        st.Page("views/impressum.py", title="Impressum", icon=":material/gavel:"),
+    "Mehr": [
+        st.Page("views/ki_lab.py", title="KI-Lab", icon=":material/science:"),
+        st.Page("views/ueber_uns.py", title="Info", icon=":material/info:"),
+        st.Page("views/impressum.py", title="Impressum", visibility="hidden"),
     ],
 }
 page = st.navigation(MENU)
@@ -69,6 +71,7 @@ state.page = page.url_path
 # A container of its own per page: a page change mounts new content, which is what the
 # page transition in assets/style.css hangs on.
 with st.container(key=f"page-{page.url_path or 'startseite'}"):
+    group_tabs(page.url_path)
     if page.url_path in PAGES:  # the pages of a phase
         journey(page.url_path)
     page.run()

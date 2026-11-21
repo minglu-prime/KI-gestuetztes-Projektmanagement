@@ -143,13 +143,20 @@ def test_findings_of_a_check_share_one_box_per_kind():
 
 def test_the_project_path_names_each_step_like_the_menu():
     # "Prüfen" in the path above the title "Kontrolle": one step, two names.
-    from pm_agent.ui import JOURNEY
+    from pm_agent.ui import GROUPS, JOURNEY
 
     pages = re.findall(
         r'st\.Page\("views/(\w+)\.py", title="([^"]+)"', (ROOT / "app.py").read_text("utf-8")
     )
     titles = dict(pages)
-    assert [(slug, name) for slug, name, _ in JOURNEY if titles[slug] != name] == []
+    # The first page of a group stands in the menu under the name of the group.
+    heads = {pages[0][0]: group for group, pages in GROUPS.items()}
+    assert [
+        (slug, name) for slug, name, _ in JOURNEY if titles[slug] != heads.get(slug, name)
+    ] == []
+    # Every other step is named in the tabs of its group as in the path.
+    labels = {slug: label for pages in GROUPS.values() for slug, label in pages}
+    assert [(slug, name) for slug, name, _ in JOURNEY if labels.get(slug, name) != name] == []
 
 
 def test_numbers_to_fill_in_follow_the_language_of_the_browser():
@@ -172,7 +179,7 @@ def test_the_menu_groups_pages_by_phase():
     # stood under "Vorbereiten": the group said who acts, and said it wrongly.
     source = (ROOT / "app.py").read_text(encoding="utf-8")
     groups = re.findall(r'^    "([^"]*)": \[', source, flags=re.M)
-    assert groups == ["", "Vorbereiten", "Umsetzen", "Experiment", "Info"]
+    assert groups == ["", "Umsetzen", "Mehr"]
     assert not (ROOT / "views" / "betrieb.py").exists()
     assert not (ROOT / "views" / "iteration.py").exists()
 
@@ -219,3 +226,22 @@ def test_texts_split_over_lines_keep_the_space_between_words():
                 if ends_in_word and right[:1].isalpha():
                     glued.append(f"{path.name}:{first.start[0]}")
     assert not glued, glued
+
+
+def test_the_menu_shows_one_entry_per_group_and_hides_the_rest():
+    # Thirteen entries were too many to scan. The pages of a group are tabs on its page; the
+    # menu shows its first page only, and every other page of the group is hidden there.
+    from pm_agent.ui import GROUPS
+
+    entries = re.findall(
+        r'st\.Page\("views/(\w+)\.py", title="([^"]+)"[^)]*?(visibility="hidden")?\)',
+        (ROOT / "app.py").read_text("utf-8"),
+    )
+    shown = [title for _, title, hidden in entries if not hidden]
+    assert shown == [
+        "Startseite", "Vorbereiten", "Planung", "Durchführung", "Kontrolle", "Abschluss",
+        "KI-Lab", "Info",
+    ]  # fmt: skip
+    hidden = {slug for slug, _, hidden in entries if hidden}
+    rest = {slug for pages in GROUPS.values() for slug, _ in pages[1:]}
+    assert hidden == rest

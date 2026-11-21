@@ -18,7 +18,7 @@ Der Agent schlägt vor. Python prüft nach. Die Projektleitung entscheidet.
 [Schnellstart](#schnellstart) ·
 [Stand und Grenzen](#stand-und-grenzen)
 
-<img src="04-Prototyp/pm_agent/assets/screenshots/startseite.jpg" width="900" alt="Startseite der Website: links das Menü mit Vorbereiten, Umsetzen, Experiment und Info, Überschrift „Der Agent schlägt vor. Du entscheidest.“, daneben die drei Schritte der Agent schlägt vor, Python prüft nach, Du entscheidest; darunter das aktuelle Projekt mit 24 Aufgaben, 0 % Fortschritt und 8 im Verzug">
+<img src="04-Prototyp/pm_agent/assets/screenshots/startseite.jpg" width="900" alt="Startseite der Website: links das Menü mit Startseite, Vorbereiten, Planung, Durchführung, Kontrolle, Abschluss, KI-Lab und Info, Überschrift „Der Agent schlägt vor. Du entscheidest.“, daneben die drei Schritte der Agent schlägt vor, Python prüft nach, Du entscheidest; darunter das aktuelle Projekt mit 24 Aufgaben, 0 % Fortschritt und 8 im Verzug">
 
 </div>
 
@@ -89,9 +89,10 @@ Ausgabe-Token, Modell `claude-opus-5-5`. Projekt (Web-App zum Buchen von Lernrä
 ## Die Website
 
 Eine Streamlit-Anwendung, die nur auf dem eigenen Rechner läuft. Das Menü folgt dem Ablauf eines
-Softwareprojekts: Startseite; Vorbereiten (Projektauftrag, Anforderungen, Entwurf, Testplan);
-Umsetzen (Planung, Durchführung, Test, Kontrolle, Abschluss); Experiment (KI-Lab); Info (Über
-uns, Impressum). Betrieb und der nächste Durchlauf sind Reiter im Abschluss. Über jeder dieser
+Softwareprojekts und hat acht Einträge: Startseite; Vorbereiten; Planung, Durchführung, Kontrolle,
+Abschluss; KI-Lab; Info. Vorbereiten öffnet Projektauftrag, Anforderungen, Entwurf und Testplan
+als Reiter über der Seite, Kontrolle ebenso den Test, Info Über uns und Impressum. Betrieb und
+der nächste Durchlauf sind Reiter im Abschluss. Über jeder dieser
 Seiten steht der Projektpfad mit allen neun Schritten und darunter, was als Nächstes zu tun ist. Die Screenshots zeigen das erfundene
 Beispielprojekt vom 20.11.2026.
 

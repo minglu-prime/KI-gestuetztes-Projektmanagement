@@ -179,6 +179,37 @@ PAGES = {
 }
 
 
+# Pages shown as tabs of one menu entry: the menu names the group and opens its first page;
+# the others are hidden there (app.py) and reached by `group_tabs`.
+GROUPS = {
+    "Vorbereiten": [
+        ("auftrag", "Projektauftrag"),
+        ("anforderungen", "Anforderungen"),
+        ("entwurf", "Entwurf"),
+        ("testplan", "Testplan"),
+    ],
+    "Kontrolle": [("kontrolle", "Kontrolle"), ("testlauf", "Test")],
+    "Info": [("ueber_uns", "Über uns"), ("impressum", "Impressum")],
+}
+
+
+def group_tabs(page: str) -> None:
+    """The pages of the group `page` belongs to, as a row of tabs; nothing outside a group.
+    The others are links, this page is marked: a link to itself would only reload it."""
+    group = next((pages for pages in GROUPS.values() if page in dict(pages)), None)
+    if group is None:
+        return
+    with st.container(horizontal=True, gap="small", key="group-tabs"):
+        for slug, label in group:
+            if slug == page:
+                st.html(
+                    f'<span class="group-tab here" aria-current="page">{escape(label)}</span>',
+                    width="content",
+                )
+            else:
+                st.page_link(f"views/{slug}.py", label=label, width="content")
+
+
 def journey(page: str) -> None:
     """The project path above every page of a phase: which step is done, which is this page,
     which comes next, and which phase before the plan is not approved (a draft, changed since
