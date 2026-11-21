@@ -80,10 +80,12 @@ zehn Phasen und wie sie zusammenhängen in `04-Prototyp/pm_agent/docs/lebenszykl
   - Liest `OPENAI_BASE_URL`, das Modell aus `PM_MODEL` oder ersatzweise `PM_AGENT_MODEL`, Reasoning `PM_LAB_REASONING_EFFORT`.
   - Der Freeze verlangt Key und Modellnamen, kein Datum (Entscheidung E01). Die Auswertung nennt die antwortenden Modelle (`models_returned`, `model_varies`).
   - Issue #9 ist geschlossen, Nachweis in `04-Prototyp/ki_lab/VERIFIKATION.md`.
+  - Formale Fälle aus einer privaten Datei (#6): `PM_LAB_MATERIALS` oder `--materials`, gleiches Format wie `cases.json`, Prüfung beim Laden; der Freeze hält Version, Prüfsumme und Quelle (`öffentlich`/`privat`) fest. Die Fälle selbst schreibt die Gruppe.
+  - Einwilligungen nennen den Dienst, an den die Daten gehen: `ui.ai_service` (Host aus `OPENAI_BASE_URL`) auf den Seiten, der eingefrorene Endpunkt im Lab; eine Quellregel verbietet „an (die) OpenAI (API)“.
 - **Forschungsordner** (Entwürfe, von der Gruppe zu bestätigen):
-  - `01-Projektplanung/entscheidungen.md`: Entscheidungslog, E01.
+  - `01-Projektplanung/entscheidungen.md`: Entscheidungslog, E01; `agenda-entscheidungen.md`: alle offenen Entscheidungen der Gruppe als Agenda (#1).
   - `02-Recherche/`: Baseline, KI-Lösungen, Chancen und Risiken; 20 Quellen, 13 im Volltext.
-  - `03-Experiment/`: Versuchsdesign, Pilot-Checkliste, Bewertungsrubrik, Agentenlauf.
+  - `03-Experiment/`: Versuchsdesign, Pilot-Checkliste, Bewertungsrubrik, Teilnahmeinformation (#8), Durchführungsprotokoll (#10), Agentenlauf.
   - `05-Ergebnisse/berichtsvorlage.md`.
 
 ## Zugang zum Modell (lokal, nicht im Repository)
@@ -102,14 +104,14 @@ Echter Test: `uv run --env-file .env pytest tests/test_agent_live.py` (verbrauch
 nur auf Wort der Projektleitung). Chat Completions nimmt bei diesem Modell Werkzeuge nur mit
 `reasoning_effort` „none“ an; deshalb Responses.
 
-## Projekt in Zahlen (21.11.2026, `main` nach PR 75)
+## Projekt in Zahlen (21.11.2026, `main` nach PR 78)
 
-- **Repository:** 305 Commits auf `main` (234 ohne Merges) seit dem 28.10.2026, 63 gemergte PRs, **0 Releases, 0 Tags**.
+- **Repository:** 309 Commits auf `main` (236 ohne Merges) seit dem 28.10.2026, 65 gemergte PRs, **0 Releases, 0 Tags**.
 - **Fachcode:** rund 10 070 Zeilen Python (ohne Leerzeilen und Kommentare).
-  - `pm_agent` 9 456 (Paket und Seiten)
-  - `ki_lab` 614
+  - `pm_agent` 9 410 (Paket und Seiten)
+  - `ki_lab` 656
   - dazu 9 Prompts, 8 Vorlagen, CSS
-- **Tests:** 686, alle ohne Netz (647 `pm_agent`, 39 `ki_lab`); dazu ein Live-Test, der sich ohne Schlüssel überspringt. CI: `pm-agent.yml` (Lint, Tests) und `static.yml` (README als Pages).
+- **Tests:** 692, alle ohne Netz (649 `pm_agent`, 43 `ki_lab`); dazu ein Live-Test, der sich ohne Schlüssel überspringt. CI: `pm-agent.yml` (Lint, Tests) und `static.yml` (README als Pages).
 - **Betrieb:** läuft lokal als Streamlit-Seite. Das Menü in 8 Einträgen ist in Chrome geprüft (1440 px und 375 px); Firefox und WebKit nur für den Stand vor dem 21.11. Kein öffentlicher Betrieb.
 - **Issues:** 11 (#1–#11, Meilensteine M1–M4).
   - #9 geschlossen.
@@ -120,6 +122,7 @@ nur auf Wort der Projektleitung). Chat Completions nimmt bei diesem Modell Werkz
 ## Offen, nach Wirkung geordnet
 
 1. **Die Forschungsarbeit liegt bei der Gruppe.**
+   - Ausgangspunkt ist `01-Projektplanung/agenda-entscheidungen.md`: alle offenen Entscheidungen in der Reihenfolge, in der sie voneinander abhängen.
    - Entwürfe prüfen und beschließen (#2–#5, #7, #11). Dabei die schweren Fehler aus `02-Recherche/baseline.md`, Abschnitt 5, und `03-Experiment/bewertungsrubrik.md` zu einer Liste machen.
    - Dann folgen, in dieser Reihenfolge:
      - Rollen und Termine (#1)
@@ -129,7 +132,7 @@ nur auf Wort der Projektleitung). Chat Completions nimmt bei diesem Modell Werkz
      - Erhebung (#10)
      - Bericht (#11)
    - Daten zur Frage des Projekts gibt es noch nicht.
-2. **Einwilligung genau machen.** Der Text im KI-Lab (`web/app.js`, `setupForm`) und die Zustimmung auf den Agentenseiten nennen „OpenAI“. Die Daten gehen an den Dienst in `OPENAI_BASE_URL` (KI:connect). Vor den Piloten richtigstellen, mit Kontakt und Löschfrist (#8).
+2. **Teilnahmeinformation fertig machen (#8).** Die Einwilligungen nennen seit PR 77 den richtigen Dienst. In `03-Experiment/teilnahmeinformation.md` fehlen noch Kontakt, Löschdatum und Name des Dienstes. Die Einwilligung zu Zitaten fragt das Lab nicht ab: auf Papier einholen oder im Lab ergänzen (Agenda M2).
 3. **Mehrere Läufe je Agent.** Ein Lauf je Agent und Tag reicht nicht für Aussagen über Runden, Token oder Dauer. `03-Experiment/agentenlauf-2026-11-21/run_agents.py` wiederholt den Lauf (kostet Kontingent, nur auf Wort der Projektleitung).
 4. **Agenten fachlich.**
    - Bei einer Abwesenheit trägt die Umplanung sie ein, verteilt aber keine Aufgabe um: Das Ende rückt hinter die Deadline (21.11.: 24.12.2026). Prompt `replanning.md` oder eine Warnung prüfen.
