@@ -1,3 +1,4 @@
+import json
 from datetime import date, datetime
 
 import pytest
@@ -6,6 +7,7 @@ from test_testplan import ACCEPT, CONFLICT, INTEGRATE, evidence
 from test_tools import PROJECT, TEAM, plan_input
 
 from pm_agent import closing
+from pm_agent.agent import AgentError
 from pm_agent.models import Plan
 from pm_agent.tracking import (
     CaseResult,
@@ -404,3 +406,17 @@ def test_the_closing_report_names_goal_and_success_criteria(project):
     assert "- K2: Doppelbuchungen sind ausgeschlossen" in text
     plain = closing.closing_document(project, None, evaluate(project, DAY))
     assert "Kein Projektauftrag." in plain
+
+
+def test_the_lessons_agent_gets_the_numbers_the_way_the_report_says_them(project, monkeypatch):
+    sent = {}
+
+    def capture(name, submission, data, log_dir, on_round):
+        sent["data"] = json.loads(data)
+        raise AgentError("nur die Eingabe geprüft")
+
+    monkeypatch.setattr(closing, "run_submission", capture)
+    with pytest.raises(AgentError):
+        closing.run_lessons(project, date(2026, 11, 12), log_dir=None)
+    figures = sent["data"]["kennzahlen"]
+    assert figures["fortschritt"].endswith(" %") and figures["planstunden"].endswith(" h")

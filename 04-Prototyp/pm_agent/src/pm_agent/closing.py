@@ -165,17 +165,14 @@ def run_lessons(
 ) -> Lessons:
     """Claude drafts the lessons learned from retros, defects and sign-offs. No names of
     the team go to the API. Raises AgentError."""
-    from pm_agent.tracking import evaluate  # the same day the page evaluates
+    from pm_agent.tracking import evaluate, key_figures  # the same day the page evaluates
 
     evaluation = evaluate(tracking, today)
     titles = {n.id: n.title for n in tracking.requirements}
     data = json.dumps(
         {
-            "kennzahlen": {
-                "fortschritt": round(evaluation.progress, 3),
-                "planstunden": evaluation.planned_hours,
-                "iststunden": evaluation.actual_hours,
-            },
+            # As the report writes them; weeks and IDs below stay as written for `refs`.
+            "kennzahlen": key_figures(evaluation),
             "rueckblicke": [r.model_dump(mode="json") for r in tracking.retros],
             "fehler": [d.model_dump(mode="json") for d in tracking.defects],
             "abnahme": [

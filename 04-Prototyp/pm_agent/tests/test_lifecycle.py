@@ -1,4 +1,5 @@
 import json
+import re
 from datetime import date, datetime
 
 import pytest
@@ -593,3 +594,28 @@ def test_an_acceptance_criterion_id_is_used_once():
     assert check_requirements(
         requirements(twice, need("R2", sources=["K2"])), charter()
     ).errors == ["Anforderung 'R1': das Akzeptanzkriterium 'R1.1' ist mehrfach vergeben"]
+
+
+@pytest.mark.parametrize(
+    "run",
+    [
+        lambda: lifecycle.run_charter(PROJECT, log_dir=None),
+        lambda: lifecycle.run_requirements(PROJECT, charter(), log_dir=None),
+        lambda: lifecycle.run_design(PROJECT, charter(), requirements(need("R1")), log_dir=None),
+        lambda: lifecycle.run_cases(PROJECT, requirements(need("R1")), None, log_dir=None),
+    ],
+)
+def test_the_agents_before_the_plan_get_dates_the_german_way(run, monkeypatch):
+    # The Testplan agent wrote "2026-12-10 10:00" into its steps: it took the dates of the
+    # project as it got them.
+    sent = []
+
+    def capture(name, submission, data, log_dir, on_round):
+        sent.append(data)
+        raise lifecycle.InputError("nur die Eingabe geprüft")
+
+    monkeypatch.setattr(lifecycle, "run_submission", capture)
+    with pytest.raises(lifecycle.InputError):
+        run()
+    assert "09.11.2026" in sent[0]
+    assert not re.findall(r"\d{4}-\d{2}-\d{2}", sent[0])

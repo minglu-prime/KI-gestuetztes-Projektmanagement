@@ -39,7 +39,7 @@ from pm_agent.models import (
     Step,
 )
 from pm_agent.tools import Submission
-from pm_agent.tracking import CasePlan, _fill
+from pm_agent.tracking import CasePlan, _fill, as_shown
 from pm_agent.workbench import DATA_DIR, InputError, _cell, _date, _md, _reason
 
 FILE = DATA_DIR / "vorhaben.json"
@@ -888,7 +888,7 @@ def run_charter(
         schema=Charter,
         check=lambda charter: check_charter(charter).errors,
     )
-    data = json.dumps({"projekt": project.model_dump(mode="json")}, ensure_ascii=False, indent=2)
+    data = json.dumps(as_shown({"projekt": project.model_dump()}), ensure_ascii=False, indent=2)
     return run_submission("auftrag", submission, data, log_dir, on_round)
 
 
@@ -914,15 +914,17 @@ def run_requirements(
         check=lambda requirements: check_requirements(requirements, charter).errors,
     )
     data = json.dumps(
-        {
-            "projekt": project.model_dump(mode="json"),
-            "projektauftrag": charter.model_dump(mode="json") if charter else None,
-            **(
-                {"offen_aus_dem_letzten_durchlauf": [b.model_dump(mode="json") for b in backlog]}
-                if backlog
-                else {}
-            ),
-        },
+        as_shown(
+            {
+                "projekt": project.model_dump(),
+                "projektauftrag": charter.model_dump() if charter else None,
+                **(
+                    {"offen_aus_dem_letzten_durchlauf": [b.model_dump() for b in backlog]}
+                    if backlog
+                    else {}
+                ),
+            }
+        ),
         ensure_ascii=False,
         indent=2,
     )
@@ -951,11 +953,13 @@ def run_design(
         check=lambda design: check_design(design, requirements).errors,
     )
     data = json.dumps(
-        {
-            "projekt": project.model_dump(mode="json"),
-            "projektauftrag": charter.model_dump(mode="json") if charter else None,
-            "anforderungen": requirements.model_dump(mode="json") if requirements else None,
-        },
+        as_shown(
+            {
+                "projekt": project.model_dump(),
+                "projektauftrag": charter.model_dump() if charter else None,
+                "anforderungen": requirements.model_dump() if requirements else None,
+            }
+        ),
         ensure_ascii=False,
         indent=2,
     )
@@ -1028,13 +1032,13 @@ def run_cases(
         check=lambda cases: check_cases(cases, requirements, design).errors,
     )
     data = json.dumps(
-        {
-            "projekt": project.model_dump(mode="json"),
-            "anforderungen": requirements.model_dump(mode="json") if requirements else None,
-            "schnittstellen": (
-                [i.model_dump(mode="json") for i in design.interfaces] if design else None
-            ),
-        },
+        as_shown(
+            {
+                "projekt": project.model_dump(),
+                "anforderungen": requirements.model_dump() if requirements else None,
+                "schnittstellen": ([i.model_dump() for i in design.interfaces] if design else None),
+            }
+        ),
         ensure_ascii=False,
         indent=2,
     )

@@ -1,6 +1,7 @@
 """The agents for Durchführung and Kontrolle: their checks, and the whole loop offline."""
 
 import json
+import re
 from datetime import date
 
 import pytest
@@ -86,18 +87,20 @@ def test_without_overdue_tasks_im_plan_is_a_valid_assessment(tracking):
 def test_the_agents_get_the_computed_numbers_not_raw_material_to_compute(tracking):
     data = json.loads(facts(tracking, evaluate(tracking, TODAY)))
 
-    assert data["stand"] == "2026-11-12"
+    # Written the way the report says them: the agent repeats numbers as it gets them, and
+    # "Fortschritt bei 0.0" or "2026-11-12" went into the status report as such.
+    assert data["stand"] == "12.11.2026"
     assert data["kennzahlen"] == {
-        "planstunden": 24,
-        "ist_stunden": 14,
-        "fortschritt": 0.333,
-        "abweichung_fertiger_aufgaben": 2,
+        "planstunden": "24 h",
+        "ist_stunden": "14 h",
+        "fortschritt": "33 %",
+        "abweichung_fertiger_aufgaben": "+2 h",
         "im_verzug": ["B"],
     }
     # B has 12 of its 16 h left on Thu 12.11.: it ends on Friday, two workdays after the plan.
     assert data["prognose"] == {
-        "geplantes_ende": "2026-11-11",
-        "voraussichtliches_ende": "2026-11-13",
+        "geplantes_ende": "11.11.2026",
+        "voraussichtliches_ende": "13.11.2026",
         "arbeitstage_spaeter_als_geplant": 2,
         "arbeitstage_nach_der_deadline": -25,
         "haelt_auf": {"B": []},
@@ -107,9 +110,16 @@ def test_the_agents_get_the_computed_numbers_not_raw_material_to_compute(trackin
     assert (b["id"], b["overdue"], b["planned_end"], b["depends_on"]) == (
         "B",
         True,
-        "2026-11-11",
+        "11.11.2026",
         ["A"],
     )
+
+
+def test_no_number_or_date_reaches_the_agents_in_a_machine_format(tracking):
+    text = facts(tracking, evaluate(tracking, TODAY))
+    assert not re.findall(r"\d{4}-\d{2}-\d{2}", text)  # ISO dates
+    # Decimal points: not the dots of a German date, not IDs like R1.1.
+    assert not re.findall(r"(?<![\w.])\d+\.\d+(?![\d.])", text)
 
 
 def test_a_rejected_status_summary_goes_back_to_claude_until_it_is_accepted(
