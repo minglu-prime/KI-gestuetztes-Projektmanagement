@@ -104,8 +104,10 @@ class Lab:
                 'limit_seconds': LIMIT, 'protocol_version': '1.0'}
 
     def freeze(self, attestation):
-        if not self.api_key or not re.search(r'\d{4}-\d{2}-\d{2}$', self.model):
-            raise Problem('Für Freeze: API-Key und datierte Modell-Snapshot-ID konfigurieren.')
+        # Study rule of 21.11.2026: no dated snapshot needed. The model name is frozen with the
+        # configuration; each call keeps the model that answered (analysis: models_returned).
+        if not self.api_key or not self.model.strip():
+            raise Problem('Für Freeze: API-Key und Modell konfigurieren.')
         if not isinstance(attestation, str) or len(attestation.strip()) < 20:
             raise Problem('Freigaben und erfolgreichen Live-Pilot schriftlich bestätigen (mind. 20 Zeichen).')
         with self.lock:

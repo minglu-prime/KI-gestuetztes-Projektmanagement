@@ -41,5 +41,22 @@ class AnalysisTests(unittest.TestCase):
             summarize([], ratings=[{'rating_id':'X', 'rater':'R1'}, {'rating_id':'X', 'rater':'R1'}])
 
 
+    def test_the_models_that_answered_are_reported(self):
+        # Without a dated snapshot the provider may answer with another model; the report
+        # names every model that answered in the formal study, pilots left out.
+        def call(model, status='completed'):
+            return {'status': status, 'model_returned': model}
+        def session(pilot, calls):
+            return {'participant': 'P', 'pilot': pilot, 'group': 1, 'rounds': [
+                {'rating_id': 'x', 'case_id': 'A', 'condition': 'ai', 'status': 'submitted',
+                 'started_at': 0, 'ended_at': 1, 'ai_calls': calls}]}
+        report = summarize([session(False, [call('gpt-6-sol'), call(None, 'error')]),
+                            session(False, [call('gpt-6-sol-b')]),
+                            session(True, [call('pilot-model')])])
+        self.assertEqual(report['models_returned'], ['gpt-6-sol', 'gpt-6-sol-b'])
+        self.assertTrue(report['model_varies'])
+        self.assertEqual(summarize([])['models_returned'], [])
+        self.assertFalse(summarize([])['model_varies'])
+
 if __name__ == '__main__':
     unittest.main()

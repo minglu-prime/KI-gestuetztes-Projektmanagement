@@ -26,7 +26,9 @@ Für KI-Runden `OPENAI_API_KEY` und `PM_MODEL` setzen (ersatzweise gilt `PM_AGEN
 anderer OpenAI-kompatibler Dienst steht in `OPENAI_BASE_URL`, das Reasoning (Standard `medium`) in
 `PM_LAB_REASONING_EFFORT`. Ohne Schlüssel und Modell funktionieren die Runden ohne KI;
 KI-Runden melden einen protokollierten Fehler, es gibt keine Demo-Antworten. Der Freeze für die
-formale Studie verlangt zusätzlich eine datierte Modell-Snapshot-ID.
+formale Studie verlangt Key und Modell und hält den Modellnamen fest; ein datierter Snapshot ist
+nicht nötig (Studienregel vom 21.11.2026, `01-Projektplanung/entscheidungen.md`). Jeder Aufruf
+speichert das Modell, das geantwortet hat; die Auswertung nennt sie (`models_returned`).
 
 Studienleitung (Einladungen, Export, Auswertung): `python manage.py --help`.
 

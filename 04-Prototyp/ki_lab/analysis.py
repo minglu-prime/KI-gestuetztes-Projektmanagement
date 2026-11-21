@@ -76,7 +76,11 @@ def summarize(records, ratings=None):
                 'includes_timeout':any(r['status']=='timed_out' for r in s['rounds']),
                 'manual':means['manual'], 'ai':means['ai'],
                 'delta_ai_minus_manual':{k:means['ai'][k]-means['manual'][k] for k in means['ai']}})
+    # No dated snapshot (study rule of 21.11.2026): name every model that answered.
+    models = sorted({c['model_returned'] for s in records for r in s['rounds'] for c in r['ai_calls']
+                     if c['status'] == 'completed' and c.get('model_returned')})
     return {'participants':len(records), 'complete_pairs':len(pairs), 'pairs':pairs,
+            'models_returned':models, 'model_varies':len(models) > 1,
             'median_time_delta': statistics.median(p['time_delta_ai_minus_manual'] for p in pairs) if pairs else None,
             'timeouts':timeouts, 'ai_failed_or_unfinished_calls':ai_failures,
             'incomplete_participants':incomplete, 'quality_pairs':quality, 'rater_disagreements':disagreements,
