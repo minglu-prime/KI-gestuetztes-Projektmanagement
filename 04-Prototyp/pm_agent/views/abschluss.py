@@ -42,11 +42,13 @@ from pm_agent.tracking import (
 from pm_agent.ui import (
     adopted_project,
     as_text,
+    check_verdict,
     consent,
     heading,
     kept_editor,
     messages,
     run_with_progress,
+    verdict,
 )
 from pm_agent.workbench import DATA_DIR, InputError
 
@@ -140,6 +142,12 @@ def on_fixed(incident_id: str) -> None:
     change(fix)
 
 
+# The result on top: can the project be closed?
+errors, warnings = check_closing(tracking, plan)
+if tracking.requirements or errors or warnings:  # with nothing to accept, nothing is closed
+    fine = "Nichts Schweres ist offen: Das Projekt lässt sich abschließen."
+    verdict(*check_verdict(errors, warnings, fine))
+
 # All three are drawn on every run; the browser shows the chosen one.
 closing_tab, operations_tab, next_tab = st.tabs(
     ["Abnahme und Lehren", "Betrieb", "Nächster Durchlauf"]
@@ -148,7 +156,6 @@ closing_tab, operations_tab, next_tab = st.tabs(
 with closing_tab:
     with st.container(border=True, key="panel-signoff"):
         heading("verified", "Abnahme je Anforderung", python="schlägt vor", du="entscheidest")
-        errors, warnings = check_closing(tracking, plan)
         if tracking.requirements:
             st.dataframe(pd.DataFrame(signoff_rows(tracking, plan)), hide_index=True)
             titles = {n.id: n.title for n in tracking.requirements}
@@ -172,8 +179,6 @@ with closing_tab:
                 args=({need.id: need for need in tracking.requirements},),
             )
         messages(errors, warnings)
-        if tracking.requirements and not errors:  # with nothing to accept, nothing is closed
-            st.success("Nichts Schweres ist offen: Das Projekt lässt sich abschließen.")
 
     with st.container(border=True, key="panel-lessons"):
         heading(

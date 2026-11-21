@@ -4,8 +4,8 @@ from datetime import date
 
 import streamlit as st
 
-from pm_agent.tracking import evaluate, forecast, forecast_text, load, next_step, percent
-from pm_agent.ui import JOURNEY, PAGES, as_text, heading
+from pm_agent.tracking import evaluate, forecast, load, next_step, percent
+from pm_agent.ui import JOURNEY, PAGES, as_text, forecast_verdict, heading, verdict
 from pm_agent.workbench import InputError
 
 # How every agent works, as the diagram next to the headline (styled in assets/style.css).
@@ -59,18 +59,11 @@ with st.container(key="project"):
         else:
             result = evaluate(tracking, date.today())
             st.markdown(f"**{as_text(tracking.project.idea)}**")
+            verdict(*forecast_verdict(forecast(tracking, date.today()), tracking.project.deadline))
             a, b, c = st.columns(3)
             a.metric("Aufgaben", len(result.tasks))
             b.metric("Fortschritt", percent(result.progress))
             c.metric("Im Verzug", len(result.overdue))
-            outlook = forecast(tracking, date.today())
-            said = forecast_text(outlook, tracking.project.deadline).rstrip(".")
-            if outlook.problem:
-                st.error(f"Prognose: {said}.")
-            elif outlook.deadline_gap > 0:
-                st.warning(f"Prognose: {said}.")
-            else:
-                st.caption(f"Prognose: {said}.")
             advice, where = next_step(tracking, date.today())
             # Advice for the Kontrolle repeats the forecast or the delay shown above.
             if where != "kontrolle":

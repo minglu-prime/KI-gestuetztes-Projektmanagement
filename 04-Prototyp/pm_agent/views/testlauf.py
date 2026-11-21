@@ -23,7 +23,7 @@ from pm_agent.tracking import (
     reopen,
     save_if_current,
 )
-from pm_agent.ui import adopted_project, as_text, heading, messages
+from pm_agent.ui import adopted_project, as_text, check_verdict, heading, messages, verdict
 from pm_agent.workbench import InputError
 
 state = st.session_state
@@ -112,6 +112,9 @@ if lifecycle.cases_state(life) != "freigegeben":
         "geprüft wird gegen die Testfälle, wie sie gerade stehen."
     )
 titles = {c.id: c.title for c in plan.cases}
+errors, warnings = check_results(tracking, plan)
+fine = "Jeder Testfall hat ein Ergebnis, jeder fehlgeschlagene einen Fehlereintrag."
+verdict(*check_verdict(errors, warnings, fine))
 
 with st.container(border=True, key="panel-results"):
     heading("rule", "Ergebnisse", du="trägst ein", python="prüft")
@@ -129,7 +132,6 @@ with st.container(border=True, key="panel-results"):
 
 with st.container(border=True, key="panel-defects"):
     heading("bug_report", "Fehler", du="erfasst und entscheidest", python="prüft")
-    errors, warnings = check_results(tracking, plan)
     messages(errors, warnings)
     tasks = {t.id: t.title for t in tracking.plan.tasks}
     st.selectbox(

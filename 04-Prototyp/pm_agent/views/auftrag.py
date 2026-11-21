@@ -25,10 +25,12 @@ from pm_agent.ui import (
     heading,
     messages,
     phase_chip,
+    phase_verdict,
     run_with_progress,
     saved_lifecycle,
     store,
     strip,
+    verdict,
 )
 from pm_agent.workbench import InputError
 
@@ -223,3 +225,10 @@ if life.charter is not None and life.project is not None:
         )
 
 status.html(strip(phase_chip("Projektauftrag", charter_state(life))))
+# The result on top, beside the chips: the findings of the check, or what the approval needs.
+shown = phase_verdict(
+    charter_state(life), check_charter(life.charter) if life.charter is not None else None
+)
+if shown is not None:
+    with status:
+        verdict(*shown)
