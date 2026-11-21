@@ -161,3 +161,28 @@ def test_a_change_can_set_an_absence_and_the_check_counts_it():
 def test_a_new_plan_cannot_set_an_absence():
     # A new plan starts from the team table; only a wish can name an absence.
     assert PlanningTools(PROJECT, TEAM).set_absence is None
+
+
+def test_a_text_longer_than_its_limit_is_sent_back_to_be_shortened():
+    # A page full of long rationales was too much to read. The plan is rejected, not cut:
+    # the agent shortens the text itself, and saved plans with longer texts still load.
+    tools = PlanningTools(PROJECT, TEAM)
+    plan = plan_input()
+    plan["assignments"][0]["reason"] = "kennt die Raumdaten " * 20
+    with pytest.raises(ToolError) as err:
+        tools.submit_plan.call(plan)
+    assert "assignments.0.reason" in err.value.content
+    assert "höchstens 160 Zeichen" in err.value.content
+    assert tools.plan is None
+    # The same text in a stored plan is no error of the model itself.
+    assert Plan.model_validate(plan).assignments[0].reason.startswith("kennt")
+
+
+def test_every_submission_holds_its_texts_to_the_limits():
+    from pm_agent.models import StatusSummary
+    from pm_agent.tools import Submission
+
+    submission = Submission("submit_status", "Zusammenfassung", "", StatusSummary, lambda s: [])
+    with pytest.raises(ToolError) as err:
+        submission.tool.call({"summary": "Satz. " * 100, "next_steps": []})
+    assert "summary" in err.value.content and "höchstens" in err.value.content

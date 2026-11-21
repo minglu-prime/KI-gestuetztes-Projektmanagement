@@ -9,8 +9,8 @@ sie.
 
 `items`: die Lehren, höchstens etwa acht. Jede hat:
 
-- `observation`: was passiert ist, konkret und ohne Schuldzuweisung an Personen.
-- `advice`: was das Team beim nächsten Mal tut, als Handlung formuliert.
+- `observation`: in einem Satz (höchstens 200 Zeichen), was passiert ist, konkret und ohne Schuldzuweisung an Personen.
+- `advice`: in einem Satz (höchstens 200 Zeichen), was das Team beim nächsten Mal tut, als Handlung formuliert.
 - `refs`: worauf sich die Lehre stützt: Fehler-IDs (`F1`) und Wochen als Datum ihres Montags
   (`2026-11-16`), genau wie in den Daten.
 

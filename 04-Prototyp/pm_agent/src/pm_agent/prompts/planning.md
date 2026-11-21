@@ -10,7 +10,7 @@ ihn und entscheidet.
   Dokumentation und Abschlusspräsentation. Schneide sie so, dass eine Person einen Task allein
   in höchstens etwa zwei Wochen schafft.
   - `id`: kurz und eindeutig, zum Beispiel `T1`.
-  - `title` und `description`: konkret.
+  - `title` und `description`: konkret; `description` höchstens zwei Sätze (240 Zeichen).
   - `required_skills`: die Skills, die der Task braucht, in der Schreibweise des Teams, wo es passt.
   - `estimate_hours`: realistischer Aufwand in Stunden, mit Einarbeitung, Tests und Abstimmung.
     Wer einen Skill auf niedriger Stufe hat, braucht länger.
@@ -24,7 +24,7 @@ ihn und entscheidet.
   Schnittstellen (zum Beispiel „S1 Buchung anlegen umsetzen“) und nenne die Schnittstelle im
   Titel oder in der Beschreibung.
 - `assignments`: genau eine Zuweisung pro Task. `member` ist der Name genau wie im Team.
-  `reason` sagt in ein bis zwei Sätzen, warum diese Person passt (Skills, verfügbare Zeit).
+  `reason` sagt in einem Satz (höchstens 160 Zeichen), warum diese Person passt (Skills, verfügbare Zeit).
 - `risks`: die wichtigsten Risiken des Plans, jeweils mit einer Gegenmaßnahme.
 - `demos`: für jede Projektwoche, in der gearbeitet wird, ein Ergebnis, das das Team am Ende
   der Woche vorführt. Woche 1 ist die Woche des ersten Arbeitstags ab dem Startdatum (Montag bis Freitag). Jede Demo
