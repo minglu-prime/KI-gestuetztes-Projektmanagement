@@ -300,3 +300,18 @@ def test_what_the_agents_read_has_its_dates_and_numbers_written_the_german_way()
                 ):
                     unshown.append(f"{name}:{call.lineno}")
     assert unshown == []
+
+
+def test_no_text_says_the_data_go_to_openai():
+    # The data go to the service in OPENAI_BASE_URL (the school's endpoint), not necessarily to
+    # OpenAI. Consent and data notes name it through ui.ai_service; the KI-Lab page names the
+    # host of the endpoint the lab is configured with.
+    lab = ROOT.parent / "ki_lab" / "web" / "app.js"
+    found = [
+        f"{path.name}:{number}"
+        for path in [*SOURCES, lab]
+        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1)
+        if re.search(r"\ban (die OpenAI API|OpenAI)\b(?! model)", line)
+        and not line.lstrip().startswith("#")
+    ]
+    assert found == []

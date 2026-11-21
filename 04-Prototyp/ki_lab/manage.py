@@ -16,6 +16,8 @@ def write_json(path, value):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--db', default=str(ROOT / 'data' / 'lab.db'))
+    parser.add_argument('--materials', default=None, metavar='DATEI',
+                        help='privates Fallmaterial (sonst PM_LAB_MATERIALS, sonst cases.json)')
     sub = parser.add_subparsers(dest='command', required=True)
     freeze = sub.add_parser('freeze')
     freeze.add_argument('--attestation', required=True)
@@ -32,7 +34,10 @@ def main():
     analyze.add_argument('--out', required=True)
     sub.add_parser('status')
     args = parser.parse_args()
-    lab = Lab(args.db)
+    try:
+        lab = Lab(args.db, materials=args.materials)
+    except Problem as exc:  # missing or malformed case file: say why and stop
+        parser.error(str(exc))
     try:
         if args.command == 'freeze':
             print(json.dumps(lab.freeze(args.attestation), ensure_ascii=False, indent=2))

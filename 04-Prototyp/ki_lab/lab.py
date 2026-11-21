@@ -29,6 +29,38 @@ def canonical(value):
     return json.dumps(value, ensure_ascii=False, sort_keys=True)
 
 
+# The fields every case needs; the page and the AI read them (`visible_case`).
+CASE_FIELDS = {'id', 'title', 'brief', 'rules', 'packages', 'reference_plan', 'change', 'deliverables'}
+
+
+def load_materials(source):
+    """The cases: the public demo cases (`cases.json`), or the formal ones from a private file
+    outside the repository (issue #6). A missing or malformed file stops the lab with the reason;
+    there are no fallback cases."""
+    path = Path(source) if source else ROOT / 'cases.json'
+    try:
+        materials = json.loads(path.read_text(encoding='utf-8'))
+    except FileNotFoundError:
+        raise Problem(f'Fallmaterial nicht gefunden: {path.name}') from None
+    except (OSError, ValueError) as exc:
+        raise Problem(f'Fallmaterial ungültig: {path.name} ist kein lesbares JSON ({exc}).') from None
+    cases = materials.get('cases') if isinstance(materials, dict) else None
+    problems = []
+    if not isinstance(materials, dict) or not isinstance(materials.get('version'), str):
+        problems.append('Feld version fehlt')
+    if not isinstance(cases, dict) or set(cases) != {'A', 'B'}:
+        problems.append('Fälle A und B fehlen')
+    else:
+        problems += [f'Fall {key}: {", ".join(sorted(CASE_FIELDS - set(case)))} fehlt'
+                     for key, case in sorted(cases.items())
+                     if not isinstance(case, dict) or CASE_FIELDS - set(case)]
+    if not isinstance(materials, dict) or not isinstance(materials.get('practice'), dict):
+        problems.append('Übung (practice) fehlt')
+    if problems:
+        raise Problem(f'Fallmaterial ungültig: {path.name}: ' + '; '.join(problems) + '.')
+    return materials, 'privat' if source else 'öffentlich'
+
+
 # Reasoning tokens count against this limit, so it leaves room for the thinking.
 MAX_OUTPUT_TOKENS = 8000
 
@@ -76,7 +108,7 @@ def call_model(api_key, model, messages):
 
 
 class Lab:
-    def __init__(self, database, clock=time.time, model=None, api_key=None):
+    def __init__(self, database, clock=time.time, model=None, api_key=None, materials=None):
         self.path = Path(database)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.db = sqlite3.connect(self.path, check_same_thread=False, timeout=15)
@@ -89,14 +121,20 @@ class Lab:
         self.model = model if model is not None else (
             os.environ.get('PM_MODEL') or os.environ.get('PM_AGENT_MODEL') or '')
         self.api_key = api_key if api_key is not None else os.environ.get('OPENAI_API_KEY', '')
-        self.materials = json.loads((ROOT / 'cases.json').read_text(encoding='utf-8'))
+        # Formal cases come from a private file (PM_LAB_MATERIALS); without it, the public ones.
+        source = materials if materials is not None else os.environ.get('PM_LAB_MATERIALS', '')
+        try:
+            self.materials, self.materials_source = load_materials(source)
+        except Problem:
+            self.db.close()
+            raise
         self.prompt = (ROOT / 'prompt.txt').read_text(encoding='utf-8')
 
     def close(self):
         self.db.close()
 
     def config(self):
-        return {'case_version': self.materials['version'],
+        return {'case_version': self.materials['version'], 'materials_source': self.materials_source,
                 'materials_sha256': hashlib.sha256(canonical(self.materials).encode()).hexdigest(),
                 'prompt_sha256': hashlib.sha256(self.prompt.encode()).hexdigest(),
                 'model': self.model, 'api': responses_url(),
