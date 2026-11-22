@@ -19,14 +19,17 @@ from pm_agent.lifecycle import Lifecycle
 from pm_agent.models import Plan
 from pm_agent.tracking import (
     PART,
+    Evaluation,
     Forecast,
     Tracking,
     current_results,
     forecast_text,
     has_progress,
     history_rows,
+    hours_text,
     load,
     next_step,
+    percent,
 )
 from pm_agent.workbench import InputError, describe_round, round_summary
 
@@ -54,7 +57,7 @@ def adopted_project() -> Tracking | None:
     if tracking is None:
         st.info(
             "Noch kein Projekt übernommen. Erstelle oder öffne einen Plan auf der Seite Planung "
-            "und wähle dort im Schritt Export „Plan als Projekt übernehmen“."
+            "und wähle dort im Schritt Übernehmen „Plan als Projekt übernehmen“."
         )
         if st.button("Zur Planung", type="primary", icon=":material/arrow_forward:"):
             st.switch_page("views/planung.py")
@@ -117,19 +120,37 @@ def phase_verdict(phase: str, check: lifecycle.Check | None) -> tuple[str, str] 
     return check_verdict(*check, "") if any(check) else PHASE_VERDICTS[phase]
 
 
-def forecast_verdict(outlook: Forecast, deadline: datetime.date) -> tuple[str, str]:
-    """The forecast as a verdict: bad past the deadline or without a forecast, a warning
-    when the end moved later or no buffer is left, fine otherwise."""
+# Finished work may take this share more hours than planned before the verdict asks for a
+# decision. The CPI on the Kontrolle counts begun work as earning nothing (0/100 rule) and is
+# low early on by design, so the verdict reads the finished work only.
+COST_TOLERANCE = 0.10
+
+
+def forecast_verdict(
+    outlook: Forecast, deadline: datetime.date, evaluation: Evaluation
+) -> tuple[str, str]:
+    """Time and effort as a verdict: bad past the deadline or without a forecast, a warning
+    when the end moved later, no buffer is left or finished work took more hours than
+    planned beyond COST_TOLERANCE, fine otherwise."""
     said = forecast_text(outlook, deadline)
     if outlook.end is None and not outlook.problem:
-        return "ok", said
-    if outlook.problem or outlook.deadline_gap > 0:
-        state = "bad"
-    elif outlook.shift > 0 or outlook.deadline_gap == 0:
-        state = "warn"
+        state, text = "ok", said
     else:
-        state = "ok"
-    return state, f"Prognose: {said}."
+        if outlook.problem or outlook.deadline_gap > 0:
+            state = "bad"
+        elif outlook.shift > 0 or outlook.deadline_gap == 0:
+            state = "warn"
+        else:
+            state = "ok"
+        text = f"Prognose: {said}."
+    over = evaluation.finished_deviation
+    if evaluation.earned and over / evaluation.earned > COST_TOLERANCE:
+        share = percent(over / evaluation.earned)
+        text += (
+            f" Fertige Aufgaben brauchten {share} mehr Stunden als geplant (+{hours_text(over)} h)."
+        )
+        state = "bad" if state == "bad" else "warn"
+    return state, text
 
 
 def saved_lifecycle() -> Lifecycle | None:

@@ -54,12 +54,14 @@ with st.container(key="project"):
         if tracking is None:
             st.info("Noch kein Projekt übernommen.")
             st.caption(
-                "Erstelle einen Plan auf der Seite Planung und übernimm ihn dort im Schritt Export."
+                "Erstelle einen Plan auf der Seite Planung und übernimm ihn dort im Schritt "
+                "Übernehmen."
             )
         else:
             result = evaluate(tracking, date.today())
             st.markdown(f"**{as_text(tracking.project.idea)}**")
-            verdict(*forecast_verdict(forecast(tracking, date.today()), tracking.project.deadline))
+            outlook = forecast(tracking, date.today())
+            verdict(*forecast_verdict(outlook, tracking.project.deadline, result))
             a, b, c = st.columns(3)
             a.metric("Aufgaben", len(result.tasks))
             b.metric("Fortschritt", percent(result.progress))

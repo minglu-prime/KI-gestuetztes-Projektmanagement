@@ -68,7 +68,7 @@ tracking = adopted_project()
 if tracking is not None:
     result = evaluate(tracking, date.today())
     outlook = forecast(tracking, date.today())
-    verdict(*forecast_verdict(outlook, tracking.project.deadline))
+    verdict(*forecast_verdict(outlook, tracking.project.deadline, result))
     st.subheader("Projektstand")
     st.html(roles(python="rechnet aus Plan und Fortschritt"))
     if not has_progress(tracking):

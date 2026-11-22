@@ -142,8 +142,13 @@ def on_fixed(incident_id: str) -> None:
     change(fix)
 
 
-# The result on top: can the project be closed?
+# The result on top: can the project be closed? The handbook in the Betrieb tab counts as
+# warnings: it does not block the next run, but a green line must not hide it.
 errors, warnings = check_closing(tracking, plan)
+warnings = [
+    *warnings,
+    *(f"Betrieb: {e}" for e in check_operations(design, tracking.operations).errors),
+]
 if tracking.requirements or errors or warnings:  # with nothing to accept, nothing is closed
     fine = "Nichts Schweres ist offen: Das Projekt lässt sich abschließen."
     verdict(*check_verdict(errors, warnings, fine))
