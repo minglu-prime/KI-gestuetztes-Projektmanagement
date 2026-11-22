@@ -2412,6 +2412,191 @@ def test_a_new_run_starts_from_the_backlog(site, monkeypatch, tmp_path):
     assert any("Offen aus dem letzten Durchlauf" in m.value for m in at.markdown)
 
 
+def test_one_project_goes_from_the_auftrag_to_the_next_run(site, monkeypatch, tmp_path):
+    # Every other test seeds the files of the phase before it. Here one project passes all
+    # nine steps through the pages only, so each hand-over between phases is exercised:
+    # what one page approves is what the next page and its agent get.
+    from test_lifecycle import design
+    from test_testplan import cases
+
+    from pm_agent import closing
+    from pm_agent.models import Lessons
+
+    linked = plan_input()
+    for task in linked["tasks"]:
+        task["requirement_ids"] = ["R1"]
+    linked_plan = Plan.model_validate(linked)
+    lessons = Lessons.model_validate({"items": [{"observation": "a", "advice": "b"}]})
+    seen = {}
+
+    def charter(project, on_round=None):
+        seen["charter"] = project
+        return CHARTER
+
+    def requirements(project, charter, on_round=None):
+        seen["requirements"] = charter
+        return NEEDS
+
+    def drafted_design(project, charter, requirements, on_round=None):
+        seen["design"] = requirements
+        return design()
+
+    def drafted_cases(project, requirements, the_design, on_round=None):
+        seen["cases"] = (requirements, the_design)
+        return cases()
+
+    def planning(project, team, on_round=None, **context):
+        seen["planning"] = (project, context)
+        return linked_plan
+
+    monkeypatch.setattr(lifecycle, "run_charter", charter)
+    monkeypatch.setattr(lifecycle, "run_requirements", requirements)
+    monkeypatch.setattr(lifecycle, "run_design", drafted_design)
+    monkeypatch.setattr(lifecycle, "run_cases", drafted_cases)
+    monkeypatch.setattr(agent, "run_planning", planning)
+    monkeypatch.setattr(closing, "run_lessons", lambda tracking, today, on_round=None: lessons)
+    monkeypatch.setattr(agent, "OpenAI", lambda *a, **k: pytest.fail("no provider call"))
+    monkeypatch.setattr(workbench, "DATA_DIR", tmp_path)
+
+    def draft_and_approve(at, page, consent, draft, approve):
+        at = at.switch_page(f"views/{page}.py").run()
+        at.checkbox(key=consent).check().run()
+        button(at, draft).click()
+        at = at.run()
+        assert not at.exception and not at.error, page
+        button(at, approve).click()
+        at = at.run()
+        assert not at.exception and not at.error, page
+        return at
+
+    # 1-4 Vorbereiten: each draft is approved before the next phase drafts from it.
+    at = enter_project(site.switch_page("views/auftrag.py").run())
+    at = draft_and_approve(
+        at,
+        "auftrag",
+        "charter_consent",
+        "Projektauftrag mit dem Agenten entwerfen",
+        "Projektauftrag freigeben",
+    )
+    at = draft_and_approve(
+        at,
+        "anforderungen",
+        "requirements_consent",
+        "Anforderungen mit dem Agenten entwerfen",
+        "Anforderungen freigeben",
+    )
+    at = draft_and_approve(
+        at, "entwurf", "design_consent", "Entwurf mit dem Agenten entwerfen", "Entwurf freigeben"
+    )
+    at = draft_and_approve(
+        at,
+        "testplan",
+        "cases_consent",
+        "Testfälle mit dem Agenten entwerfen",
+        "Testplan freigeben",
+    )
+    assert seen["charter"] == PROJECT
+    assert seen["requirements"] == CHARTER
+    assert seen["design"] == NEEDS
+    assert seen["cases"] == (NEEDS, design())
+    life = lifecycle.load()
+    assert [
+        lifecycle.charter_state(life),
+        lifecycle.requirements_state(life),
+        lifecycle.design_state(life),
+        lifecycle.cases_state(life),
+    ] == ["freigegeben"] * 4
+
+    # 5 Planung: the dates come from the Auftrag, the agent gets requirements and design.
+    at = at.switch_page(PLANUNG).run()
+    button(at, "Eckdaten aus dem Projektauftrag übernehmen").click()
+    at = at.run()
+    at.checkbox(key="consent").check().run()
+    button(at, "Plan mit dem Agenten erstellen").click()
+    at = at.run()
+    assert not at.exception and not at.error
+    project, context = seen["planning"]
+    assert project == PROJECT
+    assert (context["requirements"], context["design"]) == (NEEDS.items, design())
+    button(at, "Plan als Projekt übernehmen").click()
+    at = at.run()
+    assert not at.exception and not at.error
+    adopted = tracking.load()
+    assert (adopted.plan, adopted.requirements) == (linked_plan, NEEDS.items)
+
+    # 6 Durchführung: both tasks are done.
+    at = at.switch_page("views/durchfuehrung.py").run()
+    at = edit_progress(
+        at, {0: {"Status": "fertig", "Ist (h)": 8}, 1: {"Status": "fertig", "Ist (h)": 16}}
+    )
+    button(at, "Fortschritt speichern").click()
+    at = at.run()
+    assert not at.exception and not at.error
+    assert {t: p.status for t, p in tracking.load().progress.items()} == {
+        "A": "fertig",
+        "B": "fertig",
+    }
+
+    # 7 Kontrolle: the requirement is traced to the finished tasks.
+    at = at.switch_page("views/kontrolle.py").run()
+    assert not at.exception
+    (trace,) = [d.value for d in at.dataframe if "Anforderung" in d.value.columns]
+    assert trace[["ID", "Aufgaben", "Fertig"]].to_dict("records") == [
+        {"ID": "R1", "Aufgaben": "A, B", "Fertig": "2 von 2"}
+    ]
+
+    # 8 Test: every case of the approved test plan passes.
+    at = at.switch_page("views/testlauf.py").run()
+    assert not at.exception
+    assert [w.value for w in at.warning] == ["3 Testfälle ohne Ergebnis: T1, T2, T3"]
+    for case in [c.id for c in cases().cases]:
+        at.selectbox(key="test_case").set_value(case).run()
+        at.radio(key="test_result").set_value("bestanden").run()
+        button(at, "Ergebnis speichern").click()
+        at = at.run()
+        assert not at.exception and not at.error, case
+    assert {r.case_id: r.result for r in tracking.load().results} == dict.fromkeys(
+        [c.id for c in cases().cases], "bestanden"
+    )
+
+    # 9 Abschluss: sign-off, handbook and lessons, then the next run.
+    at = at.switch_page("views/abschluss.py").run()
+    assert not at.exception
+    signoff = next(f.value for f in at.dataframe if "Vorschlag" in f.value.columns)
+    assert list(signoff["Vorschlag"]) == ["abnehmbar"]
+    at.radio(key="signoff_decision").set_value("abgenommen").run()
+    button(at, "Entscheidung speichern").click()
+    at = at.run()
+    at = edit_table(
+        at,
+        "operations_editor",
+        {
+            0: {"Verantwortlich": "Team", "Überwachung": "Fehler zählen"},
+            1: {"Verantwortlich": "Team", "Überwachung": "Health-Check"},
+        },
+    )
+    button(at, "Betriebshandbuch speichern").click()
+    at = at.run()
+    at.checkbox(key="consent_abschluss").check().run()
+    button(at, "Lessons Learned mit dem Agenten entwerfen").click()
+    at = at.run()
+    assert not at.exception and not at.error
+    closed = tracking.load()
+    assert [(s.requirement_id, s.decision) for s in closed.signoffs] == [("R1", "abgenommen")]
+    assert closed.lessons == lessons.items
+    assert "lässt sich abschließen" in verdict(at) and 'class="verdict ok"' in verdict(at)
+
+    at.checkbox(key="next_run_sure").check().run()
+    button(at, "Neuen Durchlauf beginnen").click()
+    at = at.run()
+    assert not at.exception and not at.error
+    assert tracking.load() is None
+    assert lifecycle.load() == lifecycle.Lifecycle()  # nothing left over for the next run
+    (archived,) = (tmp_path / "archiv").iterdir()
+    assert sorted(p.name for p in archived.iterdir()) == ["projekt.json", "vorhaben.json"]
+    assert tracking.load(archived / "projekt.json") == closed
+
+
 def test_the_operations_step_is_done_only_when_the_handbook_passes(tracked):
     from test_lifecycle import design
 
