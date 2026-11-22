@@ -82,7 +82,7 @@ from pm_agent.workbench import (
 )
 
 state = st.session_state
-STEPS = ["1 · Team", "2 · Projekt", "3 · Planung", "4 · Ergebnis", "5 · Anpassen", "6 · Export"]
+STEPS = ["1 · Team", "2 · Projekt", "3 · Planung", "4 · Ergebnis", "5 · Anpassen", "6 · Übernehmen"]
 # What becomes of the recorded progress when a plan is adopted again.
 KEEP = "Als frühere Arbeit behalten"
 DROP = "Verwerfen"
@@ -1001,9 +1001,9 @@ with tabs[4]:
                 disabled=bool(blocked) or proposal is not None or unchecked,
             )
 
-# 6 · Export -------------------------------------------------------------------------------
+# 6 · Übernehmen --------------------------------------------------------------------------
 with tabs[5]:
-    st.subheader("Export")
+    st.subheader("Übernehmen und exportieren")
     if state.plan is None or result is None:
         st.info("Noch kein geprüfter Plan zum Exportieren.")
     else:
@@ -1030,7 +1030,7 @@ with tabs[5]:
                 state.export_error = str(err)
 
         stamp = date.today().strftime("%Y%m%d")
-        download, take_over = st.columns(2, gap="medium")
+        take_over, download = st.columns(2, gap="medium")
         with download.container(border=True, key="panel-download", height="stretch"):
             heading("download", "Herunterladen")
             not_recorded = state.pop("export_error", None)

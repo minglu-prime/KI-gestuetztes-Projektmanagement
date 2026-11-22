@@ -2936,3 +2936,59 @@ def test_betrieb_and_the_next_run_are_parts_of_the_abschluss(tracked):
     for label in ["Lessons Learned speichern", "Neuen Durchlauf beginnen"]:
         button(at, label)  # raises if the part is missing
     assert any("kein Betriebshandbuch" in i.value for i in at.info)  # no design in this project
+
+
+def test_the_step_that_adopts_the_plan_says_so_in_its_tab(app, monkeypatch):
+    # The button "Plan als Projekt übernehmen" sat in a tab named "6 · Export": a tester
+    # looked for it in "4 · Ergebnis" and did not find it.
+    monkeypatch.setattr(agent, "run_planning", planned)
+    at = fill_project(app.run())
+    button(at, "Plan mit dem Agenten erstellen").click()
+    at = at.run()
+    (tab,) = [t for t in at.tabs if any(b.label == "Plan als Projekt übernehmen" for b in t.button)]
+    assert "Übernehmen" in tab.label
+
+
+FUTURE = PROJECT.model_copy(update={"start_date": date(2099, 1, 5), "deadline": date(2099, 12, 31)})
+
+
+@pytest.mark.parametrize("page", ["kontrolle", "durchfuehrung", "startseite"])
+def test_the_verdict_says_when_finished_work_took_more_hours(site, page):
+    # The verdict read "In Ordnung" from the forecast alone while finished work had taken a
+    # quarter more hours than planned (CPI 0,50 on the same page).
+    adopted = tracking.adopt(FUTURE, TEAM, PLAN)
+    tracking.save(tracking.apply_rows(adopted, [{"ID": "A", "Status": "fertig", "Ist (h)": 10}]))
+    at = site.switch_page(f"views/{page}.py").run()
+    assert not at.exception
+    shown = verdict(at)
+    assert 'class="verdict warn"' in shown, shown
+    assert "25 % mehr Stunden als geplant (+2 h)" in shown
+
+    # Within the tolerance the forecast alone decides.
+    tracking.save(tracking.apply_rows(adopted, [{"ID": "A", "Status": "fertig", "Ist (h)": 8}]))
+    shown = verdict(at.run())
+    assert 'class="verdict ok"' in shown and "mehr Stunden" not in shown
+
+
+def test_the_closing_verdict_names_an_unfinished_handbook(site):
+    # "Das Projekt lässt sich abschließen" stood in green above a Betrieb tab with four
+    # errors in the handbook.
+    from test_lifecycle import design
+
+    from pm_agent import closing
+
+    lifecycle.save(lifecycle.Lifecycle(project=PROJECT, design=design()))
+    adopted = tracking.adopt(PROJECT, TEAM, PLAN, requirements=NEEDS.items)
+    tracking.save(
+        closing.record_signoff(
+            adopted, tracking.Signoff(requirement_id="R1", decision="abgenommen")
+        )
+    )
+    at = site.switch_page("views/abschluss.py").run()
+    assert not at.exception
+    shown = verdict(at)
+    # One warning of the sign-off (no test case) and four of the handbook.
+    assert 'class="verdict warn"' in shown and "5 Warnungen" in shown, shown
+    # The handbook does not block the next run; only closing errors do.
+    at.checkbox(key="next_run_sure").check().run()
+    assert not button(at, "Neuen Durchlauf beginnen").disabled

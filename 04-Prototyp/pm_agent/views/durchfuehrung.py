@@ -53,7 +53,7 @@ if tracking is None:
 # Where the project stands, from the saved progress: the forecast first.
 result = evaluate(tracking, date.today())
 outlook = forecast(tracking, date.today())
-verdict(*forecast_verdict(outlook, tracking.project.deadline))
+verdict(*forecast_verdict(outlook, tracking.project.deadline, result))
 finished = sum(t.status == "fertig" for t in result.tasks)
 running = sum(t.status == "in Arbeit" for t in result.tasks)
 late = len(result.overdue)
