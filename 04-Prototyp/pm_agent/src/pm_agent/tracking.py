@@ -595,15 +595,27 @@ def reopen(tracking: Tracking, defect_id: str) -> Tracking:
 
 
 def check_results(tracking: Tracking, plan: CasePlan) -> RetroCheck:
-    """Errors: a failed case without a defect. Warnings: cases without a result, open
+    """Errors: a failed case without an open defect. Warnings: cases without a result, open
     defects whose task is finished."""
     latest = current_results(tracking, plan)
     found = {d.case_id for d in tracking.defects if d.status == "offen"}
-    errors = [
-        f"Testfall '{c.id}' ist fehlgeschlagen, aber es gibt keinen Fehlereintrag"
-        for c in plan.cases
-        if c.id in latest and latest[c.id].result == "fehlgeschlagen" and c.id not in found
-    ]
+    errors = []
+    for c in plan.cases:
+        if c.id not in latest or latest[c.id].result != "fehlgeschlagen" or c.id in found:
+            continue
+        # A fixed defect does not count: the case may fail again after the fix. Defects have
+        # no date, so "not tested again yet" looks the same; the message says what to do.
+        fixed = [d.id for d in tracking.defects if d.case_id == c.id]
+        if fixed:
+            errors.append(
+                f"Testfall '{c.id}' ist fehlgeschlagen, sein Fehler {', '.join(fixed)} ist "
+                "behoben: Testfall wiederholen. Schlägt er wieder fehl, einen neuen Fehler "
+                "erfassen"
+            )
+        else:
+            errors.append(
+                f"Testfall '{c.id}' ist fehlgeschlagen, aber es gibt keinen Fehlereintrag"
+            )
     warnings = []
     missing = [c.id for c in plan.cases if c.id not in latest]
     if missing:

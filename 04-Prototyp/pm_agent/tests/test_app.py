@@ -2992,3 +2992,15 @@ def test_the_closing_verdict_names_an_unfinished_handbook(site):
     # The handbook does not block the next run; only closing errors do.
     at.checkbox(key="next_run_sure").check().run()
     assert not button(at, "Neuen Durchlauf beginnen").disabled
+
+
+def test_the_handbook_warnings_stay_out_of_the_signoff_list(site):
+    # PR 82 put the handbook into the verdict by adding it to `warnings`, which the sign-off
+    # panel lists too: every "Betrieb: …" line showed twice, once beside the sign-off.
+    from test_lifecycle import design
+
+    lifecycle.save(lifecycle.Lifecycle(project=PROJECT, design=design()))
+    tracking.adopt(PROJECT, TEAM, PLAN, requirements=NEEDS.items)
+    at = site.switch_page("views/abschluss.py").run()
+    assert not at.exception
+    assert not [w.value for w in at.warning if "Betrieb:" in w.value]

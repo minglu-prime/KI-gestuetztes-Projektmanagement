@@ -412,9 +412,12 @@ def test_a_case_that_fails_again_after_its_fix_needs_a_new_defect(adopted):
     tracking = record_defect(
         tracking, Defect(case_id="T1", severity="leicht", cause="x", status="behoben")
     )
-    assert "Testfall 'T1' ist fehlgeschlagen, aber es gibt keinen Fehlereintrag" in (
-        check_results(tracking, plan).errors
-    )
+    # Still an error, but not "no defect": F1 exists. Without dates on defects, a case that
+    # fails again cannot be told from one not tested again yet; the message names both.
+    assert check_results(tracking, plan).errors == [
+        "Testfall 'T1' ist fehlgeschlagen, sein Fehler F1 ist behoben: Testfall wiederholen. "
+        "Schlägt er wieder fehl, einen neuen Fehler erfassen"
+    ]
 
 
 def test_open_defects_come_next_when_all_tasks_are_done(adopted):
