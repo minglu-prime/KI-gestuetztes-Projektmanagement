@@ -52,7 +52,7 @@ Bestanden: `uv sync` ohne Fehler.
 | Quellregeln | `test_source_rules.py` | Verbotene Muster in allen Seiten (z. B. „Claude“ in der Oberfläche, Vorschauen, ISO-Daten) |
 | KI-Lab | in `ki_lab`: `uv run --no-project --python 3.11 python -m unittest discover -s tests -v` | Freeze, Abläufe, Zeitlimit, Auswertung (`summarize`), HTTP, Stil |
 
-Bestanden: alle grün. Erwartung zum Vergleich: 649 Tests `pm_agent` (+1 übersprungen), 43 `ki_lab`.
+Bestanden: alle grün. Erwartung zum Vergleich: 650 Tests `pm_agent` (+1 übersprungen), 43 `ki_lab`.
 Abweichende Anzahl melden.
 
 ## 4. Integrations- und Kettentests (mehrere Module zusammen, weiter ohne Netz)
@@ -65,10 +65,12 @@ Abweichende Anzahl melden.
 | Site ↔ KI-Lab | `test_lab_server.py` | echter Start des Studienservers, Antwort, erlaubter Frame, Stopp, belegter Port |
 | Start | `test_launch.py` | Streamlit bindet an Loopback |
 
-**Fachliche Kette** (AGENTS.md: ein Fall über alle Phasen): mit
-`uv run pytest tests/test_app.py -q -k "plan or durchf or kontroll or abschluss"` die Fälle
-heraussuchen, die einen Plan übernehmen und danach Durchführung, Kontrolle und Exporte
-prüfen. Berichten, welche Phasenübergänge **kein** Test abdeckt (Lücke, keine Reparatur).
+**Fachliche Kette** (AGENTS.md: ein Fall über alle Phasen):
+`uv run pytest tests/test_app.py -q -k one_project_goes_from_the_auftrag_to_the_next_run`
+führt ein Projekt nur über die Seiten durch alle neun Schritte, vom Projektauftrag bis zum
+neuen Durchlauf. Zusätzlich mit `-k "plan or durchf or kontroll or abschluss"` die Fälle
+heraussuchen, die einzelne Übergänge genauer prüfen. Berichten, welche Phasenübergänge
+**kein** Test abdeckt (Lücke, keine Reparatur).
 
 Bestanden: alle grün, keine Warnung über offene Dateien oder hängende Prozesse.
 
