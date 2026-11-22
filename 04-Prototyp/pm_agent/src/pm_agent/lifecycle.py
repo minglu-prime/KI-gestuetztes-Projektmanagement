@@ -19,7 +19,7 @@ from typing import Any, Literal, NamedTuple
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from pm_agent.agent import LOG_DIR, run_submission
+from pm_agent.agent import run_submission
 from pm_agent.diagram import sequence_mermaid
 from pm_agent.models import (
     BacklogItem,
@@ -873,7 +873,7 @@ def _split(value: Any, separator: str) -> list[str]:
 
 def run_charter(
     project: Project,
-    log_dir: Path | None = LOG_DIR,
+    log_dir: Path | None = None,
     on_round: Callable[[dict[str, Any]], None] | None = None,
 ) -> Charter:
     """Claude drafts the Projektauftrag from idea and dates. Only these go to the API, no
@@ -895,7 +895,7 @@ def run_charter(
 def run_requirements(
     project: Project,
     charter: Charter | None,
-    log_dir: Path | None = LOG_DIR,
+    log_dir: Path | None = None,
     on_round: Callable[[dict[str, Any]], None] | None = None,
     backlog: list[BacklogItem] | None = None,
 ) -> Requirements:
@@ -935,7 +935,7 @@ def run_design(
     project: Project,
     charter: Charter | None,
     requirements: Requirements | None,
-    log_dir: Path | None = LOG_DIR,
+    log_dir: Path | None = None,
     on_round: Callable[[dict[str, Any]], None] | None = None,
 ) -> Design:
     """Claude drafts the design from charter and requirements; Python rejects it until it
@@ -1014,7 +1014,7 @@ def run_cases(
     project: Project,
     requirements: Requirements | None,
     design: Design | None,
-    log_dir: Path | None = LOG_DIR,
+    log_dir: Path | None = None,
     on_round: Callable[[dict[str, Any]], None] | None = None,
 ) -> Cases:
     """Claude drafts the test cases from the acceptance criteria and the contracts; Python

@@ -835,3 +835,19 @@ def test_a_damaged_file_names_json_and_date_errors_in_german(tmp_path, content, 
     with pytest.raises(InputError) as raised:
         load_team(path)
     assert str(raised.value) == f"team.json ist beschädigt: {reason}"
+
+
+def test_the_team_and_runs_follow_their_paths_when_set_later(monkeypatch, tmp_path):
+    # Read only, so that this test cannot touch the real data/ while the bug is there.
+    team_file = tmp_path / "team.json"
+    team_file.write_text(json.dumps([m.model_dump(mode="json") for m in TEAM]), encoding="utf-8")
+    monkeypatch.setattr(workbench, "TEAM_FILE", team_file)
+    monkeypatch.setattr(workbench, "LOG_DIR", tmp_path)
+    assert workbench.load_team() == TEAM
+    assert workbench.saved_runs() == []
+
+
+def test_the_team_is_saved_where_team_file_points_now(monkeypatch, tmp_path):
+    monkeypatch.setattr(workbench, "TEAM_FILE", tmp_path / "team.json")
+    workbench.save_team(TEAM)
+    assert workbench.load_team(tmp_path / "team.json") == TEAM

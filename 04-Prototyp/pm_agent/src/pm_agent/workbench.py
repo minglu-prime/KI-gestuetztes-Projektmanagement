@@ -191,8 +191,9 @@ def table_plan(plan: Plan) -> Plan:
         return plan
 
 
-def load_team(path: Path = TEAM_FILE) -> list[Member]:
+def load_team(path: Path | None = None) -> list[Member]:
     """An empty team if nothing was saved yet. A damaged file is an error, not an empty team."""
+    path = path or TEAM_FILE  # read at call time: scripts and tests point it elsewhere
     if not path.exists():
         return []
     try:
@@ -205,14 +206,16 @@ def load_team(path: Path = TEAM_FILE) -> list[Member]:
         raise InputError(f"{path.name} ist beschädigt: {_reason(err)}") from err
 
 
-def save_team(team: list[Member], path: Path = TEAM_FILE) -> None:
+def save_team(team: list[Member], path: Path | None = None) -> None:
+    path = path or TEAM_FILE
     path.parent.mkdir(parents=True, exist_ok=True)
     data = [m.model_dump(mode="json") for m in team]
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
-def saved_runs(log_dir: Path = LOG_DIR) -> list[Path]:
+def saved_runs(log_dir: Path | None = None) -> list[Path]:
     """Logged runs that ended with a plan and can be reopened, newest first."""
+    log_dir = log_dir or LOG_DIR
     runs = []
     for path in sorted(log_dir.glob("run-*.json"), reverse=True):
         record = json.loads(path.read_text(encoding="utf-8"))

@@ -13,7 +13,7 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
-from pm_agent.agent import LOG_DIR, run_submission
+from pm_agent.agent import run_submission
 from pm_agent.models import ControlReport, Member, StatusSummary
 from pm_agent.tools import Submission
 from pm_agent.tracking import (
@@ -32,7 +32,7 @@ from pm_agent.tracking import (
 def run_status_summary(
     tracking: Tracking,
     today: date,
-    log_dir: Path | None = LOG_DIR,
+    log_dir: Path | None = None,
     on_round: Callable[[dict[str, Any]], None] | None = None,
 ) -> StatusSummary:
     """Durchführung agent: the text part of the status report. Raises AgentError."""
@@ -53,7 +53,7 @@ def run_status_summary(
 def run_control_report(
     tracking: Tracking,
     today: date,
-    log_dir: Path | None = LOG_DIR,
+    log_dir: Path | None = None,
     on_round: Callable[[dict[str, Any]], None] | None = None,
 ) -> ControlReport:
     """Kontrolle agent: assessment, findings and countermeasures. Raises AgentError."""

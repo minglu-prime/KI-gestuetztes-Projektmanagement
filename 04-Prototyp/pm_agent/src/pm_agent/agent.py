@@ -39,7 +39,7 @@ PlanningError = AgentError  # the name the planning page and its tests use
 def run_planning(
     project: Project,
     team: list[Member],
-    log_dir: Path | None = LOG_DIR,
+    log_dir: Path | None = None,
     on_round: Callable[[dict[str, Any]], None] | None = None,
     *,
     requirements: list[Requirement] | None = None,
@@ -48,7 +48,7 @@ def run_planning(
 ) -> Plan:
     """Let Claude plan the project. Returns the first plan that submit_plan accepts: no
     errors, warnings possible. Raises PlanningError; errors of the API itself propagate.
-    Each run, successful or not, is written to `log_dir` as one JSON file (None: no log).
+    Each run, successful or not, is written to `log_dir` as one JSON file (None: LOG_DIR).
     `on_round` gets each round as soon as its tools have run, for live progress.
     `requirements`: the approved ones; Claude links each task to them and the check traces
     the plan (`covered`: served by finished work outside the plan). `design`: the approved
@@ -74,7 +74,7 @@ def run_replanning(
     team: list[Member],
     plan: Plan,
     wish: str,
-    log_dir: Path | None = LOG_DIR,
+    log_dir: Path | None = None,
     on_round: Callable[[dict[str, Any]], None] | None = None,
     *,
     requirements: list[Requirement] | None = None,
@@ -150,7 +150,7 @@ def run_submission(
     name: str,
     submission: Submission[T],
     data: str,
-    log_dir: Path | None = LOG_DIR,
+    log_dir: Path | None = None,
     on_round: Callable[[dict[str, Any]], None] | None = None,
 ) -> T:
     """An agent with one submit tool: the system prompt is prompts/<name>.md, the request
@@ -180,7 +180,7 @@ def run_agent(
     tools: list[Tool],
     result: Callable[[], T | None],
     record: Callable[[T | None], dict[str, Any]],
-    log_dir: Path | None = LOG_DIR,
+    log_dir: Path | None = None,
     on_round: Callable[[dict[str, Any]], None] | None = None,
 ) -> T:
     """One agent run. `result` returns what the submit tool accepted, or None until then.
@@ -190,6 +190,7 @@ def run_agent(
     accepted: T | None = None
     error = None
     started = datetime.now().astimezone()
+    log_dir = log_dir or LOG_DIR  # read at call time: scripts and tests point it elsewhere
     try:
         accepted = _run(noun, system, request, tools, result, rounds, on_round or (lambda _: None))
         return accepted
@@ -197,18 +198,17 @@ def run_agent(
         error = f"{type(err).__name__}: {err}"
         raise
     finally:
-        if log_dir is not None:
-            log_dir.mkdir(parents=True, exist_ok=True)
-            entry = {
-                "started": started.isoformat(timespec="seconds"),
-                "seconds": round((datetime.now().astimezone() - started).total_seconds(), 1),
-                "requested_model": _model(),
-                "outcome": noun.lower() if accepted is not None else "error",
-                "error": error,
-                "rounds": [{"round": n, **item} for n, item in enumerate(rounds, start=1)],
-                **record(accepted),
-            }
-            _write_log(log_dir, log_prefix, started, entry)
+        log_dir.mkdir(parents=True, exist_ok=True)
+        entry = {
+            "started": started.isoformat(timespec="seconds"),
+            "seconds": round((datetime.now().astimezone() - started).total_seconds(), 1),
+            "requested_model": _model(),
+            "outcome": noun.lower() if accepted is not None else "error",
+            "error": error,
+            "rounds": [{"round": n, **item} for n, item in enumerate(rounds, start=1)],
+            **record(accepted),
+        }
+        _write_log(log_dir, log_prefix, started, entry)
 
 
 def _run(

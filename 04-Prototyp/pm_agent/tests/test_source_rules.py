@@ -315,3 +315,21 @@ def test_no_text_says_the_data_go_to_openai():
         and not line.lstrip().startswith("#")
     ]
     assert found == []
+
+
+def test_no_function_binds_a_module_constant_as_its_default():
+    # `def load_team(path=TEAM_FILE)` takes the value at import. A script or test that then
+    # points workbench.TEAM_FILE (or agent.LOG_DIR, lab_server.PORT) elsewhere still read and
+    # wrote the real data/ and logs/ (found while recording the demo, 22.11.2026). Defaults
+    # are None and the constant is read inside, at call time.
+    found = []
+    for path in SOURCES:
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
+                args = node.args
+                for default in [*args.defaults, *(d for d in args.kw_defaults if d)]:
+                    if isinstance(default, ast.Name) and re.search(
+                        r"(_DIR|_FILE|_CSV|PORT)$", default.id
+                    ):
+                        found.append(f"{path.name}:{node.lineno} {node.name}={default.id}")
+    assert found == []

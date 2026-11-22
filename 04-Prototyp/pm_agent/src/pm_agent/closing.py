@@ -12,7 +12,7 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from pm_agent.agent import LOG_DIR, run_submission
+from pm_agent.agent import run_submission
 from pm_agent.lifecycle import Check
 from pm_agent.models import BacklogItem, Charter, Design, Lesson, Lessons
 from pm_agent.planning import working_shift
@@ -160,7 +160,7 @@ def check_lessons(lessons: Lessons, tracking: Tracking) -> list[str]:
 def run_lessons(
     tracking: Tracking,
     today: date,
-    log_dir: Path | None = LOG_DIR,
+    log_dir: Path | None = None,
     on_round: Callable[[dict[str, Any]], None] | None = None,
 ) -> Lessons:
     """Claude drafts the lessons learned from retros, defects and sign-offs. No names of
