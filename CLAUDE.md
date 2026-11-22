@@ -37,6 +37,14 @@ zehn Phasen und wie sie zusammenhängen in `04-Prototyp/pm_agent/docs/lebenszykl
   nach `data/projekt.json`. Vorher `tracking.PROJECT_FILE`, `lifecycle.FILE`,
   `workbench.TEAM_FILE` und die Protokollordner auf einen Temp-Ordner setzen (wie die
   Fixture `local` in `tests/test_app.py`) und `data/` vorher und nachher vergleichen.
+  Protokollordner sind drei Namen: `agent.LOG_DIR` (dort schreiben die Agenten),
+  `tracking.LOG_DIR` und `workbench.LOG_DIR` (beim Import kopiert, dort wird gelesen). Seit
+  PR 83 lesen alle Funktionen Pfade und Port beim Aufruf (Quellregel), nicht beim Import.
+- **Vorführen ohne Kontingent.** Für Demo oder Video die Agentenfunktionen
+  (`agent.run_planning`, `lifecycle.run_*`, `followup.run_*`, `closing.run_lessons`) durch
+  feste Antworten ersetzen und die Pfade wie oben umleiten, in einer eigenen Startdatei
+  neben `app.py`, die nicht ins Repository kommt. Bearbeitbare Tabellen sind ein Canvas:
+  Playwright kann dort nicht zuverlässig tippen, Werte dann über die Paketfunktionen setzen.
 - **Entwicklungsserver.** Streamlit führt `views/` bei jedem Lauf neu aus, behält aber das
   Paket unter `src/pm_agent` im Speicher. Nach Änderungen dort den Server neu starten. Der
   Seitenordner heißt `views/`, nicht `pages/` (sonst baut Streamlit ein zweites Menü). Server
@@ -50,7 +58,7 @@ zehn Phasen und wie sie zusammenhängen in `04-Prototyp/pm_agent/docs/lebenszykl
 - **Windows.** Python öffnet keine Pfade der Form `/d/...`, `D:/...` verwenden. Für Umlaute in
   der Konsole `PYTHONIOENCODING=utf-8` setzen.
 
-## Stand am 21.11.2026
+## Stand am 22.11.2026
 
 - **Seiten.**
   - Neun Schritte, vom Projektauftrag bis zum Abschluss.
@@ -63,6 +71,10 @@ zehn Phasen und wie sie zusammenhängen in `04-Prototyp/pm_agent/docs/lebenszykl
 - **Ergebnis zuerst.**
   - Jede Seite mit einer Prüfung beginnt mit einer Ergebniszeile (`ui.verdict`): rot „Achtung“, golden „Zu entscheiden“, grün „In Ordnung“.
   - Helfer: `check_verdict`, `phase_verdict`, `forecast_verdict`.
+  - `forecast_verdict` nennt neben der Prognose auch Mehraufwand: Fertige Aufgaben mehr als `ui.COST_TOLERANCE` (10 %, Vorschlag) über Plan geben „Zu entscheiden“. Der CPI zählt Begonnenes als 0 und ist früh zu niedrig, deshalb nicht er (PR 82).
+  - Der Abschluss zählt Lücken im Betriebshandbuch als Warnungen der Ergebniszeile; den neuen Durchlauf blockieren sie nicht (PR 82, 84).
+  - In der Planung heißt Schritt 6 „Übernehmen“ (dort liegt „Plan als Projekt übernehmen“).
+  - Test: Ein fehlgeschlagener Fall mit nur behobenem Fehler bleibt ein Fehler, die Meldung sagt „Testfall wiederholen“ (PR 84). Fehler haben kein Datum; „wieder fehlgeschlagen“ und „noch nicht wiederholt“ sind nicht zu trennen.
   - Eine Quellregel verlangt sie überall, wo `messages(` steht.
   - Die Runden eines Laufs stehen nur noch im Statuskasten (nach Erfolg zugeklappt).
   - Markdown-Vorschauen unter Downloads sind entfernt (Quellregel).
@@ -82,6 +94,11 @@ zehn Phasen und wie sie zusammenhängen in `04-Prototyp/pm_agent/docs/lebenszykl
   - Issue #9 ist geschlossen, Nachweis in `04-Prototyp/ki_lab/VERIFIKATION.md`.
   - Formale Fälle aus einer privaten Datei (#6): `PM_LAB_MATERIALS` oder `--materials`, gleiches Format wie `cases.json`, Prüfung beim Laden; der Freeze hält Version, Prüfsumme und Quelle (`öffentlich`/`privat`) fest. Die Fälle selbst schreibt die Gruppe.
   - Einwilligungen nennen den Dienst, an den die Daten gehen: `ui.ai_service` (Host aus `OPENAI_BASE_URL`) auf den Seiten, der eingefrorene Endpunkt im Lab; eine Quellregel verbietet „an (die) OpenAI (API)“.
+- **Prüfen.**
+  - `04-Prototyp/pm_agent/docs/pruefplan.md`: Prüfplan für einen Testlauf durch einen Coding-Agenten (statisch, Unit, Integration, Smoke im Browser, Datenvergleich). Codex lief ihn am 22.11.2026 auf `701337c`: alles grün, eine Lücke (keine Kette über alle Phasen).
+  - Die Lücke schließt `test_one_project_goes_from_the_auftrag_to_the_next_run` in `tests/test_app.py` (PR 80): ein Projekt nur über die Seiten vom Auftrag bis zum neuen Durchlauf.
+- **Betrieb im Netz (Plan).** `04-Prototyp/pm_agent/docs/betrieb-cloud.md` (PR 81): Streamlit bleibt als dauerhafter Container, Daten in Supabase Postgres (EU), Speicher hinter `store.py`, fünf PRs. Nichts davon umgesetzt; zuerst Vorbedingung 1 (siehe Offen, Punkt 8).
+- **Videos** (auf Wunsch der Projektleitung, 22.11.2026, nicht im Repository): ein Demo-Durchlauf (3 min) und zwei Werbefassungen mit Titelkarten, Übergängen, selbst erzeugter Musik, Lupe an Klicks und Zoom auf Diagramme. Erzeugt mit Playwright, OpenCV und PyAV aus einer Demo mit festen Agentenantworten.
 - **Forschungsordner** (Entwürfe, von der Gruppe zu bestätigen):
   - `01-Projektplanung/entscheidungen.md`: Entscheidungslog, E01; `agenda-entscheidungen.md`: alle offenen Entscheidungen der Gruppe als Agenda (#1).
   - `02-Recherche/`: Baseline, KI-Lösungen, Chancen und Risiken; 20 Quellen, 13 im Volltext.
@@ -104,15 +121,15 @@ Echter Test: `uv run --env-file .env pytest tests/test_agent_live.py` (verbrauch
 nur auf Wort der Projektleitung). Chat Completions nimmt bei diesem Modell Werkzeuge nur mit
 `reasoning_effort` „none“ an; deshalb Responses.
 
-## Projekt in Zahlen (21.11.2026, `main` nach PR 78)
+## Projekt in Zahlen (22.11.2026, `main` nach PR 84)
 
-- **Repository:** 309 Commits auf `main` (236 ohne Merges) seit dem 28.10.2026, 65 gemergte PRs, **0 Releases, 0 Tags**.
-- **Fachcode:** rund 10 070 Zeilen Python (ohne Leerzeilen und Kommentare).
-  - `pm_agent` 9 410 (Paket und Seiten)
+- **Repository:** 324 Commits auf `main` (244 ohne Merges) seit dem 28.10.2026, 72 gemergte PRs, **0 Releases, 0 Tags**.
+- **Fachcode:** rund 10 100 Zeilen Python (ohne Leerzeilen und Kommentare).
+  - `pm_agent` 9 445 (Paket und Seiten)
   - `ki_lab` 656
   - dazu 9 Prompts, 8 Vorlagen, CSS
 - **Tests:** 704, alle ohne Netz (661 `pm_agent`, 43 `ki_lab`); dazu ein Live-Test, der sich ohne Schlüssel überspringt. CI: `pm-agent.yml` (Lint, Tests) und `static.yml` (README als Pages).
-- **Betrieb:** läuft lokal als Streamlit-Seite. Das Menü in 8 Einträgen ist in Chrome geprüft (1440 px und 375 px); Firefox und WebKit nur für den Stand vor dem 21.11. Kein öffentlicher Betrieb.
+- **Betrieb:** läuft lokal als Streamlit-Seite. Das Menü in 8 Einträgen ist in Chrome geprüft (1440 px und 375 px), am 22.11. auch in Edge (Codex, 13 Seiten bei 375 px ohne waagrechtes Scrollen); Firefox und WebKit nur für den Stand vor dem 21.11. Kein öffentlicher Betrieb.
 - **Issues:** 11 (#1–#11, Meilensteine M1–M4).
   - #9 geschlossen.
   - #2–#5, #7 und #11 haben Entwürfe und einen Kommentar dazu.
@@ -144,7 +161,13 @@ nur auf Wort der Projektleitung). Chat Completions nimmt bei diesem Modell Werkz
    - Englische Kommentare und Docstrings sagen noch „Claude“.
    - Auf einer verborgenen Seite (z. B. Entwurf) ist im Menü kein Eintrag hervorgehoben.
    - Firefox und WebKit nach den Menü-Änderungen erneut prüfen, gern in der CI.
-8. **Betrieb, vorsichtig.** Die Seite läuft nur auf dem eigenen Rechner. Für die Gruppe auf einem Server erst mit Anmeldung und geschütztem Schlüssel, sonst nutzt jeder das Kontingent.
+   - `tracking.LOG_DIR` und `workbench.LOG_DIR` sind Kopien von `agent.LOG_DIR`: auf einen Namen zurückführen (ändert die Test-Fixtures).
+   - Fehler bekommen ein Datum „behoben am“, damit der Test „wieder fehlgeschlagen“ von „noch nicht wiederholt“ trennt (ändert das Datenformat; Entscheidung der Projektleitung).
+   - Ein direkter Aufruf einer Unterseite (etwa `/planung`) erzeugt zwei 404 auf `/planung/_stcore/…` in der Konsole; die Seite lädt normal. Vermutlich Streamlit selbst, nicht geprüft.
+8. **Betrieb im Netz.** Plan in `04-Prototyp/pm_agent/docs/betrieb-cloud.md`, Weg A (Streamlit-Container, Supabase). Vorher klären, Antwort steht aus:
+   - Darf der KI:connect-Schlüssel auf einem Server für die Gruppe genutzt werden, und ist die API von außerhalb des Hochschulnetzes erreichbar? Ansprechpartner: KI:connect-Verantwortliche der HSBI, sonst `kiconnect@cls.rwth-aachen.de`.
+   - Laut Hilfeseite von KI:connect gelten API-Schlüssel einen Monat, und die Hochschule legt Monatsbudget und parallele Anfragen je Gruppe fest. Ein Server braucht also einen Schlüsselwechsel je Monat.
+   - Bis dahin: nur auf dem eigenen Rechner, ohne Anmeldung nicht für andere öffnen.
 
 ## Lokaler Stand dieses Rechners
 
@@ -152,6 +175,8 @@ nur auf Wort der Projektleitung). Chat Completions nimmt bei diesem Modell Werkz
 - `logs/` enthält die Protokolle der echten Läufe. Nichts davon ist im Repository.
   - mit Claude: 11. bis 18.11.2026
   - mit `gpt-6-sol`: `gpt-6-sol-20261120/`, `lauf-20261121/` (alle Agenten und KI-Lab) und `check-20261121/` (Durchführung und Testplan nach der Datumskorrektur)
+- `origin` zeigt auf `minglu-prime/KI-gestuetztes-Projektmanagement` (das Repository ist umgezogen; die alte Adresse leitet um).
+- Im Worktree `project-structure-review-16429a` liegen unversioniert der Testbericht von Codex (`04-Prototyp/pm_agent/docs/test-report.md`, Chinesisch) und zwei Bildschirmfotos. Nicht committen ohne Übersetzung und Wort der Projektleitung.
 - `.claude/` (nicht im Repository): `launch.json` für den Entwicklungsserver und der Skill `sibling-fix` für Fehlerbehebungen. `.claude/` steht zusätzlich in `.git/info/exclude`, weil das Wurzelverzeichnis keine `.gitignore` hat (eine eigene würde mit PR 12 kollidieren).
 - Entfernte Branches außer `main`:
   - `feat/polish`: zusammengeführt, bleibt auf Wunsch
