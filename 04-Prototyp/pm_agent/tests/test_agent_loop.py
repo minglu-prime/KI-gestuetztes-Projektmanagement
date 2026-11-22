@@ -266,3 +266,13 @@ def test_the_reasoning_effort_is_medium_unless_the_setting_says_otherwise(
     assert [r["reasoning"]["effort"] for r in requests] == ["medium", "high"]
     assert all(r["store"] is False for r in requests)
     assert all("reasoning.encrypted_content" in r["include"] for r in requests)
+
+
+def test_a_run_without_log_dir_writes_where_agent_log_dir_points_now(api, monkeypatch, tmp_path):
+    # LOG_DIR was bound as the default at import: pointing agent.LOG_DIR elsewhere afterwards
+    # still wrote into the real logs/.
+    replies, _ = api
+    replies.append(reply([submit(plan_input(), "call_1")]))
+    monkeypatch.setattr(agent, "LOG_DIR", tmp_path / "logs")
+    run_planning(PROJECT, TEAM)
+    assert len(list((tmp_path / "logs").glob("run-*.json"))) == 1

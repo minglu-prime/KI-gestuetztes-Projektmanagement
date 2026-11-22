@@ -52,7 +52,7 @@ Bestanden: `uv sync` ohne Fehler.
 | Quellregeln | `test_source_rules.py` | Verbotene Muster in allen Seiten (z. B. „Claude“ in der Oberfläche, Vorschauen, ISO-Daten) |
 | KI-Lab | in `ki_lab`: `uv run --no-project --python 3.11 python -m unittest discover -s tests -v` | Freeze, Abläufe, Zeitlimit, Auswertung (`summarize`), HTTP, Stil |
 
-Bestanden: alle grün. Erwartung zum Vergleich: 656 Tests `pm_agent` (+1 übersprungen), 43 `ki_lab`.
+Bestanden: alle grün. Erwartung zum Vergleich: 660 Tests `pm_agent` (+1 übersprungen), 43 `ki_lab`.
 Abweichende Anzahl melden.
 
 ## 4. Integrations- und Kettentests (mehrere Module zusammen, weiter ohne Netz)

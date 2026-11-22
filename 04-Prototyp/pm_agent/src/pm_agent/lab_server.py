@@ -27,8 +27,9 @@ class LabError(RuntimeError):
     """The lab cannot be started or reached. The message is German and meant for the user."""
 
 
-def health(port: int = PORT) -> dict[str, Any] | None:
-    """The lab's status, or None if nothing listens on the port."""
+def health(port: int | None = None) -> dict[str, Any] | None:
+    """The lab's status, or None if nothing listens on the port (default: PORT)."""
+    port = port or PORT
     try:
         with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/health", timeout=2) as response:
             status = json.load(response)
@@ -45,9 +46,10 @@ def health(port: int = PORT) -> dict[str, Any] | None:
     return status
 
 
-def allows_frame(origin: str, port: int = PORT) -> bool:
+def allows_frame(origin: str, port: int | None = None) -> bool:
     """Whether the running lab lets the page at `origin` show it in a frame. A lab that was
     started on its own forbids framing."""
+    port = port or PORT
     with urllib.request.urlopen(f"http://127.0.0.1:{port}/", timeout=2) as response:
         policy = response.headers.get("Content-Security-Policy", "")
     ancestors = next(
@@ -62,11 +64,12 @@ def allows_frame(origin: str, port: int = PORT) -> bool:
 
 
 def start(
-    frame_origins: list[str], port: int = PORT, db: Path | None = None, wait: float = 15
+    frame_origins: list[str], port: int | None = None, db: Path | None = None, wait: float = 15
 ) -> None:
     """Run the lab as a child process and return once it answers. `frame_origins` are the
     pages that may show it in a frame; the lab accepts only pages on this computer."""
     global _process, _messages
+    port = port or PORT
     command = [sys.executable, "server.py", "--port", str(port)]
     for origin in frame_origins:
         command += ["--allow-frame", origin]
