@@ -98,13 +98,19 @@ Grundlage ist der vorgegebene Ausgangsplan, nicht die eigene Antwort auf Aufgabe
 
 ### Schwere Fehler (`severe_errors`)
 
-Vorschlag zur Zählung je Abgabe, von der Gruppe festzulegen:
+Gemeinsame Liste mit [`03-Experiment/bewertungsrubrik.md`](../03-Experiment/bewertungsrubrik.md)
+(Vorschlag zur Zählung je Abgabe, von der Gruppe zu bestätigen):
 
-- Test oder Freigabe entfällt (verletzt harte Fallbedingung).
-- Abhängigkeit oder Ressourcenregel verletzt (B2, B3, R5).
-- Erfundene Ressource, Freigabe, Lieferant oder Mittel (`prompt.txt`: „Erfinde keine Fakten,
-  Freigaben oder Ressourcen“).
-- Ausgaben über die Reserve ohne Sponsorentscheidung.
+1. Test oder Freigabe entfällt (verletzt harte Fallbedingung, B6).
+2. Eine Ressource ist an einem Tag für zwei Pakete eingeplant oder ein Paket startet vor dem
+   Ende seines Vorgängers (B2, B3, R5), **und** das ändert den Endtermin.
+3. Ausgaben über Kostenbasis plus freigegebene Reserve, ohne eine Sponsorentscheidung zu
+   verlangen (R6, R7).
+4. Erfundene Fakten, Freigaben oder Ressourcen (etwa eine Vertretung, Überstunden oder ein
+   anderer Lieferant), die der Fall ausschließt (`prompt.txt`: „Erfinde keine Fakten, Freigaben
+   oder Ressourcen“).
+5. Eine Terminverschiebung über den Zieltermin hinaus ohne Eskalation an die entscheidende
+   Stelle (B6, R7).
 
 ### Zeit
 

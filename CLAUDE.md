@@ -136,7 +136,7 @@ nur auf Wort der Projektleitung). Chat Completions nimmt bei diesem Modell Werkz
   - `pm_agent` 9 638 (Paket und Seiten)
   - `ki_lab` 656
   - dazu 9 Prompts, 8 Vorlagen, CSS
-- **Tests:** 711, alle ohne Netz (667 `pm_agent`, 44 `ki_lab`); dazu ein Live-Test, der sich ohne Schlüssel überspringt, und drei Browser-Tests (`tests/test_browsers.py`), die ohne `PM_BROWSERS` überspringen. CI: `pm-agent.yml` (Lint, Tests; Job `browsers`: jede Seite in Chromium, Firefox und WebKit bei 1440 px und 375 px, auf einem leeren Temp-Ordner über `smoke_app.py`) und `static.yml` (README als Pages).
+- **Tests:** 715, alle ohne Netz (670 `pm_agent`, 45 `ki_lab`); dazu ein Live-Test, der sich ohne Schlüssel überspringt, und drei Browser-Tests (`tests/test_browsers.py`), die ohne `PM_BROWSERS` überspringen. CI: `pm-agent.yml` (Lint, Tests; Job `browsers`: jede Seite in Chromium, Firefox und WebKit bei 1440 px und 375 px, auf einem leeren Temp-Ordner über `smoke_app.py`) und `static.yml` (README als Pages).
 - **Betrieb:** läuft lokal als Streamlit-Seite. Das Menü in 8 Einträgen ist in Chrome geprüft (1440 px und 375 px), am 22.11. auch in Edge (Codex, 13 Seiten bei 375 px ohne waagrechtes Scrollen); Firefox und WebKit seit dem 23.11. im CI-Job `browsers`. Kein öffentlicher Betrieb.
 - **Issues:** 11 (#1–#11, Meilensteine M1–M4).
   - #9 geschlossen.
@@ -148,7 +148,7 @@ nur auf Wort der Projektleitung). Chat Completions nimmt bei diesem Modell Werkz
 
 1. **Die Forschungsarbeit liegt bei der Gruppe.**
    - Ausgangspunkt ist `01-Projektplanung/agenda-entscheidungen.md`: alle offenen Entscheidungen in der Reihenfolge, in der sie voneinander abhängen.
-   - Entwürfe prüfen und beschließen (#2–#5, #7, #11). Dabei die schweren Fehler aus `02-Recherche/baseline.md`, Abschnitt 5, und `03-Experiment/bewertungsrubrik.md` zu einer Liste machen.
+   - Entwürfe prüfen und beschließen (#2–#5, #7, #11); die fünf schweren Fehler in `02-Recherche/baseline.md` (Abschnitt 5) und `03-Experiment/bewertungsrubrik.md` sind abgeglichen, der optionale Interviewleitfaden (#4) und die Einzelkriterien-Auswertung O5 in `analysis.py` ergänzt.
    - Dann folgen, in dieser Reihenfolge:
      - Rollen und Termine (#1)
      - private formale Fälle (#6)

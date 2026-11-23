@@ -40,6 +40,28 @@ class AnalysisTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             summarize([], ratings=[{'rating_id':'X', 'rater':'R1'}, {'rating_id':'X', 'rater':'R1'}])
 
+    def test_quality_pairs_report_single_criteria_beside_sums(self):
+        records = [{'participant':'P001', 'pilot':False, 'group':1, 'rounds':[
+            {'rating_id':'m', 'case_id':'A', 'condition':'manual', 'status':'submitted', 'started_at':0, 'ended_at':100, 'ai_calls':[]},
+            {'rating_id':'a', 'case_id':'B', 'condition':'ai', 'status':'submitted', 'started_at':200, 'ended_at':270, 'ai_calls':[]}]}]
+        ratings = [
+            {'rating_id':'m', 'rater':'R1', 'dependencies':18, 'resources':14, 'milestones':12,
+             'risk_identification':14, 'prioritization':10, 'measures':10, 'severe_errors':0},
+            {'rating_id':'m', 'rater':'R2', 'dependencies':16, 'resources':12, 'milestones':12,
+             'risk_identification':12, 'prioritization':10, 'measures':10, 'severe_errors':1},
+            {'rating_id':'a', 'rater':'R1', 'dependencies':12, 'resources':10, 'milestones':14,
+             'risk_identification':18, 'prioritization':14, 'measures':12, 'severe_errors':2},
+            {'rating_id':'a', 'rater':'R2', 'dependencies':14, 'resources':8, 'milestones':14,
+             'risk_identification':16, 'prioritization':12, 'measures':12, 'severe_errors':2},
+        ]
+        (pair,) = summarize(records, ratings)['quality_pairs']
+        self.assertEqual(pair['manual']['dependencies'], 17)
+        self.assertEqual(pair['ai']['dependencies'], 13)
+        self.assertEqual(pair['delta_ai_minus_manual']['dependencies'], -4)
+        self.assertEqual(pair['delta_ai_minus_manual']['resources'], -4)
+        self.assertEqual(pair['delta_ai_minus_manual']['plan'], -6)
+        self.assertEqual(pair['delta_ai_minus_manual']['risk'], 9)
+
 
     def test_the_models_that_answered_are_reported(self):
         # Without a dated snapshot the provider may answer with another model; the report

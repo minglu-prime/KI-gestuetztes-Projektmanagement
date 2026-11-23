@@ -24,13 +24,13 @@ Punkte innerhalb eines Kriteriums sind ganze Zahlen von 0 bis zum Höchstwert. *
 
 ## Schwere Fehler (Anzahl je Antwort)
 
-Ein schwerer Fehler macht den Plan in der Praxis unbrauchbar oder führt zu einer falschen Entscheidung. Er wird zusätzlich zu den Punkten gezählt (`severe_errors`):
+Ein schwerer Fehler macht den Plan in der Praxis unbrauchbar oder führt zu einer falschen Entscheidung. Er wird zusätzlich zu den Punkten gezählt (`severe_errors`; gemeinsame Liste mit [`02-Recherche/baseline.md`](../02-Recherche/baseline.md), Abschnitt 5):
 
-1. Test oder Freigabe entfällt (harte Bedingung des Falls).
-2. Eine Ressource ist an einem Tag für zwei Pakete eingeplant, oder ein Paket startet vor dem Ende seines Vorgängers, **und** das ändert den Endtermin.
-3. Mehr Geld als Kostenbasis plus freigegebene Reserve, ohne eine Sponsorentscheidung zu verlangen.
-4. Erfundene Fakten, Freigaben oder Ressourcen (etwa eine Vertretung, Überstunden), die der Fall ausschließt.
-5. Eine Terminverschiebung über den Zieltermin hinaus ohne Eskalation.
+1. Test oder Freigabe entfällt (verletzt harte Fallbedingung, B6).
+2. Eine Ressource ist an einem Tag für zwei Pakete eingeplant oder ein Paket startet vor dem Ende seines Vorgängers (B2, B3, R5), **und** das ändert den Endtermin.
+3. Ausgaben über Kostenbasis plus freigegebene Reserve, ohne eine Sponsorentscheidung zu verlangen (R6, R7).
+4. Erfundene Fakten, Freigaben oder Ressourcen (etwa eine Vertretung, Überstunden oder ein anderer Lieferant), die der Fall ausschließt (`prompt.txt`).
+5. Eine Terminverschiebung über den Zieltermin hinaus ohne Eskalation an die entscheidende Stelle (B6, R7).
 
 ## Kalibrierung und Abweichungen
 
