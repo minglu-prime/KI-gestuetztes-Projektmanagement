@@ -47,13 +47,15 @@ class HttpTests(unittest.TestCase):
         status, body = self.request('/api/session', token=token)
         self.assertTrue(json.loads(body)['pilot'])
         self.assertIsNone(json.loads(body)['case'])
-        self.assertEqual(self.request('/api/start', {'consent': True, 'pm_experience': 'keine', 'ai_experience': 'nie'}, token)[0], 200)
+        self.assertEqual(self.request('/api/start', {'consent': True, 'quote_consent': True, 'pm_experience': 'keine', 'ai_experience': 'nie'}, token)[0], 200)
         self.assertEqual(self.request('/api/ai', {'question': 'Plan'}, token)[0], 403)
         self.assertEqual(self.request('/api/plan', {'plan': 'Basis', 'risks': ''}, token)[0], 200)
         self.assertEqual(self.request('/api/submit', {'plan': 'Basis', 'risks': 'Analyse'}, token)[0], 200)
         status, body = self.request('/api/export', token=token)
         self.assertEqual(status, 200)
-        self.assertEqual(json.loads(body)['rounds'][0]['final']['plan'], 'Basis')
+        exported = json.loads(body)
+        self.assertTrue(exported['quote_consent'])
+        self.assertEqual(exported['rounds'][0]['final']['plan'], 'Basis')
 
     def test_no_private_files_or_bulk_export(self):
         for path in ('/lab.py', '/cases.json', '/prompt.txt', '/data/lab.db', '/docs/scoring.md', '/api/admin', '/../../lab.py'):

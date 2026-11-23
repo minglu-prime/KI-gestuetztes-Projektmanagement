@@ -154,7 +154,7 @@ nur auf Wort der Projektleitung). Chat Completions nimmt bei diesem Modell Werkz
      - Erhebung (#10)
      - Bericht (#11)
    - Daten zur Frage des Projekts gibt es noch nicht.
-2. **Teilnahmeinformation fertig machen (#8).** Die Einwilligungen nennen seit PR 77 den richtigen Dienst. In `03-Experiment/teilnahmeinformation.md` fehlen noch Kontakt, Löschdatum und Name des Dienstes. Die Einwilligung zu Zitaten fragt das Lab nicht ab: auf Papier einholen oder im Lab ergänzen (Agenda M2).
+2. **Teilnahmeinformation fertig machen (#8).** Die Einwilligungen nennen seit PR 77 den richtigen Dienst, und das Lab fragt die freiwillige Einwilligung zu anonymen Zitaten (`quote_consent`) vor dem Start mit ab. In `03-Experiment/teilnahmeinformation.md` fehlen noch Kontakt, Löschdatum und Name des Dienstes (Agenda M2).
 3. **Mehrere Läufe je Agent.** Ein Lauf je Agent und Tag reicht nicht für Aussagen über Runden, Token oder Dauer. `03-Experiment/agentenlauf-2026-11-21/run_agents.py` wiederholt den Lauf (kostet Kontingent, nur auf Wort der Projektleitung).
 4. **Agenten fachlich.**
    - Bei einer Abwesenheit verteilte die Umplanung am 21.11. keine Aufgabe um (Ende 24.12.2026, hinter der Deadline). Seit PR 86 verlangt `replanning.md` die Umverteilung: in einem echten Lauf prüfen (kostet Kontingent, nur auf Wort der Projektleitung).
