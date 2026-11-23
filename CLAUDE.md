@@ -45,6 +45,9 @@ zehn Phasen und wie sie zusammenhängen in `04-Prototyp/pm_agent/docs/lebenszykl
   feste Antworten ersetzen und die Pfade wie oben umleiten, in einer eigenen Startdatei
   neben `app.py`, die nicht ins Repository kommt. Bearbeitbare Tabellen sind ein Canvas:
   Playwright kann dort nicht zuverlässig tippen, Werte dann über die Paketfunktionen setzen.
+- **404 in der Konsole.** Wird eine Unterseite direkt aufgerufen (etwa `/kontrolle`), fragt
+  Streamlit 1.67 erst `/kontrolle/_stcore/health` und `/host-config` (404), dann `/_stcore/…`
+  (200). Eine leere Streamlit-App mit zwei Seiten tut dasselbe (23.11.2026): kein Fehler der Site.
 - **Entwicklungsserver.** Streamlit führt `views/` bei jedem Lauf neu aus, behält aber das
   Paket unter `src/pm_agent` im Speicher. Nach Änderungen dort den Server neu starten. Der
   Seitenordner heißt `views/`, nicht `pages/` (sonst baut Streamlit ein zweites Menü). Server
@@ -133,8 +136,8 @@ nur auf Wort der Projektleitung). Chat Completions nimmt bei diesem Modell Werkz
   - `pm_agent` 9 638 (Paket und Seiten)
   - `ki_lab` 656
   - dazu 9 Prompts, 8 Vorlagen, CSS
-- **Tests:** 707, alle ohne Netz (664 `pm_agent`, 43 `ki_lab`); dazu ein Live-Test, der sich ohne Schlüssel überspringt. CI: `pm-agent.yml` (Lint, Tests) und `static.yml` (README als Pages).
-- **Betrieb:** läuft lokal als Streamlit-Seite. Das Menü in 8 Einträgen ist in Chrome geprüft (1440 px und 375 px), am 22.11. auch in Edge (Codex, 13 Seiten bei 375 px ohne waagrechtes Scrollen); Firefox und WebKit nur für den Stand vor dem 21.11. Kein öffentlicher Betrieb.
+- **Tests:** 711, alle ohne Netz (667 `pm_agent`, 44 `ki_lab`); dazu ein Live-Test, der sich ohne Schlüssel überspringt, und drei Browser-Tests (`tests/test_browsers.py`), die ohne `PM_BROWSERS` überspringen. CI: `pm-agent.yml` (Lint, Tests; Job `browsers`: jede Seite in Chromium, Firefox und WebKit bei 1440 px und 375 px, auf einem leeren Temp-Ordner über `smoke_app.py`) und `static.yml` (README als Pages).
+- **Betrieb:** läuft lokal als Streamlit-Seite. Das Menü in 8 Einträgen ist in Chrome geprüft (1440 px und 375 px), am 22.11. auch in Edge (Codex, 13 Seiten bei 375 px ohne waagrechtes Scrollen); Firefox und WebKit seit dem 23.11. im CI-Job `browsers`. Kein öffentlicher Betrieb.
 - **Issues:** 11 (#1–#11, Meilensteine M1–M4).
   - #9 geschlossen.
   - #2–#5, #7 und #11 haben Entwürfe und einen Kommentar dazu.
@@ -163,8 +166,6 @@ nur auf Wort der Projektleitung). Chat Completions nimmt bei diesem Modell Werkz
 6. **Issues pflegen.** Zuständige eintragen; die Meilenstein-Issues in Aufgaben für einen Tag zerlegen.
 7. **Code, nicht dringend.**
    - `views/planung.py` (rund 1 200 Zeilen) teilen, wenn dort wieder gearbeitet wird.
-   - Firefox und WebKit nach den Menü-Änderungen erneut prüfen, gern in der CI.
-   - Ein direkter Aufruf einer Unterseite (etwa `/planung`) erzeugt zwei 404 auf `/planung/_stcore/…` in der Konsole; die Seite lädt normal. Vermutlich Streamlit selbst, nicht geprüft.
 8. **Betrieb im Netz.** Plan in `04-Prototyp/pm_agent/docs/betrieb-cloud.md`, Weg A (Streamlit-Container, Supabase). Vorher klären, Antwort steht aus:
    - Darf der KI:connect-Schlüssel auf einem Server für die Gruppe genutzt werden, und ist die API von außerhalb des Hochschulnetzes erreichbar? Ansprechpartner: KI:connect-Verantwortliche der HSBI, sonst `kiconnect@cls.rwth-aachen.de`.
    - Laut Hilfeseite von KI:connect gelten API-Schlüssel einen Monat, und die Hochschule legt Monatsbudget und parallele Anfragen je Gruppe fest. Ein Server braucht also einen Schlüsselwechsel je Monat.
@@ -182,6 +183,4 @@ nur auf Wort der Projektleitung). Chat Completions nimmt bei diesem Modell Werkz
 - Entfernte Branches außer `main`:
   - `feat/polish`: zusammengeführt, bleibt auf Wunsch
   - `feat/pm-experiment-lab`: PR 12, nicht anfassen
-  - `test/planning-execution-control-flow`: Teammitglied
-  - `feat/ux-and-defect-lifecycle` (PR 86) und `fix/review-followup` (PR 88): Branches eines Teammitglieds, gemergt; Löschen mit ihm absprechen
-  - `test/planning-execution-control-flow` und die Branches des Teammitglieds nicht anfassen. Alle anderen Branches dieser Arbeit sind gelöscht.
+  - Alle anderen Branches dieser Arbeit sind gelöscht. Die Branches des Teammitglieds (`test/planning-execution-control-flow`, PR 86, PR 88) sind am 23.11. nicht mehr auf `origin`; gelöscht hat sie nicht diese Arbeit.
