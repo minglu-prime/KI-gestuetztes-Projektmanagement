@@ -95,6 +95,10 @@ zehn Phasen und wie sie zusammenhängen in `04-Prototyp/pm_agent/docs/lebenszykl
   - Mit den Grenzen lag kein Freitext darüber, und keiner ging wegen Länge zurück; die Texte sind 26 % kürzer als am 20.11.
   - Danach Durchführung und Testplan nach der Datumskorrektur: keine ISO-Daten oder Dezimalpunkte mehr.
   - `data/` blieb jeweils unberührt.
+- **Echter Lauf am 23.11.2026** (`03-Experiment/agentenlauf-2026-11-23/`): Umplanung bei Abwesenheit und Durchführung je dreimal, Eingaben vom 21.11.
+  - Die Zusammenfassung nennt das Enddatum der Prognose in 3 von 3 Läufen, ohne Ablehnung.
+  - Die Umplanung verteilt in 2 von 3 Läufen um (zwei Aufgaben von Clara an Anna und Ben). Das Ende liegt dann genau auf der Deadline, ohne Puffer, und Anna und Ben fehlen verlangte Fähigkeiten. Ein Lauf verteilt nichts um (Ende 24.12.2026).
+  - `data/` blieb unberührt.
 - **KI-Lab.**
   - Liest `OPENAI_BASE_URL`, das Modell aus `PM_MODEL` oder ersatzweise `PM_AGENT_MODEL`, Reasoning `PM_LAB_REASONING_EFFORT`.
   - Der Freeze verlangt Key und Modellnamen, kein Datum (Entscheidung E01). Die Auswertung nennt die antwortenden Modelle (`models_returned`, `model_varies`).
@@ -158,10 +162,9 @@ nur auf Wort der Projektleitung). Chat Completions nimmt bei diesem Modell Werkz
      - Bericht (#11)
    - Daten zur Frage des Projekts gibt es noch nicht.
 2. **Teilnahmeinformation fertig machen (#8).** Die Einwilligungen nennen seit PR 77 den richtigen Dienst, und das Lab fragt die freiwillige Einwilligung zu anonymen Zitaten (`quote_consent`) vor dem Start mit ab. In `03-Experiment/teilnahmeinformation.md` fehlen noch Kontakt, Löschdatum und Name des Dienstes (Agenda M2).
-3. **Mehrere Läufe je Agent.** Ein Lauf je Agent und Tag reicht nicht für Aussagen über Runden, Token oder Dauer. `03-Experiment/agentenlauf-2026-11-21/run_agents.py` wiederholt den Lauf (kostet Kontingent, nur auf Wort der Projektleitung).
+3. **Mehrere Läufe je Agent.** Ein Lauf je Agent und Tag reicht nicht für Aussagen über Runden, Token oder Dauer. Am 23.11. liefen zwei Agenten je dreimal; die übrigen einmal. `03-Experiment/agentenlauf-2026-11-21/run_agents.py` wiederholt den ganzen Lauf (kostet Kontingent, nur auf Wort der Projektleitung).
 4. **Agenten fachlich.**
-   - Bei einer Abwesenheit verteilte die Umplanung am 21.11. keine Aufgabe um (Ende 24.12.2026, hinter der Deadline). Seit PR 86 verlangt `replanning.md` die Umverteilung: in einem echten Lauf prüfen (kostet Kontingent, nur auf Wort der Projektleitung).
-   - Das Enddatum in der Zusammenfassung der Durchführung prüft Python seit PR 86; ein echter Lauf damit steht aus.
+   - Umplanung bei Abwesenheit: Der Prompt (PR 86) reicht nicht, am 23.11. verteilte sie in 1 von 3 Läufen nichts um, und Python nimmt ein Ende nach der Deadline als Warnung an. Vorschlag (Entscheidung der Projektleitung): Nach `set_absence` weist `submit_plan` einen Plan nach der Deadline zurück, solange das Team freie Stunden hat; offen, ob auch fehlende Fähigkeiten oder kein Puffer zurückgehen.
 5. **Einen Stand festhalten.** Es gibt kein Release. Ein `v0.1` mit „was geht, mit welchem Modell geprüft“ (öffentlich: nur auf Wort der Projektleitung).
 6. **Issues pflegen.** Zuständige eintragen; die Meilenstein-Issues in Aufgaben für einen Tag zerlegen.
 7. **Code, nicht dringend.**
@@ -176,7 +179,7 @@ nur auf Wort der Projektleitung). Chat Completions nimmt bei diesem Modell Werkz
 - `data/` enthält ein erfundenes Beispielprojekt (Team Anna, Ben, Clara) mit freigegebenem Projektauftrag, Anforderungen, Entwurf und Testplan aus den Läufen vom 18.11.2026.
 - `logs/` enthält die Protokolle der echten Läufe. Nichts davon ist im Repository.
   - mit Claude: 11. bis 18.11.2026
-  - mit `gpt-6-sol`: `gpt-6-sol-20261120/`, `lauf-20261121/` (alle Agenten und KI-Lab) und `check-20261121/` (Durchführung und Testplan nach der Datumskorrektur)
+  - mit `gpt-6-sol`: `gpt-6-sol-20261120/`, `lauf-20261121/` (alle Agenten und KI-Lab) `check-20261121/` (Durchführung und Testplan nach der Datumskorrektur) und `lauf-20261123/` (Umplanung bei Abwesenheit und Durchführung je dreimal)
 - `origin` zeigt auf `minglu-prime/KI-gestuetztes-Projektmanagement` (das Repository ist umgezogen; die alte Adresse leitet um).
 - Im Worktree `project-structure-review-16429a` liegen unversioniert der Testbericht von Codex (`04-Prototyp/pm_agent/docs/test-report.md`, Chinesisch) und zwei Bildschirmfotos. Nicht committen ohne Übersetzung und Wort der Projektleitung.
 - `.claude/` (nicht im Repository): `launch.json` für den Entwicklungsserver und der Skill `sibling-fix` für Fehlerbehebungen. `.claude/` steht zusätzlich in `.git/info/exclude`, weil das Wurzelverzeichnis keine `.gitignore` hat (eine eigene würde mit PR 12 kollidieren).
