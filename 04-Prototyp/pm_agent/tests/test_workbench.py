@@ -614,18 +614,23 @@ def test_an_uneven_load_suggests_moving_work_and_a_broken_plan_suggests_nothing(
 
 
 def test_a_non_critical_task_blocking_a_critical_one_suggests_reordering():
-    # Anna does C (8 h, no followers) before A (8 h), which Ben's D (16 h) waits for.
-    # Starting with A lets Ben work while Anna does C and finishes a day earlier.
+    # Anna has E (8 h, Mon, while A still waits for Ben's B0 on Mon) and C (8 h, Tue, no
+    # followers) before A (8 h, Wed), which Ben's D (16 h) waits for. Only C actually
+    # delays A: pulling A ahead of C lets Ben run D while Anna does C.
     ben = Member(name="Ben", skills={"SQL": 3}, hours_per_week=40)
     team = [Member(name="Anna", skills={"SQL": 3}, hours_per_week=40), ben]
     plan = Plan.model_validate(
         {
             "tasks": [
+                {"id": "B0", "title": "Setup", "estimate_hours": 8},
+                {"id": "E", "title": "Vorbereitung", "estimate_hours": 8},
                 {"id": "C", "title": "Doku", "estimate_hours": 8},
-                {"id": "A", "title": "Datenmodell", "estimate_hours": 8},
+                {"id": "A", "title": "Datenmodell", "estimate_hours": 8, "depends_on": ["B0"]},
                 {"id": "D", "title": "Frontend", "estimate_hours": 16, "depends_on": ["A"]},
             ],
             "assignments": [
+                {"task_id": "B0", "member": "Ben", "reason": "r"},
+                {"task_id": "E", "member": "Anna", "reason": "r"},
                 {"task_id": "C", "member": "Anna", "reason": "r"},
                 {"task_id": "A", "member": "Anna", "reason": "r"},
                 {"task_id": "D", "member": "Ben", "reason": "r"},

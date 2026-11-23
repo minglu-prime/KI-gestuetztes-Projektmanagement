@@ -63,11 +63,10 @@ zehn Phasen und wie sie zusammenhängen in `04-Prototyp/pm_agent/docs/lebenszykl
 - **Seiten.**
   - Neun Schritte, vom Projektauftrag bis zum Abschluss.
   - Das Menü hat acht Einträge: Startseite; Vorbereiten; Planung, Durchführung, Kontrolle, Abschluss; KI-Lab; Info.
-  - Die übrigen Seiten einer Gruppe sind im Menü verborgen (`st.Page(visibility="hidden")`) und erscheinen als Reiter oben auf der Seite (`ui.GROUPS`, `ui.group_tabs`):
+  - Die übrigen Seiten einer Gruppe sind im Menü verborgen (`st.Page(visibility="hidden")`) und erscheinen als Reiter oben auf der Seite (`ui.GROUPS`, `ui.group_tabs`); der Eintrag der Gruppe bleibt im Menü hervorgehoben (PR 86):
     - Vorbereiten: Projektauftrag, Anforderungen, Entwurf, Testplan
     - Kontrolle: Test
     - Info: Impressum
-  - Auf einer verborgenen Seite hebt die Seitenleiste den Eintrag ihrer Gruppe hervor (`ui.group_tabs`, PR 86).
   - Betrieb und nächster Durchlauf sind Reiter im Abschluss.
 - **Ergebnis zuerst.**
   - Jede Seite mit einer Prüfung beginnt mit einer Ergebniszeile (`ui.verdict`): rot „Achtung“, golden „Zu entscheiden“, grün „In Ordnung“.
@@ -76,7 +75,7 @@ zehn Phasen und wie sie zusammenhängen in `04-Prototyp/pm_agent/docs/lebenszykl
   - Der Abschluss zählt Lücken im Betriebshandbuch als Warnungen der Ergebniszeile; den neuen Durchlauf blockieren sie nicht (PR 82, 84).
   - In der Planung heißt Schritt 6 „Übernehmen“ (dort liegt „Plan als Projekt übernehmen“).
   - Test: Ein fehlgeschlagener Fall mit nur behobenem Fehler bleibt ein Fehler (PR 84). „behoben“ speichert den Tag (`Defect.fixed_on`, PR 86); die Meldung sagt danach „Testfall wiederholen“ (Ergebnis vor der Behebung) oder „neuen Fehler erfassen oder Fehler wieder öffnen“ (danach), am selben Tag beides (PR 87). Ältere Fehler ohne Tag: „Testfall wiederholen“.
-  - Fehler und Störungen lassen sich wieder öffnen und über „Eintrag“ ändern; das Formular zeigt den Eintrag, Status und Daten bleiben (PR 86, 87).
+  - Fehler und Störungen lassen sich wieder öffnen und über „Eintrag“ ändern; das Formular zeigt den Eintrag, Status und Daten bleiben (PR 86, 87). Eine Quellregel verbietet `Defect(`/`Incident(` mit `id=` (PR 88).
   - Eine Quellregel verlangt sie überall, wo `messages(` steht.
   - Die Runden eines Laufs stehen nur noch im Statuskasten (nach Erfolg zugeklappt).
   - Markdown-Vorschauen unter Downloads sind entfernt (Quellregel).
@@ -87,7 +86,7 @@ zehn Phasen und wie sie zusammenhängen in `04-Prototyp/pm_agent/docs/lebenszykl
   - Eingaben der Agenten vor und nach dem Plan schreiben Daten und Zahlen deutsch (`tracking.as_shown`, `key_figures`; Quellregel). Der Planungsagent behält ISO-Daten für `set_absence`.
   - Liegt die Prognose hinter der Deadline, muss die Zusammenfassung der Durchführung ihr Enddatum nennen (`followup.check_summary`, PR 86).
   - `replanning.md` verlangt nach `set_absence` eine Umverteilung, wenn Deadline oder Puffer reißen (PR 86); nur im Prompt, nicht live geprüft.
-  - `suggested_wishes` schlägt vor, eine kritische Aufgabe vor eine unkritische derselben Person zu ziehen, wenn das den Plan verkürzt (PR 86).
+  - `suggested_wishes` schlägt vor, eine kritische Aufgabe vor eine unkritische derselben Person zu ziehen, wenn das den Plan verkürzt, und nennt die Aufgabe, die dabei tatsächlich nach hinten rückt (PR 86, 88).
 - **Echte Läufe am 21.11.2026** (Endpunkt der Hochschule, `gpt-6-sol`):
   - Alle elf Agenten und das KI-Lab je einmal ohne Fehler, Auswertung in `03-Experiment/agentenlauf-2026-11-21/`.
   - Mit den Grenzen lag kein Freitext darüber, und keiner ging wegen Länge zurück; die Texte sind 26 % kürzer als am 20.11.
@@ -127,14 +126,14 @@ Echter Test: `uv run --env-file .env pytest tests/test_agent_live.py` (verbrauch
 nur auf Wort der Projektleitung). Chat Completions nimmt bei diesem Modell Werkzeuge nur mit
 `reasoning_effort` „none“ an; deshalb Responses.
 
-## Projekt in Zahlen (23.11.2026, `main` nach PR 87)
+## Projekt in Zahlen (23.11.2026, `main` nach PR 88)
 
-- **Repository:** 332 Commits auf `main` (249 ohne Merges) seit dem 28.10.2026, 75 gemergte PRs, **0 Releases, 0 Tags**.
+- **Repository:** 334 Commits auf `main` (250 ohne Merges) seit dem 28.10.2026, 76 gemergte PRs, **0 Releases, 0 Tags**.
 - **Fachcode:** rund 10 300 Zeilen Python (ohne Leerzeilen und Kommentare).
-  - `pm_agent` 9 629 (Paket und Seiten)
+  - `pm_agent` 9 638 (Paket und Seiten)
   - `ki_lab` 656
   - dazu 9 Prompts, 8 Vorlagen, CSS
-- **Tests:** 706, alle ohne Netz (663 `pm_agent`, 43 `ki_lab`); dazu ein Live-Test, der sich ohne Schlüssel überspringt. CI: `pm-agent.yml` (Lint, Tests) und `static.yml` (README als Pages).
+- **Tests:** 707, alle ohne Netz (664 `pm_agent`, 43 `ki_lab`); dazu ein Live-Test, der sich ohne Schlüssel überspringt. CI: `pm-agent.yml` (Lint, Tests) und `static.yml` (README als Pages).
 - **Betrieb:** läuft lokal als Streamlit-Seite. Das Menü in 8 Einträgen ist in Chrome geprüft (1440 px und 375 px), am 22.11. auch in Edge (Codex, 13 Seiten bei 375 px ohne waagrechtes Scrollen); Firefox und WebKit nur für den Stand vor dem 21.11. Kein öffentlicher Betrieb.
 - **Issues:** 11 (#1–#11, Meilensteine M1–M4).
   - #9 geschlossen.
@@ -184,7 +183,7 @@ nur auf Wort der Projektleitung). Chat Completions nimmt bei diesem Modell Werkz
 - `.claude/` (nicht im Repository): `launch.json` für den Entwicklungsserver und der Skill `sibling-fix` für Fehlerbehebungen. `.claude/` steht zusätzlich in `.git/info/exclude`, weil das Wurzelverzeichnis keine `.gitignore` hat (eine eigene würde mit PR 12 kollidieren).
 - Entfernte Branches außer `main`:
   - `feat/polish`: zusammengeführt, bleibt auf Wunsch
-  - `feat/pm-experiment-lab`: PR 12
+  - `feat/pm-experiment-lab`: PR 12, nicht anfassen
   - `test/planning-execution-control-flow`: Teammitglied
-  - `feat/ux-and-defect-lifecycle`: PR 86 eines Teammitglieds, gemergt; Löschen mit ihm absprechen
-  - Die letzten drei nicht anfassen. Alle anderen Branches dieser Arbeit sind gelöscht.
+  - `feat/ux-and-defect-lifecycle` (PR 86) und `fix/review-followup` (PR 88): Branches eines Teammitglieds, gemergt; Löschen mit ihm absprechen
+  - `test/planning-execution-control-flow` und die Branches des Teammitglieds nicht anfassen. Alle anderen Branches dieser Arbeit sind gelöscht.

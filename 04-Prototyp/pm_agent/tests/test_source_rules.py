@@ -333,3 +333,17 @@ def test_no_function_binds_a_module_constant_as_its_default():
                     ):
                         found.append(f"{path.name}:{node.lineno} {node.name}={default.id}")
     assert found == []
+
+
+def test_existing_defects_and_incidents_are_updated_with_model_copy():
+    # Building `Defect(id=..., ...)` or `Incident(id=..., ...)` from form fields resets
+    # fields the form does not carry (`status`, `fixed_on`, `on`) to their defaults.
+    found = [
+        f"{path.name}:{node.lineno}"
+        for path in SOURCES
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8")))
+        if isinstance(node, ast.Call)
+        and getattr(node.func, "id", "") in {"Defect", "Incident"}
+        and "id" in {kw.arg for kw in node.keywords}
+    ]
+    assert found == []
