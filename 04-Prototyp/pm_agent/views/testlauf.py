@@ -63,12 +63,14 @@ def on_result(versions: dict[str, str]) -> None:
 
 def on_defect() -> None:
     defect = Defect(
+        id=state.get("defect_id", ""),
         case_id=state.defect_case,
         severity=state.defect_severity,
         cause=state.defect_cause,
         task_id=state.defect_task or None,
     )
     if change(lambda t: record_defect(t, defect)):
+        state.defect_id = ""
         state.defect_cause = ""
         state.defect_task = ""
 
@@ -80,9 +82,19 @@ def on_reopen(defect_id: str) -> None:
 def on_fixed(defect_id: str) -> None:
     def fix(t: Tracking) -> Tracking:
         defect = next(d for d in t.defects if d.id == defect_id)
-        return record_defect(t, defect.model_copy(update={"status": "behoben"}))
+        return record_defect(
+            t, defect.model_copy(update={"status": "behoben", "fixed_on": date.today()})
+        )
 
     change(fix)
+
+
+def on_unfix(defect_id: str) -> None:
+    def unfix(t: Tracking) -> Tracking:
+        defect = next(d for d in t.defects if d.id == defect_id)
+        return record_defect(t, defect.model_copy(update={"status": "offen", "fixed_on": None}))
+
+    change(unfix)
 
 
 st.header("Test")
@@ -134,6 +146,14 @@ with st.container(border=True, key="panel-defects"):
     heading("bug_report", "Fehler", du="erfasst und entscheidest", python="prüft")
     messages(errors, warnings)
     tasks = {t.id: t.title for t in tracking.plan.tasks}
+    defects_by_id = {d.id: d for d in tracking.defects}
+    if defects_by_id:
+        st.selectbox(
+            "Eintrag",
+            ["", *defects_by_id],
+            format_func=lambda d: f"{d} ändern ({defects_by_id[d].cause})" if d else "Neuer Fehler",
+            key="defect_id",
+        )
     st.selectbox(
         "Gefunden von", list(titles), format_func=lambda c: f"{c} · {titles[c]}", key="defect_case"
     )
@@ -156,7 +176,11 @@ with st.container(border=True, key="panel-defects"):
                         "Schwere": d.severity,
                         "Ursache": d.cause,
                         "Aufgabe": d.task_id or "",
-                        "Status": d.status,
+                        "Status": (
+                            f"behoben ({d.fixed_on:%d.%m.%Y})"
+                            if d.status == "behoben" and d.fixed_on
+                            else d.status
+                        ),
                     }
                     for d in tracking.defects
                 ]
@@ -178,5 +202,13 @@ with st.container(border=True, key="panel-defects"):
                 key=f"fixed_{defect.id}",
                 icon=":material/check:",
                 on_click=on_fixed,
+                args=(defect.id,),
+            )
+        for defect in [d for d in tracking.defects if d.status == "behoben"]:
+            st.button(
+                f"{defect.id}: wieder öffnen",
+                key=f"unfix_{defect.id}",
+                icon=":material/undo:",
+                on_click=on_unfix,
                 args=(defect.id,),
             )

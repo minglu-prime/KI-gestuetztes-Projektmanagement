@@ -63,6 +63,27 @@ def test_a_status_summary_must_cover_overdue_tasks_and_only_open_known_ones(trac
     ]
 
 
+def test_a_status_summary_past_the_deadline_must_name_the_forecast_end_date(tracking):
+    from pm_agent.tracking import forecast
+
+    late_day = date(2026, 12, 21)  # Mon after the deadline (18.12.): B finishes on 22.12.
+    evaluation = evaluate(tracking, late_day)
+    outlook = forecast(tracking, late_day)
+    assert outlook.deadline_gap > 0
+    vague = StatusSummary(
+        summary="Das Projekt endet erst nach der Deadline.",
+        next_steps=[{"task_id": "B", "action": "Anna schließt B ab."}],
+    )
+    assert check_summary(vague, evaluation, outlook) == [
+        "Die Prognose endet nach der Deadline am 22.12.2026, die Zusammenfassung nennt "
+        "dieses Datum aber nicht"
+    ]
+    clear = vague.model_copy(
+        update={"summary": "Das Projekt endet voraussichtlich am 22.12.2026 nach der Deadline."}
+    )
+    assert check_summary(clear, evaluation, outlook) == []
+
+
 def test_a_control_report_must_answer_every_overdue_task(tracking):
     evaluation = evaluate(tracking, TODAY)
     assert check_report(ControlReport.model_validate(REPORT), evaluation) == []

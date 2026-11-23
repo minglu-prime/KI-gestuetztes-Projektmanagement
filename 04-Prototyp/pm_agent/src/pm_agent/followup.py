@@ -27,6 +27,7 @@ from pm_agent.tracking import (
     requirement_progress,
     signed_hours,
 )
+from pm_agent.workbench import _date
 
 
 def run_status_summary(
@@ -37,6 +38,7 @@ def run_status_summary(
 ) -> StatusSummary:
     """Durchführung agent: the text part of the status report. Raises AgentError."""
     evaluation = evaluate(tracking, today)
+    outlook = forecast(tracking, today)
     submission = Submission(
         name="submit_status",
         noun="Statusbericht",
@@ -45,7 +47,7 @@ def run_status_summary(
             "wenn eine Aufgabe im Verzug keinen nächsten Schritt hat, und nennt die Gründe."
         ),
         schema=StatusSummary,
-        check=lambda summary: check_summary(summary, evaluation),
+        check=lambda summary: check_summary(summary, evaluation, outlook),
     )
     return _run("durchfuehrung", submission, tracking, evaluation, log_dir, on_round)
 
@@ -73,7 +75,9 @@ def run_control_report(
     return _run("kontrolle", submission, tracking, evaluation, log_dir, on_round)
 
 
-def check_summary(summary: StatusSummary, evaluation: Evaluation) -> list[str]:
+def check_summary(
+    summary: StatusSummary, evaluation: Evaluation, outlook: Forecast | None = None
+) -> list[str]:
     tasks = {t.id: t for t in evaluation.tasks}
     errors = []
     for step in summary.next_steps:
@@ -89,6 +93,13 @@ def check_summary(summary: StatusSummary, evaluation: Evaluation) -> list[str]:
         for t in evaluation.overdue
         if t.id not in covered
     ]
+    if outlook is not None and outlook.end is not None and outlook.deadline_gap > 0:
+        end = _date(outlook.end)
+        if end not in summary.summary:
+            errors.append(
+                f"Die Prognose endet nach der Deadline am {end}, die Zusammenfassung nennt "
+                "dieses Datum aber nicht"
+            )
     return errors
 
 
