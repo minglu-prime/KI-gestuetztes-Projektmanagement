@@ -35,11 +35,11 @@ zehn Phasen und wie sie zusammenhängen in `04-Prototyp/pm_agent/docs/lebenszykl
 - **Echte Daten.** Ein Skript, das Funktionen des Pakets direkt aufruft (Live-Lauf,
   Experiment), schreibt sonst in die echten Dateien: `tracking.adopt` speichert ohne `path`
   nach `data/projekt.json`. Vorher `tracking.PROJECT_FILE`, `lifecycle.FILE`,
-  `workbench.TEAM_FILE` und die Protokollordner auf einen Temp-Ordner setzen (wie die
+  `workbench.TEAM_FILE` und `agent.LOG_DIR` auf einen Temp-Ordner setzen (wie die
   Fixture `local` in `tests/test_app.py`) und `data/` vorher und nachher vergleichen.
-  Protokollordner sind drei Namen: `agent.LOG_DIR` (dort schreiben die Agenten),
-  `tracking.LOG_DIR` und `workbench.LOG_DIR` (beim Import kopiert, dort wird gelesen). Seit
-  PR 83 lesen alle Funktionen Pfade und Port beim Aufruf (Quellregel), nicht beim Import.
+  Der Protokollordner hat nur diesen einen Namen: Agenten schreiben, Seiten lesen dort
+  (Quellregel gegen `from … import LOG_DIR`). Seit PR 83 lesen alle Funktionen Pfade und
+  Port beim Aufruf (Quellregel), nicht beim Import.
 - **Vorführen ohne Kontingent.** Für Demo oder Video die Agentenfunktionen
   (`agent.run_planning`, `lifecycle.run_*`, `followup.run_*`, `closing.run_lessons`) durch
   feste Antworten ersetzen und die Pfade wie oben umleiten, in einer eigenen Startdatei
@@ -81,7 +81,7 @@ zehn Phasen und wie sie zusammenhängen in `04-Prototyp/pm_agent/docs/lebenszykl
   - Markdown-Vorschauen unter Downloads sind entfernt (Quellregel).
 - **Modell.**
   - Die Agenten rufen die OpenAI Responses API auf (eigene Schleife in `agent._run`, Werkzeuge als `tools.Tool`, Reasoning `medium`).
-  - Die Oberfläche sagt „der Agent“ (Quellregel).
+  - Die Oberfläche sagt „der Agent“, Kommentare und Docstrings „the agent“ (je eine Quellregel).
   - Freitexte der Agenten haben Längengrenzen: `tools.LIMITS`, etwa ein Satz, die Zusammenfassung 400 Zeichen. Jedes Einreichungswerkzeug schickt zu Langes zurück (`tools.too_long`); die Modelle nehmen längere Texte weiter an.
   - Eingaben der Agenten vor und nach dem Plan schreiben Daten und Zahlen deutsch (`tracking.as_shown`, `key_figures`; Quellregel). Der Planungsagent behält ISO-Daten für `set_absence`.
   - Liegt die Prognose hinter der Deadline, muss die Zusammenfassung der Durchführung ihr Enddatum nennen (`followup.check_summary`, PR 86).
@@ -163,9 +163,7 @@ nur auf Wort der Projektleitung). Chat Completions nimmt bei diesem Modell Werkz
 6. **Issues pflegen.** Zuständige eintragen; die Meilenstein-Issues in Aufgaben für einen Tag zerlegen.
 7. **Code, nicht dringend.**
    - `views/planung.py` (rund 1 200 Zeilen) teilen, wenn dort wieder gearbeitet wird.
-   - Englische Kommentare und Docstrings sagen noch „Claude“.
    - Firefox und WebKit nach den Menü-Änderungen erneut prüfen, gern in der CI.
-   - `tracking.LOG_DIR` und `workbench.LOG_DIR` sind Kopien von `agent.LOG_DIR`: auf einen Namen zurückführen (ändert die Test-Fixtures).
    - Ein direkter Aufruf einer Unterseite (etwa `/planung`) erzeugt zwei 404 auf `/planung/_stcore/…` in der Konsole; die Seite lädt normal. Vermutlich Streamlit selbst, nicht geprüft.
 8. **Betrieb im Netz.** Plan in `04-Prototyp/pm_agent/docs/betrieb-cloud.md`, Weg A (Streamlit-Container, Supabase). Vorher klären, Antwort steht aus:
    - Darf der KI:connect-Schlüssel auf einem Server für die Gruppe genutzt werden, und ist die API von außerhalb des Hochschulnetzes erreichbar? Ansprechpartner: KI:connect-Verantwortliche der HSBI, sonst `kiconnect@cls.rwth-aachen.de`.
