@@ -45,7 +45,8 @@ def summarize(records, ratings=None):
             raise ValueError('Fehlerzahl muss eine nichtnegative ganze Zahl sein.')
         grades.setdefault(row['rating_id'], []).append({
             'total':sum(values), 'plan':sum(row[k] for k in ('dependencies','resources','milestones')),
-            'risk':sum(row[k] for k in ('risk_identification','prioritization','measures')), 'errors':errors})
+            'risk':sum(row[k] for k in ('risk_identification','prioritization','measures')), 'errors':errors,
+            **{k:row[k] for k in CAPS}})
     pairs, quality, incomplete, disagreements = [], [], [], []
     observations, timeouts, ai_failures = [], 0, 0
     for rid, entries in grades.items():
@@ -70,7 +71,7 @@ def summarize(records, ratings=None):
         for mode, r in by_mode.items():
             entries = grades.get(r['rating_id'], [])
             if len(entries) == 2:
-                means[mode] = {k:statistics.mean(g[k] for g in entries) for k in ('total','plan','risk','errors')}
+                means[mode] = {k:statistics.mean(g[k] for g in entries) for k in ('total','plan','risk','errors', *CAPS)}
         if set(means) == {'manual', 'ai'}:
             quality.append({'participant':s['participant'], 'group':s['group'],
                 'includes_timeout':any(r['status']=='timed_out' for r in s['rounds']),

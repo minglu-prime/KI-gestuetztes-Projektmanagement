@@ -37,8 +37,9 @@ Das Dokument trennt drei Dinge:
 
 Datenweg im Lab: Fall und Eingaben gehen an den Dienst der Hochschule, nicht an einen
 öffentlichen Anbieter. Die Fälle sind erfunden; personenbezogene Daten entstehen nur in den
-Eingaben der Teilnehmenden. Die Einwilligung muss den Dienst genau benennen (vgl. `CLAUDE.md`,
-„Offen“, Punkt 6).
+Eingaben der Teilnehmenden. Die Einwilligung im Lab nennt die Adresse dieses Dienstes (seit
+PR 77) und fragt die freiwillige Zustimmung zu anonymen Zitaten vor dem Start mit ab (seit
+PR 92).
 
 ## 3. Prüfbare Beobachtungen im Experiment
 
@@ -52,7 +53,7 @@ Vergleiche sind innerhalb der Person (Runde mit KI minus Runde ohne KI) und desk
 | O2 | Qualität Basisplan mit vs. ohne KI | C1, K2 | `quality_pairs[].delta_ai_minus_manual.plan` (Summe aus `dependencies`, `resources`, `milestones`) | vorhanden |
 | O3 | Qualität Risikoanalyse mit vs. ohne KI | C3, K3 | `quality_pairs[].delta_ai_minus_manual.risk` (Summe aus `risk_identification`, `prioritization`, `measures`) | vorhanden |
 | O4 | Schwere Fehler mit vs. ohne KI | K1, K2, K4 | `quality_pairs[].delta_ai_minus_manual.errors` (`severe_errors`) | vorhanden; Definition in `baseline.md` |
-| O5 | Einzelkriterium Abhängigkeiten und Ressourcen | K2 | Einzelwerte `dependencies`, `resources` in den Bewertungszeilen; `summarize` fasst sie nur zu `plan` zusammen | Rohdaten vorhanden, Auswertung fehlt |
+| O5 | Einzelkriterium Abhängigkeiten und Ressourcen | K2 | `quality_pairs[].delta_ai_minus_manual.dependencies`, `.resources` (sowie Einzelwerte aller sechs Kriterien in `manual` und `ai`) | vorhanden |
 | O6 | Übernommene Fehler: Fehler im ersten KI-Entwurf, die in der Abgabe bleiben | K5, K6 | `first_ai_draft` und `final` im Rohexport (`raw`); keine Größe in `analysis.py` | **neu**, Vorschlag: Bewertende markieren Fehler im KI-Entwurf und prüfen, ob sie in `final` stehen |
 | O7 | Zeitempfinden vs. gemessene Zeit | K7 | Reflexion `time_spent`, `trust` (`lab.py`, `reflect`) gegen O1 | Rohdaten vorhanden, Auswertung fehlt |
 | O8 | Ausfälle der KI und Zeitüberschreitungen | Zuverlässigkeit | `ai_failed_or_unfinished_calls`, `timeouts` | vorhanden |
@@ -73,10 +74,27 @@ Projektmanagement.
 | H3 | Weniger Erfahrene erreichen mit KI bessere Entwürfe, übersehen aber mehr Fehler des Modells. | C2, K5 | B2–O4 und O6 nach `experience` |
 | H4 | Die Entscheidung (z. B. Expresslieferung, Eskalation) bleibt beim Menschen; KI-Vorschläge werden trotzdem als beschlossen übernommen. | K8, `prompt.txt` | Kriterium R7 in `baseline.md`; O6 |
 
+## 5. Leitfaden für optionale Praxisinterviews (Entwurf zu Issue #4)
+
+> **Entwurf, falls die Gruppe Praxisinterviews durchführt (Agenda F3).** Methodischer Zweck:
+> Das Lab-Experiment misst Zeit, Plan-/Risikoqualität und schwere Fehler an kurzen synthetischen
+> Fällen. Kurze halbstrukturierte Interviews (20–30 Minuten) mit 2–3 Personen aus der PM-Praxis
+> ordnen die Rollen- und Kompetenzhypothesen (H1–H4) sowie Datenanforderungen (K9) im realen
+> Projektalltag ein. Es werden nur Rolle und Branche notiert, keine Namen oder vertraulichen
+> Projektdaten.
+
+| Nr. | Leitfrage | Bezug |
+|---|---|---|
+| I1 | **Baseline ohne KI:** Wie erstellen und prüfen Sie heute Termin-, Ressourcen- und Risikopläne sowie Änderungsanträge, und wo entstehen dabei typischerweise Engpässe? | Baseline (Issue #2) |
+| I2 | **Entwerfen vs. Prüfen:** Bei welchen PM-Tätigkeiten nutzen Sie generative KI als Startpunkt, und wie verschiebt sich dadurch Ihr Zeitanteil zwischen eigenem Schreiben und dem Prüfen eines Entwurfs? | C1–C4, H1 |
+| I3 | **Regelverstöße erkennen:** Wo erleben Sie Fehler von Sprachmodellen bei harten Randbedingungen (Abhängigkeiten, gleichzeitige Ressourcen, Budgetgrenzen, unbelegte Annahmen), und wie prüfen Sie diese gegen? | K1–K4, H2 |
+| I4 | **Entscheidungsverantwortung:** Welche Entscheidungen (z. B. Reservefreigabe, Eskalation bei Terminverzug) müssen zwingend beim Menschen bleiben, und wie verhindern Sie, dass KI-Vorschläge ungeprüft als beschlossen übernommen werden? | K5–K8, H3, H4 |
+| I5 | **Daten und Kompetenzen:** Welche Voraussetzungen bei internen Projektdaten und welche Fähigkeiten brauchen Projektmitarbeitende künftig, um KI-Assistenz verantwortungsvoll einzusetzen? | K9, H2, H3 |
+
 ## Offen
 
-- Praxisinterview-Leitfaden (optional laut Issue #4): nicht entworfen. Zweck mit der Gruppe
-  klären (z. B. H1 und H4 bei Praktikerinnen und Praktikern prüfen), dann entwerfen.
-- O6 und O7 brauchen eine Auswertung, die `analysis.py` noch nicht hat; zuerst mit der Gruppe
-  entscheiden, ob sie zum Messplan gehören.
+- Mit der Gruppe entscheiden, ob die optionalen Praxisinterviews anhand des Leitfadens oben
+  durchgeführt oder gestrichen werden (Agenda F3).
+- O6 und O7 brauchen eine zusätzliche Auswertung in `analysis.py`; zuerst mit der Gruppe
+  entscheiden, ob sie zum Messplan gehören (Agenda V7).
 - Volltexte der *(vorläufig)* markierten Quellen lesen.

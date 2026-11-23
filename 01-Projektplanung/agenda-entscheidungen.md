@@ -19,7 +19,7 @@ Vorschlag für den Ablauf: etwa 90 Minuten, Punkte in dieser Reihenfolge, weil s
 |---|---|---|---|
 | F1 | Entwürfe annehmen, ändern oder zurückweisen; wer prüft welche Quellen am Original? | [`02-Recherche/README.md`](../02-Recherche/README.md) | |
 | F2 | Datenbanksuche (Scopus, Web of Science, IEEE, ACM) und ISO 21502/31000 über die Bibliothek: ja, wer, bis wann? | `02-Recherche/suchprotokoll.md`, „Offen“ | |
-| F3 | Praxisinterviews (optional, #4): durchführen oder streichen? | `02-Recherche/chancen-risiken.md`, „Offen“ | |
+| F3 | Praxisinterviews (optional, #4): Leitfaden in `02-Recherche/chancen-risiken.md` (Abschnitt 5) durchführen oder streichen? | `02-Recherche/chancen-risiken.md`, Abschnitt 5 | |
 | F4 | Kostenobergrenze für KI-Aufrufe der Studie | `02-Recherche/ki-loesungen.md`, „Offen“ | |
 
 ## 3. Versuchsdesign (#5)
@@ -38,7 +38,7 @@ Vorschlag für den Ablauf: etwa 90 Minuten, Punkte in dieser Reihenfolge, weil s
 
 | Nr. | Frage | Vorlage | Beschluss |
 |---|---|---|---|
-| B1 | Eine gemeinsame Liste der schweren Fehler aus `bewertungsrubrik.md` und `02-Recherche/baseline.md`, Abschnitt 5 | beide Dateien | |
+| B1 | Gemeinsame Liste der fünf schweren Fehler in `bewertungsrubrik.md` und `02-Recherche/baseline.md`, Abschnitt 5, bestätigen | beide Dateien | |
 | B2 | Punkte: feste Zwischenstufen oder frei? | [`bewertungsrubrik.md`](../03-Experiment/bewertungsrubrik.md) | |
 | B3 | Ab welcher Abweichung gemeinsame Nachbewertung, und welche Zahl geht in die Auswertung (Mittel der Originale oder Konsens)? | ebenda, „Kalibrierung“ | |
 | B4 | Welche Abläufe (Gruppen 1–4) für welchen Pilot? Wer sind die Pilotpersonen (nicht in der formalen Stichprobe)? | [`pilot-checkliste.md`](../03-Experiment/pilot-checkliste.md) | |
