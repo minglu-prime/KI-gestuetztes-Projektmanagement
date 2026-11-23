@@ -2412,12 +2412,24 @@ def test_the_operations_page_checks_the_handbook_and_records_incidents(tracked):
     at = at.run()
     assert [o.owner for o in tracking.load().operations] == ["Frontend-Team", "Backend-Team"]
     assert not at.error
+    assert not [w.value for w in at.warning if "inzwischen geändert" in w.value]
 
     at.text_input(key="incident_impact").input("Buchen geht nicht").run()
     button(at, "Störung erfassen").click()
     at = at.run()
     (incident,) = tracking.load().incidents
     assert (incident.id, incident.component_id) == ("ST1", "B1")
+    incidents_table = next(f.value for f in at.dataframe if "Auswirkung" in f.value.columns)
+    assert list(incidents_table.columns) == [
+        "ID",
+        "Datum",
+        "Baustein",
+        "Auswirkung",
+        "Ursache",
+        "Maßnahme",
+        "Status",
+    ]
+    assert incidents_table.iloc[0]["Datum"] == f"{incident.on:%d.%m.%Y}"
     assert at.text_input(key="incident_impact").value == ""
     button(at, "ST1: behoben").click()
     at = at.run()
@@ -3076,3 +3088,55 @@ def test_the_handbook_warnings_stay_out_of_the_signoff_list(site):
     at = site.switch_page("views/abschluss.py").run()
     assert not at.exception
     assert not [w.value for w in at.warning if "Betrieb:" in w.value]
+
+
+def test_saving_an_edited_table_does_not_warn_that_the_saved_state_changed(site):
+    from test_lifecycle import design
+    from test_testplan import cases
+
+    from pm_agent.models import Lesson
+
+    lifecycle.save(
+        lifecycle.Lifecycle(
+            project=PROJECT, charter=CHARTER, requirements=NEEDS, design=design(), cases=cases()
+        )
+    )
+    adopted = tracking.adopt(PROJECT, TEAM, PLAN, requirements=NEEDS.items)
+    tracking.save(
+        adopted.model_copy(
+            update={"lessons": [Lesson(observation="Spät getestet", advice="Früh testen")]}
+        )
+    )
+
+    for page, editor, change_row, save_label in [
+        (
+            "anforderungen",
+            "requirements_editor_",
+            {0: {"Titel": "Raum online buchen"}},
+            "Änderungen speichern und prüfen",
+        ),
+        (
+            "entwurf",
+            "design_components_",
+            {0: {"Name": "Buchungs-Web"}},
+            "Änderungen speichern und prüfen",
+        ),
+        (
+            "testplan",
+            "cases_editor_",
+            {0: {"Erwartet": "Buchung erscheint"}},
+            "Änderungen speichern und prüfen",
+        ),
+        (
+            "abschluss",
+            "lessons_editor_",
+            {0: {"Empfehlung": "Ab Tag 1 testen"}},
+            "Lessons Learned speichern",
+        ),
+    ]:
+        at = site.switch_page(f"views/{page}.py").run()
+        at = edit_table(at, editor, change_row)
+        button(at, save_label).click()
+        at = at.run()
+        assert not at.exception, page
+        assert not [w.value for w in at.warning if "inzwischen geändert" in w.value], page

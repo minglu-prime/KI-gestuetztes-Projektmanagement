@@ -185,6 +185,7 @@ with st.container(border=True, key="panel-design"):
         and can_save
     ):
         if store(life, life.model_copy(update={"design": edited})) is not None:
+            state.design_version = state.get("design_version", 0) + 1
             st.rerun()
     errors = []
     if life.design is not None:

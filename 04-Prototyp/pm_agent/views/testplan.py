@@ -158,6 +158,7 @@ with st.container(border=True, key="panel-cases"):
         and can_save
     ):
         if store(life, life.model_copy(update={"cases": edited})) is not None:
+            state.cases_version = state.get("cases_version", 0) + 1
             st.rerun()
     errors = []
     if life.cases is not None:

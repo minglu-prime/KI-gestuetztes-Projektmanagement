@@ -254,6 +254,7 @@ with closing_tab:
                 st.error(f"Bitte korrigieren:\n\n{as_text(str(err))}")
             else:
                 if save_lessons(tracking, items):
+                    state.lessons_version = state.get("lessons_version", 0) + 1
                     st.rerun()
         if tracking.lessons:
             messages([], check_lessons(Lessons(items=tracking.lessons), tracking))
@@ -298,6 +299,7 @@ with operations_tab:
             ):
                 items = rows_to_operations(handbook.to_dict("records"))
                 if change(lambda t: t.model_copy(update={"operations": items})):
+                    state.operations_version = state.get("operations_version", 0) + 1
                     st.rerun()
             messages(*check_operations(design, tracking.operations))
 
@@ -345,7 +347,20 @@ with operations_tab:
             )
         if tracking.incidents:
             st.dataframe(
-                pd.DataFrame([i.model_dump(mode="json") for i in tracking.incidents]),
+                pd.DataFrame(
+                    [
+                        {
+                            "ID": i.id,
+                            "Datum": f"{i.on:%d.%m.%Y}",
+                            "Baustein": i.component_id,
+                            "Auswirkung": i.impact,
+                            "Ursache": i.cause,
+                            "Maßnahme": i.measure,
+                            "Status": i.status,
+                        }
+                        for i in tracking.incidents
+                    ]
+                ),
                 hide_index=True,
             )
         else:
