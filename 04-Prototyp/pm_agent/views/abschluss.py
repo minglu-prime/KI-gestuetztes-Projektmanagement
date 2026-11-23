@@ -1,5 +1,5 @@
 """Page "Abschluss", in three tabs. Abnahme und Lehren: the project lead accepts or defers
-each requirement, Claude drafts the lessons learned, Python checks that nothing severe is
+each requirement, the agent drafts the lessons learned, Python checks that nothing severe is
 left open and fills the closing report. Betrieb (optional: many student projects are never
 run): who runs each component of the design, how it is deployed, watched and taken back, and
 which incidents happened. Nächster Durchlauf: Python collects deferred requirements, open

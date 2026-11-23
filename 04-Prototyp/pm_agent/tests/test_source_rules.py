@@ -44,7 +44,7 @@ def test_current_test_results_and_signoffs_use_evidence_helpers():
 
 def test_error_messages_are_shown_as_written():
     # PR 44 and the commits before it: text in a message rendered as a link or an image.
-    # An error can quote a cell, a file name or what Claude wrote; ui.as_text escapes it.
+    # An error can quote a cell, a file name or what the agent wrote; ui.as_text escapes it.
     # The reason for a damaged team.json names the place: a skill name is one.
     found = []
     for source in SOURCES:
@@ -185,8 +185,8 @@ def test_the_menu_groups_pages_by_phase():
 
 
 def test_no_text_shown_to_the_project_lead_names_the_model_claude():
-    # A different model answers now, and the pages call it "der Agent". Comments and
-    # docstrings may still say Claude; strings that reach a page or a document may not.
+    # A different model answers now, and the pages call it "der Agent". No string that
+    # reaches a page or a document names Claude (the comments follow in the next rule).
     found = []
     for path in SOURCES:
         tree = ast.parse(path.read_text(encoding="utf-8"))
@@ -345,5 +345,29 @@ def test_existing_defects_and_incidents_are_updated_with_model_copy():
         if isinstance(node, ast.Call)
         and getattr(node.func, "id", "") in {"Defect", "Incident"}
         and "id" in {kw.arg for kw in node.keywords}
+    ]
+    assert found == []
+
+
+def test_the_log_folder_has_one_name():
+    # `from pm_agent.agent import LOG_DIR` copies the folder at import: pointing
+    # agent.LOG_DIR elsewhere later leaves the copy behind. Use `agents.LOG_DIR` instead.
+    found = [
+        f"{path.name}:{node.lineno}"
+        for path in SOURCES
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8")))
+        if isinstance(node, ast.ImportFrom) and any(a.name == "LOG_DIR" for a in node.names)
+    ]
+    assert found == []
+
+
+def test_no_comment_or_docstring_names_the_model_claude():
+    # The model is not Claude any more; comments and docstrings say "the agent" like the
+    # pages. Only the folder `.claude/` may appear.
+    found = [
+        f"{path.name}:{number}"
+        for path in SOURCES
+        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1)
+        if "Claude" in line
     ]
     assert found == []

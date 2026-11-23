@@ -1,5 +1,5 @@
 """Page "Entwurf": the parts of the system, their contracts and the flows between them.
-Claude drafts it from the requirements, Python checks it and draws the sequence diagrams,
+The agent drafts it from the requirements, Python checks it and draws the sequence diagrams,
 the project lead changes and approves it."""
 
 from datetime import datetime

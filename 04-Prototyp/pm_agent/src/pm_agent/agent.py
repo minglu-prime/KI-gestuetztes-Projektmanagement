@@ -1,6 +1,6 @@
-"""The agent loop and the planning agent. The model (an OpenAI model; the pages still call it
-Claude, after the model the site was built with) drafts a result, a deterministic tool checks
-it, and the model corrects it until the submit tool accepts it. The project lead reviews the
+"""The agent loop and the planning agent. The model (through the OpenAI Responses API; the
+pages call it "der Agent") drafts a result, a deterministic tool checks it, and the model
+corrects it until the submit tool accepts it. The project lead reviews the
 result. The agents for Durchführung and Kontrolle (followup.py) use the same loop.
 """
 
@@ -16,8 +16,8 @@ from openai import OpenAI, OpenAIError
 from pm_agent.models import Design, Member, MemberAbsence, Plan, Project, Requirement
 from pm_agent.tools import PlanningTools, Submission, Tool, ToolError
 
-# One round is one reply from Claude. Drafting, a few checks and the submission take about
-# five; ten without an accepted result means Claude is stuck.
+# One round is one reply from the agent. Drafting, a few checks and the submission take about
+# five; ten without an accepted result means the agent is stuck.
 MAX_ROUNDS = 10
 PROMPTS = Path(__file__).parent / "prompts"
 SYSTEM_PROMPT = (PROMPTS / "planning.md").read_text(encoding="utf-8")
@@ -46,13 +46,13 @@ def run_planning(
     covered: frozenset[str] = frozenset(),
     design: Design | None = None,
 ) -> Plan:
-    """Let Claude plan the project. Returns the first plan that submit_plan accepts: no
+    """Let the agent plan the project. Returns the first plan that submit_plan accepts: no
     errors, warnings possible. Raises PlanningError; errors of the API itself propagate.
     Each run, successful or not, is written to `log_dir` as one JSON file (None: LOG_DIR).
     `on_round` gets each round as soon as its tools have run, for live progress.
-    `requirements`: the approved ones; Claude links each task to them and the check traces
+    `requirements`: the approved ones; the agent links each task to them and the check traces
     the plan (`covered`: served by finished work outside the plan). `design`: the approved
-    one; Claude cuts tasks along its parts and interfaces."""
+    one; the agent cuts tasks along its parts and interfaces."""
     trace = Trace(requirements, covered, design)
     request = (
         f"{_inputs(project, team, trace)}\n\n"
@@ -62,7 +62,7 @@ def run_planning(
 
 
 class Replan(NamedTuple):
-    """A changed plan, and the absences the wish named that Claude set for it. The plan was
+    """A changed plan, and the absences the wish named that the agent set for it. The plan was
     checked with them; the project lead takes both into plan and team, or neither."""
 
     plan: Plan
@@ -81,8 +81,8 @@ def run_replanning(
     covered: frozenset[str] = frozenset(),
     design: Design | None = None,
 ) -> "Replan":
-    """Let Claude change `plan` the way the project lead asks in `wish`. Same tools, same
-    check and same kind of log as run_planning; the log also keeps the wish. Claude may also
+    """Let the agent change `plan` the way the project lead asks in `wish`. Same tools, same
+    check and same kind of log as run_planning; the log also keeps the wish. The agent may also
     set absences the wish names (set_absence); they come back with the plan and are logged."""
     wish = wish.strip()
     if not wish:

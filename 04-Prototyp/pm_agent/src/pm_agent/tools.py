@@ -1,5 +1,5 @@
 """The tools the agents work with. The planning tools take the plan itself as input and run
-the deterministic `planning.check_plan`, so Claude sees the same errors and warnings as the
+the deterministic `planning.check_plan`, so the agent sees the same errors and warnings as the
 project lead and corrects the plan itself. `Submission` is the same idea for one result with
 one check, used by the agents for Durchführung and Kontrolle.
 """
@@ -74,7 +74,7 @@ def with_absences(team: list[Member], absences: list[MemberAbsence]) -> list[Mem
 
 class PlanningTools:
     """The tools of one planning run. `plan` is set when submit_plan accepts a plan.
-    `absences`: the run changes a plan on a wish, and Claude may set the absences the wish
+    `absences`: the run changes a plan on a wish, and the agent may set the absences the wish
     names (set_absence); every check after that counts them."""
 
     def __init__(
@@ -261,7 +261,7 @@ def too_long(value: Any, where: str = "") -> list[str]:
 
 class Submission(Generic[T]):
     """One submit tool. It accepts a result only if it parses and `check` finds no error;
-    otherwise Claude gets the reasons and corrects the result. `result` is set on acceptance."""
+    otherwise the agent gets the reasons and corrects the result. `result` is set on acceptance."""
 
     def __init__(
         self,

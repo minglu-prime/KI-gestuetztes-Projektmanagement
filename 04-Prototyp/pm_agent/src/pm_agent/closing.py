@@ -163,7 +163,7 @@ def run_lessons(
     log_dir: Path | None = None,
     on_round: Callable[[dict[str, Any]], None] | None = None,
 ) -> Lessons:
-    """Claude drafts the lessons learned from retros, defects and sign-offs. No names of
+    """The agent drafts the lessons learned from retros, defects and sign-offs. No names of
     the team go to the API. Raises AgentError."""
     from pm_agent.tracking import evaluate, key_figures  # the same day the page evaluates
 

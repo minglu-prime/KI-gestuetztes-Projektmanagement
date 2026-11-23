@@ -158,7 +158,7 @@ def test_a_rejected_status_summary_goes_back_to_claude_until_it_is_accepted(
 
     assert summary == StatusSummary.model_validate(SUMMARY)
     assert [r["tool_results"][0]["is_error"] for r in seen] == [True, False]
-    # Claude gets the plan, the progress and the numbers, and the rule it broke.
+    # The agent gets the plan, the progress and the numbers, and the rule it broke.
     assert '"im_verzug": [\n      "B"' in requests[0]["input"][0]["content"]
     assert "studentischen Projektgruppe während der Durchführung" in json.dumps(
         requests[0]["instructions"], ensure_ascii=False

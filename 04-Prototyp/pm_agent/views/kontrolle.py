@@ -137,7 +137,7 @@ if tracking is not None:
                     )
                 )
 
-            # From here the project lead can act: plan the rest again, with Claude.
+            # From here the project lead can act: plan the rest again, with the agent.
             if st.button(
                 "Rest mit dem Agenten umplanen",
                 icon=":material/forum:",

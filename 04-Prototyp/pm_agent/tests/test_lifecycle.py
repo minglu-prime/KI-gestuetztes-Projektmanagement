@@ -223,7 +223,7 @@ def test_requirements_that_miss_a_criterion_are_rejected(api, tmp_path):
     ]
     result = lifecycle.run_requirements(PROJECT, charter(), log_dir=tmp_path)
     assert result == requirements()
-    # Claude works from the charter, and learns which success criterion is not covered.
+    # The agent works from the charter, and learns which success criterion is not covered.
     assert "Doppelbuchungen sind ausgeschlossen" in json.dumps(requests[0], ensure_ascii=False)
     assert "'K2'" in json.dumps(requests[1]["input"][-1], ensure_ascii=False)
     assert read_log(tmp_path, "anforderungen")["outcome"] == "anforderungskatalog"

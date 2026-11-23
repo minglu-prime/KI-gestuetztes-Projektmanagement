@@ -1,5 +1,5 @@
 """The agents for Durchführung and Kontrolle. Both read the adopted plan with its recorded
-progress and the numbers `tracking.evaluate` computed from it. Claude writes the judgement;
+progress and the numbers `tracking.evaluate` computed from it. The agent writes the judgement;
 Python checks it against the data before the submit tool accepts it.
 
 Skeleton: one submit tool and one check per agent. Further tools (for example a what-if

@@ -1,6 +1,6 @@
 """Before the plan: the Projektauftrag (charter) and the requirements (PRD).
 
-Every phase works the same way: Claude drafts the artefact, Python checks it against the
+Every phase works the same way: the agent drafts the artefact, Python checks it against the
 artefact before it (traceability), the project lead changes and approves it. An approval
 holds the digest of the artefact together with everything upstream of it; when any of that
 changes, the approval is stale ("geändert") and downstream phases no longer count on it.
@@ -65,7 +65,7 @@ class Approval(BaseModel):
 
 class Lifecycle(BaseModel):
     """The phases before the plan. `project` holds what the project lead enters (idea,
-    start, deadline): Claude never fills in dates."""
+    start, deadline): the agent never fills in dates."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -876,7 +876,7 @@ def run_charter(
     log_dir: Path | None = None,
     on_round: Callable[[dict[str, Any]], None] | None = None,
 ) -> Charter:
-    """Claude drafts the Projektauftrag from idea and dates. Only these go to the API, no
+    """The agent drafts the Projektauftrag from idea and dates. Only these go to the API, no
     team data. Raises AgentError."""
     submission = Submission(
         name="submit_auftrag",
@@ -899,7 +899,7 @@ def run_requirements(
     on_round: Callable[[dict[str, Any]], None] | None = None,
     backlog: list[BacklogItem] | None = None,
 ) -> Requirements:
-    """Claude drafts the requirements from the charter (or from the idea alone, without
+    """The agent drafts the requirements from the charter (or from the idea alone, without
     one). Python rejects them until every success criterion is served. Raises AgentError."""
     submission = Submission(
         name="submit_anforderungen",
@@ -938,7 +938,7 @@ def run_design(
     log_dir: Path | None = None,
     on_round: Callable[[dict[str, Any]], None] | None = None,
 ) -> Design:
-    """Claude drafts the design from charter and requirements; Python rejects it until it
+    """The agent drafts the design from charter and requirements; Python rejects it until it
     passes `check_design`. No team data goes to the API. Raises AgentError."""
     submission = Submission(
         name="submit_entwurf",
@@ -1017,7 +1017,7 @@ def run_cases(
     log_dir: Path | None = None,
     on_round: Callable[[dict[str, Any]], None] | None = None,
 ) -> Cases:
-    """Claude drafts the test cases from the acceptance criteria and the contracts; Python
+    """The agent drafts the test cases from the acceptance criteria and the contracts; Python
     rejects them until `check_cases` has no errors. No team data goes to the API. Raises
     AgentError."""
     submission = Submission(

@@ -74,7 +74,7 @@ def check(plan, call_id):
 
 def test_the_run_stops_after_the_last_round_without_an_accepted_plan(api, tmp_path):
     replies, requests = api
-    # Claude keeps checking and never submits.
+    # The agent keeps checking and never submits.
     replies += [reply([check(plan_input(), f"call_{n}")]) for n in range(agent.MAX_ROUNDS)]
 
     with pytest.raises(PlanningError, match=f"nach {agent.MAX_ROUNDS} Runden"):
