@@ -371,3 +371,64 @@ def test_no_comment_or_docstring_names_the_model_claude():
         if "Claude" in line
     ]
     assert found == []
+
+
+def test_every_kept_editor_raises_its_version_before_rerun_on_save():
+    # Without raising the version before `st.rerun()`, `kept_editor` sees the newly saved
+    # basis with the old dirty_version and warns "Der gespeicherte Stand wurde inzwischen
+    # geändert" right after the project lead's own save.
+    missing = []
+    for path in (ROOT / "views").glob("*.py"):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        versions = {
+            node.args[1].value
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Call)
+            and getattr(node.func, "id", "") == "kept_editor"
+            and len(node.args) >= 2
+            and isinstance(node.args[1], ast.Constant)
+        }
+        blocks = [
+            block
+            for node in ast.walk(tree)
+            if isinstance(node, ast.If | ast.Try)
+            for block in (node.body, node.orelse)
+        ]
+        raised_before_rerun = {
+            target.attr
+            for block in blocks
+            if any(
+                isinstance(stmt, ast.Expr)
+                and isinstance(stmt.value, ast.Call)
+                and isinstance(stmt.value.func, ast.Attribute)
+                and stmt.value.func.attr == "rerun"
+                for stmt in block
+            )
+            for stmt in block
+            if isinstance(stmt, ast.Assign)
+            for target in stmt.targets
+            if isinstance(target, ast.Attribute)
+        }
+        for version in sorted(versions - raised_before_rerun):
+            missing.append(f"{path.name}:{version}")
+    assert missing == []
+
+
+def test_no_view_builds_a_dataframe_from_a_raw_model_dump():
+    # `pd.DataFrame([i.model_dump(mode="json") ...])` exposed English field names and ISO
+    # dates on the German page instead of German column titles and DD.MM.YYYY.
+    found = [
+        f"{path.name}:{node.lineno}"
+        for path in (ROOT / "views").glob("*.py")
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8")))
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "DataFrame"
+        and any(
+            isinstance(inner, ast.Call)
+            and isinstance(inner.func, ast.Attribute)
+            and inner.func.attr == "model_dump"
+            for inner in ast.walk(node)
+        )
+    ]
+    assert found == []

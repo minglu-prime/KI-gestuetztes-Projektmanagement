@@ -130,11 +130,29 @@ function between() {
 }
 function reflection() {
   nav(3);
+  const keys = ['time_spent','trust','human_decisions','workload','protocol_deviations'];
   $('app').innerHTML=`<section class="hero"><div><p class="eyebrow">Beide Runden beendet</p><h1>Was hat sich<br><em>verändert?</em></h1><p class="lead">Ihre Beobachtungen helfen, die Ergebnisse einzuordnen. Eine schnelle Antwort ist nicht automatisch eine gute Antwort.</p></div></section><div class="grid-two"><section class="card"><h2>Ihre Reflexion</h2>${[['time_spent','Wofür haben Sie die meiste Zeit gebraucht?'],['trust','Welche KI-Aussagen haben Sie geprüft oder verworfen?'],['human_decisions','Welche Entscheidungen müssen bei Menschen bleiben?'],['workload','Wie hat sich die Arbeitsbelastung zwischen den Runden verändert?'],['protocol_deviations','Gab es technische Probleme oder Abweichungen von den Regeln?']].map(([key,label])=>`<label for="${key}">${label}</label><textarea id="${key}" rows="2" maxlength="5000">${esc(state.reflection[key]||'')}</textarea>`).join('')}<div class="actions"><button id="reflect" class="primary">Reflexion speichern</button><span id="reflection-status" role="status" class="small"></span></div></section><section class="card"><div class="done-icon">✓</div><h2>Ergebnisse gesichert</h2><p class="muted small">Die Bewertung erfolgt später anhand einheitlicher Kriterien durch zwei unabhängige Personen.</p><div class="results-grid">${state.rounds.map((r,i)=>`<div class="result"><strong>Runde ${i+1} · ${esc(r.case_id)}</strong><span>${r.status==='submitted' ? 'Abgegeben' : 'Zeitlimit · unvollständig'}<br>${Math.round(r.ended_at-r.started_at)} Sekunden</span></div>`).join('')}</div><button id="export" class="full-width">Eigene Aufzeichnung herunterladen ↓</button><p class="note">${state.pilot ? 'Pilot-Sitzung: Diese Ergebnisse werden standardmäßig aus der formalen Analyse ausgeschlossen.' : 'Die Aufzeichnung enthält nur Ihre eigene Sitzung. Bewahren Sie sie geschützt auf.'}</p><button id="leave">Sitzung verlassen</button></section></div>`;
-  bind('reflect',async()=>{const payload={}; for(const key of ['time_spent','trust','human_decisions','workload','protocol_deviations']) payload[key]=$(key).value; await api('reflect',payload); $('reflection-status').textContent='Reflexion gespeichert.';});
-  bind('leave',()=>{sessionStorage.removeItem('pm-token'); token=''; state=null; history.replaceState(null,'','/'); render();}); bindExport();
+  const saveReflection = async () => {
+    clearTimeout(saveTimer);
+    if (!$('time_spent')) return;
+    const payload = {};
+    for (const key of keys) payload[key] = $(key).value;
+    await api('reflect', payload);
+    state.reflection = payload;
+    dirty = false;
+    if ($('reflection-status')) $('reflection-status').textContent = 'Reflexion gespeichert.';
+  };
+  for (const key of keys) $(key).addEventListener('input', () => {
+    dirty = true;
+    $('reflection-status').textContent = 'Ungespeicherte Änderungen …';
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => saveReflection().catch(err => error(err.message)), 700);
+  });
+  bind('reflect', saveReflection);
+  bind('leave', async () => { if (dirty) await saveReflection(); sessionStorage.removeItem('pm-token'); token=''; state=null; history.replaceState(null,'','/'); render(); });
+  bindExport(() => dirty ? saveReflection() : null);
 }
-function bindExport() { bind('export',async()=>download('pm-lab-'+state.participant+'.json',await api('export'))); }
+function bindExport(before) { bind('export',async()=>{ if (before) await before(); download('pm-lab-'+state.participant+'.json',await api('export')); }); }
 function render() {
   generation++;
   clearInterval(tick); clearInterval(poll); clearTimeout(saveTimer);

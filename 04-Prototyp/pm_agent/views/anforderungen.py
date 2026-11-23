@@ -183,6 +183,7 @@ with st.container(border=True, key="panel-requirements"):
         and can_save
     ):
         if store(life, life.model_copy(update={"requirements": edited})) is not None:
+            state.requirements_version = state.get("requirements_version", 0) + 1
             st.rerun()
     errors = []
     if life.requirements is not None:
