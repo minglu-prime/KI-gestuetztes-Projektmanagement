@@ -41,7 +41,7 @@ def local(monkeypatch, tmp_path):
     monkeypatch.setattr(workbench, "saved_runs", lambda: [])
     monkeypatch.setattr(workbench, "RUNS_CSV", tmp_path / "runs.csv")
     monkeypatch.setattr(tracking, "PROJECT_FILE", tmp_path / "projekt.json")
-    monkeypatch.setattr(tracking, "LOG_DIR", tmp_path)
+    monkeypatch.setattr(agent, "LOG_DIR", tmp_path)
     monkeypatch.setattr(lifecycle, "FILE", tmp_path / "vorhaben.json")
     with socket.socket() as probe:  # a port where nothing listens
         probe.bind(("127.0.0.1", 0))

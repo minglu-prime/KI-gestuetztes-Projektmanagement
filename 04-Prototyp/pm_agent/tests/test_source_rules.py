@@ -347,3 +347,15 @@ def test_existing_defects_and_incidents_are_updated_with_model_copy():
         and "id" in {kw.arg for kw in node.keywords}
     ]
     assert found == []
+
+
+def test_the_log_folder_has_one_name():
+    # `from pm_agent.agent import LOG_DIR` copies the folder at import: pointing
+    # agent.LOG_DIR elsewhere later leaves the copy behind. Use `agents.LOG_DIR` instead.
+    found = [
+        f"{path.name}:{node.lineno}"
+        for path in SOURCES
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8")))
+        if isinstance(node, ast.ImportFrom) and any(a.name == "LOG_DIR" for a in node.names)
+    ]
+    assert found == []

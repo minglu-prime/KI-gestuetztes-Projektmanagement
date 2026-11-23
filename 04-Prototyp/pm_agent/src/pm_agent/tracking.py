@@ -17,7 +17,7 @@ from typing import Any, Literal, NamedTuple, get_args
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from pm_agent.agent import LOG_DIR
+from pm_agent import agent as agents
 from pm_agent.models import (
     Case,
     ControlReport,
@@ -1613,7 +1613,7 @@ def agent_runs(log_dir: Path | None = None) -> list[dict[str, Any]]:
     paths = [
         (path.name.removeprefix(f"{prefix}-"), agent, path)
         for prefix, agent in AGENTS.items()
-        for path in (log_dir or LOG_DIR).glob(f"{prefix}-*.json")
+        for path in (log_dir or agents.LOG_DIR).glob(f"{prefix}-*.json")  # read at call time
     ]
     runs = []
     for _, agent, path in sorted(paths, key=lambda item: item[0], reverse=True):

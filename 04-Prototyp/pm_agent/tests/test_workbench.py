@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 from test_tools import PROJECT, TEAM, plan_input
 
-from pm_agent import workbench
+from pm_agent import agent, tracking, workbench
 from pm_agent.models import Member, Plan, Requirement
 from pm_agent.planning import check_plan
 from pm_agent.workbench import (
@@ -872,7 +872,7 @@ def test_the_team_and_runs_follow_their_paths_when_set_later(monkeypatch, tmp_pa
     team_file = tmp_path / "team.json"
     team_file.write_text(json.dumps([m.model_dump(mode="json") for m in TEAM]), encoding="utf-8")
     monkeypatch.setattr(workbench, "TEAM_FILE", team_file)
-    monkeypatch.setattr(workbench, "LOG_DIR", tmp_path)
+    monkeypatch.setattr(agent, "LOG_DIR", tmp_path)
     assert workbench.load_team() == TEAM
     assert workbench.saved_runs() == []
 
@@ -881,3 +881,16 @@ def test_the_team_is_saved_where_team_file_points_now(monkeypatch, tmp_path):
     monkeypatch.setattr(workbench, "TEAM_FILE", tmp_path / "team.json")
     workbench.save_team(TEAM)
     assert workbench.load_team(tmp_path / "team.json") == TEAM
+
+
+def test_the_readers_of_the_logs_follow_agent_log_dir(monkeypatch, tmp_path):
+    # The agents write to agent.LOG_DIR; the pages read through tracking and workbench. One
+    # name for the folder: pointing it elsewhere moves the readers too.
+    run = tmp_path / "run-20261123-120000.json"
+    run.write_text(
+        json.dumps({"plan": {"x": 1}, "project": {"x": 1}, "team": [{}], "outcome": "plan"}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(agent, "LOG_DIR", tmp_path)
+    assert workbench.saved_runs() == [run]
+    assert [r["Lauf"] for r in tracking.agent_runs()] == [run.name]

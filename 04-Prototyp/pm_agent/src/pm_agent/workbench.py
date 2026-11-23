@@ -19,7 +19,7 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from pm_agent.agent import LOG_DIR
+from pm_agent import agent as agents
 from pm_agent.models import (
     Absence,
     Assignment,
@@ -34,9 +34,9 @@ from pm_agent.models import (
 from pm_agent.planning import check_plan, project_weeks, workday_shift, working_shift
 from pm_agent.tools import german, with_absences
 
-DATA_DIR = LOG_DIR.parent / "data"
+DATA_DIR = agents.LOG_DIR.parent / "data"
 TEAM_FILE = DATA_DIR / "team.json"
-RUNS_CSV = LOG_DIR / "runs.csv"
+RUNS_CSV = agents.LOG_DIR / "runs.csv"
 
 TEAM_COLUMNS = ["Name", "Skills", "Stunden/Woche", "Abwesend", "Notiz"]
 PLAN_COLUMNS = [
@@ -215,7 +215,7 @@ def save_team(team: list[Member], path: Path | None = None) -> None:
 
 def saved_runs(log_dir: Path | None = None) -> list[Path]:
     """Logged runs that ended with a plan and can be reopened, newest first."""
-    log_dir = log_dir or LOG_DIR
+    log_dir = log_dir or agents.LOG_DIR  # read at call time: one name for the log folder
     runs = []
     for path in sorted(log_dir.glob("run-*.json"), reverse=True):
         record = json.loads(path.read_text(encoding="utf-8"))
