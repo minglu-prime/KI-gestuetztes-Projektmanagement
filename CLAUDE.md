@@ -58,12 +58,12 @@ zehn Phasen und wie sie zusammenhängen in `04-Prototyp/pm_agent/docs/lebenszykl
 - **Windows.** Python öffnet keine Pfade der Form `/d/...`, `D:/...` verwenden. Für Umlaute in
   der Konsole `PYTHONIOENCODING=utf-8` setzen.
 
-## Stand am 22.11.2026
+## Stand am 23.11.2026
 
 - **Seiten.**
   - Neun Schritte, vom Projektauftrag bis zum Abschluss.
   - Das Menü hat acht Einträge: Startseite; Vorbereiten; Planung, Durchführung, Kontrolle, Abschluss; KI-Lab; Info.
-  - Die übrigen Seiten einer Gruppe sind im Menü verborgen (`st.Page(visibility="hidden")`) und erscheinen als Reiter oben auf der Seite (`ui.GROUPS`, `ui.group_tabs`), wobei der zugehörige Gruppeneintrag im Menü hervorgehoben bleibt:
+  - Die übrigen Seiten einer Gruppe sind im Menü verborgen (`st.Page(visibility="hidden")`) und erscheinen als Reiter oben auf der Seite (`ui.GROUPS`, `ui.group_tabs`); der Eintrag der Gruppe bleibt im Menü hervorgehoben (PR 86):
     - Vorbereiten: Projektauftrag, Anforderungen, Entwurf, Testplan
     - Kontrolle: Test
     - Info: Impressum
@@ -74,7 +74,8 @@ zehn Phasen und wie sie zusammenhängen in `04-Prototyp/pm_agent/docs/lebenszykl
   - `forecast_verdict` nennt neben der Prognose auch Mehraufwand: Fertige Aufgaben mehr als `ui.COST_TOLERANCE` (10 %, Vorschlag) über Plan geben „Zu entscheiden“. Der CPI zählt Begonnenes als 0 und ist früh zu niedrig, deshalb nicht er (PR 82).
   - Der Abschluss zählt Lücken im Betriebshandbuch als Warnungen der Ergebniszeile; den neuen Durchlauf blockieren sie nicht (PR 82, 84).
   - In der Planung heißt Schritt 6 „Übernehmen“ (dort liegt „Plan als Projekt übernehmen“).
-  - Test: Ein fehlgeschlagener Fall mit nur behobenem Fehler bleibt ein Fehler (PR 84). Fehler haben ein Behebungsdatum (`fixed_on`); damit trennt die Prüfung „noch nicht wiederholt“ (`Testfall wiederholen`) von „an einem späteren Tag wieder fehlgeschlagen“ (`neuen Fehler erfassen oder Fehler wieder öffnen`), am selben Tag nennt die Meldung beides. Bestehende Fehler und Störungen lassen sich im Formular auswählen, ändern und wieder öffnen.
+  - Test: Ein fehlgeschlagener Fall mit nur behobenem Fehler bleibt ein Fehler (PR 84). „behoben“ speichert den Tag (`Defect.fixed_on`, PR 86); die Meldung sagt danach „Testfall wiederholen“ (Ergebnis vor der Behebung) oder „neuen Fehler erfassen oder Fehler wieder öffnen“ (danach), am selben Tag beides (PR 87). Ältere Fehler ohne Tag: „Testfall wiederholen“.
+  - Fehler und Störungen lassen sich wieder öffnen und über „Eintrag“ ändern; das Formular zeigt den Eintrag, Status und Daten bleiben (PR 86, 87). Eine Quellregel verbietet `Defect(`/`Incident(` mit `id=` (PR 88).
   - Eine Quellregel verlangt sie überall, wo `messages(` steht.
   - Die Runden eines Laufs stehen nur noch im Statuskasten (nach Erfolg zugeklappt).
   - Markdown-Vorschauen unter Downloads sind entfernt (Quellregel).
@@ -83,6 +84,9 @@ zehn Phasen und wie sie zusammenhängen in `04-Prototyp/pm_agent/docs/lebenszykl
   - Die Oberfläche sagt „der Agent“ (Quellregel).
   - Freitexte der Agenten haben Längengrenzen: `tools.LIMITS`, etwa ein Satz, die Zusammenfassung 400 Zeichen. Jedes Einreichungswerkzeug schickt zu Langes zurück (`tools.too_long`); die Modelle nehmen längere Texte weiter an.
   - Eingaben der Agenten vor und nach dem Plan schreiben Daten und Zahlen deutsch (`tracking.as_shown`, `key_figures`; Quellregel). Der Planungsagent behält ISO-Daten für `set_absence`.
+  - Liegt die Prognose hinter der Deadline, muss die Zusammenfassung der Durchführung ihr Enddatum nennen (`followup.check_summary`, PR 86).
+  - `replanning.md` verlangt nach `set_absence` eine Umverteilung, wenn Deadline oder Puffer reißen (PR 86); nur im Prompt, nicht live geprüft.
+  - `suggested_wishes` schlägt vor, eine kritische Aufgabe vor eine unkritische derselben Person zu ziehen, wenn das den Plan verkürzt, und nennt die Aufgabe, die dabei tatsächlich nach hinten rückt (PR 86, 88).
 - **Echte Läufe am 21.11.2026** (Endpunkt der Hochschule, `gpt-6-sol`):
   - Alle elf Agenten und das KI-Lab je einmal ohne Fehler, Auswertung in `03-Experiment/agentenlauf-2026-11-21/`.
   - Mit den Grenzen lag kein Freitext darüber, und keiner ging wegen Länge zurück; die Texte sind 26 % kürzer als am 20.11.
@@ -93,6 +97,7 @@ zehn Phasen und wie sie zusammenhängen in `04-Prototyp/pm_agent/docs/lebenszykl
   - Der Freeze verlangt Key und Modellnamen, kein Datum (Entscheidung E01). Die Auswertung nennt die antwortenden Modelle (`models_returned`, `model_varies`).
   - Issue #9 ist geschlossen, Nachweis in `04-Prototyp/ki_lab/VERIFIKATION.md`.
   - Formale Fälle aus einer privaten Datei (#6): `PM_LAB_MATERIALS` oder `--materials`, gleiches Format wie `cases.json`, Prüfung beim Laden; der Freeze hält Version, Prüfsumme und Quelle (`öffentlich`/`privat`) fest. Die Fälle selbst schreibt die Gruppe.
+  - In KI-Runden zeigt das Lab „X / 12 genutzt“, die freien Anfragen und die Wartezeit in Sekunden (PR 86); die Grenze 12 steht im Server (`lab.py`).
   - Einwilligungen nennen den Dienst, an den die Daten gehen: `ui.ai_service` (Host aus `OPENAI_BASE_URL`) auf den Seiten, der eingefrorene Endpunkt im Lab; eine Quellregel verbietet „an (die) OpenAI (API)“.
 - **Prüfen.**
   - `04-Prototyp/pm_agent/docs/pruefplan.md`: Prüfplan für einen Testlauf durch einen Coding-Agenten (statisch, Unit, Integration, Smoke im Browser, Datenvergleich). Codex lief ihn am 22.11.2026 auf `701337c`: alles grün, eine Lücke (keine Kette über alle Phasen).
@@ -121,14 +126,14 @@ Echter Test: `uv run --env-file .env pytest tests/test_agent_live.py` (verbrauch
 nur auf Wort der Projektleitung). Chat Completions nimmt bei diesem Modell Werkzeuge nur mit
 `reasoning_effort` „none“ an; deshalb Responses.
 
-## Projekt in Zahlen (22.11.2026, `main` nach PR 84)
+## Projekt in Zahlen (23.11.2026, `main` nach PR 88)
 
-- **Repository:** 324 Commits auf `main` (244 ohne Merges) seit dem 28.10.2026, 72 gemergte PRs, **0 Releases, 0 Tags**.
-- **Fachcode:** rund 10 100 Zeilen Python (ohne Leerzeilen und Kommentare).
-  - `pm_agent` 9 445 (Paket und Seiten)
+- **Repository:** 334 Commits auf `main` (250 ohne Merges) seit dem 28.10.2026, 76 gemergte PRs, **0 Releases, 0 Tags**.
+- **Fachcode:** rund 10 300 Zeilen Python (ohne Leerzeilen und Kommentare).
+  - `pm_agent` 9 638 (Paket und Seiten)
   - `ki_lab` 656
   - dazu 9 Prompts, 8 Vorlagen, CSS
-- **Tests:** 704, alle ohne Netz (661 `pm_agent`, 43 `ki_lab`); dazu ein Live-Test, der sich ohne Schlüssel überspringt. CI: `pm-agent.yml` (Lint, Tests) und `static.yml` (README als Pages).
+- **Tests:** 707, alle ohne Netz (664 `pm_agent`, 43 `ki_lab`); dazu ein Live-Test, der sich ohne Schlüssel überspringt. CI: `pm-agent.yml` (Lint, Tests) und `static.yml` (README als Pages).
 - **Betrieb:** läuft lokal als Streamlit-Seite. Das Menü in 8 Einträgen ist in Chrome geprüft (1440 px und 375 px), am 22.11. auch in Edge (Codex, 13 Seiten bei 375 px ohne waagrechtes Scrollen); Firefox und WebKit nur für den Stand vor dem 21.11. Kein öffentlicher Betrieb.
 - **Issues:** 11 (#1–#11, Meilensteine M1–M4).
   - #9 geschlossen.
@@ -152,8 +157,8 @@ nur auf Wort der Projektleitung). Chat Completions nimmt bei diesem Modell Werkz
 2. **Teilnahmeinformation fertig machen (#8).** Die Einwilligungen nennen seit PR 77 den richtigen Dienst. In `03-Experiment/teilnahmeinformation.md` fehlen noch Kontakt, Löschdatum und Name des Dienstes. Die Einwilligung zu Zitaten fragt das Lab nicht ab: auf Papier einholen oder im Lab ergänzen (Agenda M2).
 3. **Mehrere Läufe je Agent.** Ein Lauf je Agent und Tag reicht nicht für Aussagen über Runden, Token oder Dauer. `03-Experiment/agentenlauf-2026-11-21/run_agents.py` wiederholt den Lauf (kostet Kontingent, nur auf Wort der Projektleitung).
 4. **Agenten fachlich.**
-   - Bei einer Abwesenheit trägt die Umplanung sie ein, verteilt aber keine Aufgabe um: Das Ende rückt hinter die Deadline (21.11.: 24.12.2026). `replanning.md` verlangt jetzt die Umverteilung blockierter Aufgaben (noch nicht live geprüft).
-   - Die neue Zusammenfassung der Durchführung nannte das Ende nur als „nach der Deadline“, ohne Datum. `check_summary` verlangt jetzt das Prognosedatum, wenn das Ende nach der Deadline liegt (noch nicht live geprüft).
+   - Bei einer Abwesenheit verteilte die Umplanung am 21.11. keine Aufgabe um (Ende 24.12.2026, hinter der Deadline). Seit PR 86 verlangt `replanning.md` die Umverteilung: in einem echten Lauf prüfen (kostet Kontingent, nur auf Wort der Projektleitung).
+   - Das Enddatum in der Zusammenfassung der Durchführung prüft Python seit PR 86; ein echter Lauf damit steht aus.
 5. **Einen Stand festhalten.** Es gibt kein Release. Ein `v0.1` mit „was geht, mit welchem Modell geprüft“ (öffentlich: nur auf Wort der Projektleitung).
 6. **Issues pflegen.** Zuständige eintragen; die Meilenstein-Issues in Aufgaben für einen Tag zerlegen.
 7. **Code, nicht dringend.**
@@ -178,6 +183,7 @@ nur auf Wort der Projektleitung). Chat Completions nimmt bei diesem Modell Werkz
 - `.claude/` (nicht im Repository): `launch.json` für den Entwicklungsserver und der Skill `sibling-fix` für Fehlerbehebungen. `.claude/` steht zusätzlich in `.git/info/exclude`, weil das Wurzelverzeichnis keine `.gitignore` hat (eine eigene würde mit PR 12 kollidieren).
 - Entfernte Branches außer `main`:
   - `feat/polish`: zusammengeführt, bleibt auf Wunsch
-  - `feat/pm-experiment-lab`: PR 12
+  - `feat/pm-experiment-lab`: PR 12, nicht anfassen
   - `test/planning-execution-control-flow`: Teammitglied
-  - Die letzten beiden nicht anfassen. Alle anderen Branches dieser Arbeit sind gelöscht.
+  - `feat/ux-and-defect-lifecycle` (PR 86) und `fix/review-followup` (PR 88): Branches eines Teammitglieds, gemergt; Löschen mit ihm absprechen
+  - `test/planning-execution-control-flow` und die Branches des Teammitglieds nicht anfassen. Alle anderen Branches dieser Arbeit sind gelöscht.
