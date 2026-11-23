@@ -154,6 +154,15 @@ wird er übersprungen. Mit dem Key aus `.env`:
 uv run --env-file .env pytest tests/test_agent_live.py
 ```
 
+Ein Smoke-Test öffnet jede Seite in echten Browsern (bei 1440 px und 375 px, ohne Agentenlauf,
+auf einem leeren Temp-Ordner, nie auf `data/`). Er läuft in der CI mit Chromium, Firefox und
+WebKit und überspringt sich ohne `PM_BROWSERS`. Lokal mit installiertem Chrome:
+
+```bash
+uv sync --group browser
+PM_BROWSERS=chrome uv run pytest tests/test_browsers.py
+```
+
 ## Datenschutz
 
 Das Repository ist öffentlich. Teamdaten (`data/`, auch Projektauftrag, Anforderungen und Entwurf in

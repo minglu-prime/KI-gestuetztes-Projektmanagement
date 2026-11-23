@@ -85,6 +85,12 @@ und `uv run pytest -q --durations=10` für die langsamsten Tests.
 
 ## 6. Smoke-Test der laufenden Site (Browser, ohne Agentenlauf)
 
+Automatisch: `tests/test_browsers.py` prüft Punkte 1 (keine Ausnahme), 2, 3 (jede Seite) und 6
+in Chromium, Firefox und WebKit (CI-Job `browsers`). Lokal mit Chrome:
+`uv sync --group browser` und `PM_BROWSERS=chrome uv run pytest tests/test_browsers.py`.
+Von Hand bleiben die Browserkonsole, die Ergebniszeilen, der Stand mit `data/` und die
+Screenshots:
+
 ```bash
 uv run streamlit run app.py --server.headless true --server.address localhost \
   --server.port 8501 --browser.gatherUsageStats false
@@ -139,7 +145,7 @@ noch nicht eingecheckt ist).
 - **Live-Test mit dem Modell** (`uv run --env-file .env pytest tests/test_agent_live.py`,
   `03-Experiment/agentenlauf-2026-11-21/run_agents.py`): kostet Kontingent, nur auf Wort der
   Projektleitung.
-- Firefox und WebKit: offen laut `CLAUDE.md`, nicht automatisiert.
+- Firefox und WebKit nur im CI-Job `browsers` (Seiten öffnen, Menü, 375 px), nicht von Hand.
 - Bewegung/Animationen: nur mit Chrome headless über DevTools prüfbar (siehe `CLAUDE.md`).
 
 ## Bericht

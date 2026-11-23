@@ -1,5 +1,6 @@
-# Lint and offline tests of the PM-Agent site in 04-Prototyp/pm_agent, and the tests of the
-# KI-Lab study server in 04-Prototyp/ki_lab that the site embeds.
+# Lint and offline tests of the PM-Agent site in 04-Prototyp/pm_agent, a smoke test of its pages
+# in three browsers, and the tests of the KI-Lab study server in 04-Prototyp/ki_lab that the
+# site embeds.
 # The live API test skips itself: no OPENAI_API_KEY is configured here.
 name: pm-agent
 
@@ -33,3 +34,21 @@ jobs:
         working-directory: 04-Prototyp/ki_lab
       - run: node --check web/app.js
         working-directory: 04-Prototyp/ki_lab
+
+  # Every page in Chromium, Firefox and WebKit, at 1440 px and 375 px, on an empty folder
+  # (tests/test_browsers.py, smoke_app.py). No agent runs, no data/.
+  browsers:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: 04-Prototyp/pm_agent
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.11.16"
+      - run: uv sync --locked --python 3.11 --group browser
+      - run: uv run playwright install --with-deps chromium firefox webkit
+      - run: uv run pytest tests/test_browsers.py -v
+        env:
+          PM_BROWSERS: chromium,firefox,webkit
