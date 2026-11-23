@@ -421,18 +421,27 @@ def test_a_case_that_fails_again_after_its_fix_needs_a_new_defect(adopted):
     # With fixed_on recorded, "not retested yet" and "failed again after the fix" are distinct.
     dated = record_defect(
         tracking,
-        tracking.defects[0].model_copy(update={"fixed_on": date(2026, 11, 20)}),
+        tracking.defects[0].model_copy(update={"fixed_on": date(2026, 11, 21)}),
     )
     assert check_results(dated, plan).errors == [
-        "Testfall 'T1' ist fehlgeschlagen, sein Fehler F1 ist seit 20.11.2026 behoben: "
+        "Testfall 'T1' ist fehlgeschlagen, sein Fehler F1 ist seit 21.11.2026 behoben: "
         "Testfall wiederholen"
     ]
     failed_again = record_result(
         dated, CaseResult(case_id="T1", result="fehlgeschlagen", on=date(2026, 11, 22)), plan
     )
     assert check_results(failed_again, plan).errors == [
-        "Testfall 'T1' ist am 22.11.2026 nach der Behebung von F1 (am 20.11.2026) wieder "
+        "Testfall 'T1' ist am 22.11.2026 nach der Behebung von F1 (am 21.11.2026) wieder "
         "fehlgeschlagen: neuen Fehler erfassen oder Fehler wieder öffnen"
+    ]
+    # Fixed and failed on the same day: the dates cannot tell which came first.
+    same_day = record_defect(
+        tracking, tracking.defects[0].model_copy(update={"fixed_on": date(2026, 11, 20)})
+    )
+    assert check_results(same_day, plan).errors == [
+        "Testfall 'T1' ist am 20.11.2026 fehlgeschlagen, am selben Tag wurde F1 behoben: "
+        "War das der Test nach der Behebung, neuen Fehler erfassen oder Fehler wieder öffnen, "
+        "sonst Testfall wiederholen"
     ]
 
 

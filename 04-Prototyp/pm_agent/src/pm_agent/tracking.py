@@ -619,6 +619,12 @@ def check_results(tracking: Tracking, plan: CasePlan) -> RetroCheck:
                     f"{', '.join(fixed)} (am {_date(last_fix)}) wieder fehlgeschlagen: neuen "
                     "Fehler erfassen oder Fehler wieder öffnen"
                 )
+            elif latest[c.id].on == last_fix:  # days only: which came first is unknown
+                errors.append(
+                    f"Testfall '{c.id}' ist am {_date(last_fix)} fehlgeschlagen, am selben Tag "
+                    f"wurde {', '.join(fixed)} behoben: War das der Test nach der Behebung, "
+                    "neuen Fehler erfassen oder Fehler wieder öffnen, sonst Testfall wiederholen"
+                )
             else:
                 errors.append(
                     f"Testfall '{c.id}' ist fehlgeschlagen, sein Fehler {', '.join(fixed)} ist "

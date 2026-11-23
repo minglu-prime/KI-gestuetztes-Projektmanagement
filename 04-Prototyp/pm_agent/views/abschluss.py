@@ -119,20 +119,39 @@ if "closing_error" in state:
 
 
 def on_incident() -> None:
-    incident = Incident(
-        id=state.get("incident_id", ""),
-        on=date.today(),
-        component_id=state.incident_component,
-        impact=state.incident_impact,
-        cause=state.incident_cause,
-        measure=state.incident_measure,
-    )
-    if not incident.impact:
+    fields = {
+        "component_id": state.incident_component,
+        "impact": state.incident_impact,
+        "cause": state.incident_cause,
+        "measure": state.incident_measure,
+    }
+    if not fields["impact"].strip():
         state.closing_error = "Beschreib die Auswirkung der Störung."
         return
-    if change(lambda t: closing.record_incident(t, incident, design)):
+    chosen = state.get("incident_id", "")
+
+    def record(t):
+        # A chosen entry keeps what the form does not show: the day it happened and its status.
+        old = next((i for i in t.incidents if i.id == chosen), None)
+        incident = (
+            Incident(**{**old.model_dump(), **fields})
+            if old
+            else Incident(on=date.today(), **fields)
+        )
+        return closing.record_incident(t, incident, design)
+
+    if change(record):
         for key in ["incident_id", "incident_impact", "incident_cause", "incident_measure"]:
             state[key] = ""
+
+
+def on_pick_incident(incidents: dict[str, Incident], components: dict[str, str]) -> None:
+    """Fill the form with the chosen incident, or empty it for a new one."""
+    incident = incidents.get(state.incident_id)
+    for key in ["impact", "cause", "measure"]:
+        state[f"incident_{key}"] = getattr(incident, key) if incident else ""
+    if incident and incident.component_id in components:
+        state.incident_component = incident.component_id
 
 
 def on_fixed(incident_id: str) -> None:
@@ -285,6 +304,7 @@ with operations_tab:
     with st.container(border=True, key="panel-incidents"):
         heading("warning", "Störungen", du="erfasst")
         if design is not None:
+            names = {c.id: c.name for c in design.components}
             incidents_by_id = {i.id: i for i in tracking.incidents}
             if incidents_by_id:
                 st.selectbox(
@@ -294,8 +314,9 @@ with operations_tab:
                         f"{i} ändern ({incidents_by_id[i].impact})" if i else "Neue Störung"
                     ),
                     key="incident_id",
+                    on_change=on_pick_incident,
+                    args=(incidents_by_id, names),
                 )
-            names = {c.id: c.name for c in design.components}
             st.selectbox(
                 "Baustein",
                 list(names),

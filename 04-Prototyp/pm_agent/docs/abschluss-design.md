@@ -28,7 +28,8 @@ So schließt sich der Kreis im Ablaufdiagramm („nächster Backlog → Anforder
   Projektleitung ändert sie.
 - **Betriebshandbuch:** je Komponente des Entwurfs Verantwortliche (Rolle, kein Name),
   Bereitstellung, Überwachung, Rücknahme. Störungen erfassen (Datum, Komponente, Auswirkung,
-  Ursache, Maßnahme).
+  Ursache, Maßnahme), als behoben markieren, wieder öffnen und über „Eintrag“ ändern; dabei
+  bleiben Datum und Status.
 - **Nächster Backlog:** Python stellt ihn zusammen, jeder Eintrag mit Herkunft (`R3
   zurückgestellt`, `F2 offen`, `Maßnahme Woche ab 16.11.`, `Störung 3`). Ein Knopf übernimmt
   ihn als Entwurf neuer Anforderungen in ein neues Vorhaben; das alte wird archiviert.

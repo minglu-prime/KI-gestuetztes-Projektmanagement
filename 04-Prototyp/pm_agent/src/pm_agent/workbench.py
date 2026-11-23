@@ -489,25 +489,30 @@ def suggested_wishes(
         if busiest.utilization - idlest.utilization >= 0.3:
             wishes.append(f"Verteile Arbeit von {busiest.member} auf {idlest.member} um.")
     # A task without dependents listed before a critical one of the same person can delay the end.
+    # One check per critical task: moving it to the front does not depend on which task it passes.
     for index, critical in enumerate(plan.tasks):
         if result.slack.get(critical.id) != 0:
             continue
-        for earlier in plan.tasks[:index]:
-            if owner[earlier.id] != owner[critical.id] or earlier.id in critical.depends_on:
-                continue
-            reordered = [critical, *(t for t in plan.tasks if t.id != critical.id)]
-            checked = check_plan(
-                plan.model_copy(update={"tasks": reordered}), team, project, dates_only=True
-            )
-            if checked.end_date is not None and checked.end_date < result.end_date:
-                wishes.append(
-                    f"Zieh {critical.id} ({critical.title}) vor {earlier.id} ({earlier.title}): "
-                    "Das verkürzt den Plan."
-                )
-                break
-        else:
+        earlier = next(
+            (
+                t
+                for t in plan.tasks[:index]
+                if owner[t.id] == owner[critical.id] and t.id not in critical.depends_on
+            ),
+            None,
+        )
+        if earlier is None:
             continue
-        break
+        reordered = [critical, *(t for t in plan.tasks if t.id != critical.id)]
+        checked = check_plan(
+            plan.model_copy(update={"tasks": reordered}), team, project, dates_only=True
+        )
+        if checked.end_date is not None and checked.end_date < result.end_date:
+            wishes.append(
+                f"Zieh {critical.id} ({critical.title}) vor {earlier.id} ({earlier.title}): "
+                "Das verkürzt den Plan."
+            )
+            break
     if result.critical_path:
         longest = max(result.critical_path, key=lambda tid: tasks[tid].estimate_hours)
         wishes.append(f"Was, wenn {longest} ({tasks[longest].title}) doppelt so lange dauert?")

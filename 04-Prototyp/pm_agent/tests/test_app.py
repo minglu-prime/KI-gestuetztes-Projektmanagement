@@ -2278,6 +2278,27 @@ def test_a_failed_case_needs_a_defect_which_can_reopen_its_task(tracked):
         "Nur Tippfehler",
     )
 
+    # Choosing an entry fills the form with it; saving keeps its status and date of the fix.
+    button(at, "F1: behoben").click()
+    at = at.run()
+    at.selectbox(key="defect_id").set_value("F1").run()
+    assert at.text_input(key="defect_cause").value == "Nur Tippfehler"
+    assert at.radio(key="defect_severity").value == "leicht"
+    assert at.selectbox(key="defect_task").value == "B"
+    at.text_input(key="defect_cause").input("Tippfehler im Titel").run()
+    button(at, "Fehler erfassen").click()
+    at = at.run()
+    (edited_defect,) = tracking.load().defects
+    assert (edited_defect.cause, edited_defect.status, edited_defect.fixed_on) == (
+        "Tippfehler im Titel",
+        "behoben",
+        date.today(),
+    )
+    # "Neuer Fehler" empties the form again.
+    at.selectbox(key="defect_id").set_value("F1").run()
+    at.selectbox(key="defect_id").set_value("").run()
+    assert at.text_input(key="defect_cause").value == ""
+
 
 def test_without_a_test_plan_the_test_page_leads_to_it(tracked):
     at = tracked.switch_page("views/testlauf.py").run()
@@ -2410,6 +2431,29 @@ def test_the_operations_page_checks_the_handbook_and_records_incidents(tracked):
     at = at.run()
     (edited_incident,) = tracking.load().incidents
     assert (edited_incident.id, edited_incident.impact) == ("ST1", "Buchen langsam")
+
+    # Editing a fixed incident keeps its status and the day it happened.
+    button(at, "ST1: behoben").click()
+    at = at.run()
+    saved = tracking.load()
+    earlier = date(2026, 1, 5)
+    tracking.save(
+        saved.model_copy(
+            update={"incidents": [saved.incidents[0].model_copy(update={"on": earlier})]}
+        )
+    )
+    at = at.run()
+    at.selectbox(key="incident_id").set_value("ST1").run()
+    assert at.text_input(key="incident_impact").value == "Buchen langsam"
+    at.text_input(key="incident_cause").input("Index fehlt").run()
+    button(at, "Störung erfassen").click()
+    at = at.run()
+    (edited_incident,) = tracking.load().incidents
+    assert (edited_incident.cause, edited_incident.status, edited_incident.on) == (
+        "Index fehlt",
+        "behoben",
+        earlier,
+    )
 
 
 def test_a_new_run_starts_from_the_backlog(site, monkeypatch, tmp_path):

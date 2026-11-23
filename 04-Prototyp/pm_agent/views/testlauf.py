@@ -62,17 +62,35 @@ def on_result(versions: dict[str, str]) -> None:
 
 
 def on_defect() -> None:
-    defect = Defect(
-        id=state.get("defect_id", ""),
-        case_id=state.defect_case,
-        severity=state.defect_severity,
-        cause=state.defect_cause,
-        task_id=state.defect_task or None,
-    )
-    if change(lambda t: record_defect(t, defect)):
+    fields = {
+        "case_id": state.defect_case,
+        "severity": state.defect_severity,
+        "cause": state.defect_cause,
+        "task_id": state.defect_task or None,
+    }
+    chosen = state.get("defect_id", "")
+
+    def record(t: Tracking) -> Tracking:
+        # A chosen entry keeps what the form does not show: its status and the day of the fix.
+        old = next((d for d in t.defects if d.id == chosen), None)
+        defect = Defect(**{**old.model_dump(), **fields}) if old else Defect(**fields)
+        return record_defect(t, defect)
+
+    if change(record):
         state.defect_id = ""
         state.defect_cause = ""
         state.defect_task = ""
+
+
+def on_pick_defect(defects: dict[str, Defect], cases: dict[str, str]) -> None:
+    """Fill the form with the chosen defect, or empty it for a new one."""
+    defect = defects.get(state.defect_id)
+    state.defect_cause = defect.cause if defect else ""
+    state.defect_task = (defect.task_id or "") if defect else ""
+    if defect:
+        state.defect_severity = defect.severity
+        if defect.case_id in cases:
+            state.defect_case = defect.case_id
 
 
 def on_reopen(defect_id: str) -> None:
@@ -153,6 +171,8 @@ with st.container(border=True, key="panel-defects"):
             ["", *defects_by_id],
             format_func=lambda d: f"{d} ändern ({defects_by_id[d].cause})" if d else "Neuer Fehler",
             key="defect_id",
+            on_change=on_pick_defect,
+            args=(defects_by_id, titles),
         )
     st.selectbox(
         "Gefunden von", list(titles), format_func=lambda c: f"{c} · {titles[c]}", key="defect_case"

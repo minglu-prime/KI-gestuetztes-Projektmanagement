@@ -65,6 +65,7 @@ class Defect(BaseModel):  # in projekt.json: Tracking.defects
     cause: str  # vermutete Ursache
     task_id: str | None  # die Aufgabe, die es beheben soll
     status: Literal["offen", "behoben"]
+    fixed_on: date | None  # Tag der Behebung; ältere Dateien haben keinen
 ```
 
 Akzeptanzkriterien brauchen dafür **feste IDs**. Heute ergeben sie sich aus der Reihenfolge
@@ -85,6 +86,10 @@ eine Datenänderung an Batch 1 mit Übernahme alter Dateien.
 `check_results(tracking)`:
 
 - Fehler: fehlgeschlagener Testfall ohne Fehlereintrag; schwerer Fehler ohne Aufgabe.
+- Fehler: fehlgeschlagener Testfall, dessen Fehler alle behoben sind. Mit `fixed_on` nennt
+  die Meldung, was zu tun ist: Ergebnis vor der Behebung „Testfall wiederholen“, danach
+  „neuen Fehler erfassen oder Fehler wieder öffnen“; am selben Tag ist die Reihenfolge
+  unbekannt, die Meldung nennt beides. Ohne Datum wie früher „Testfall wiederholen“.
 - Warnung: Testfall ohne Ergebnis; Fehler offen, dessen Aufgabe „fertig“ ist.
 
 ## Seiten
@@ -92,7 +97,9 @@ eine Datenänderung an Batch 1 mit Übernahme alter Dateien.
 - **Vorbereiten · Testplan** (nach Entwurf): Entwurf vom Agenten, Tabelle der Testfälle,
   Abdeckung je Kriterium und je Schnittstelle, Freigabe, Markdown. Projektpfad: 7 Schritte.
 - **Agenten · Test** (nach Durchführung): Ergebnisse eintragen, Fehler erfassen, „Aufgabe
-  wieder öffnen“ setzt die zuständige Aufgabe auf „in Arbeit“.
+  wieder öffnen“ setzt die zuständige Aufgabe auf „in Arbeit“. „behoben“ hält den Tag fest,
+  „wieder öffnen“ setzt den Fehler zurück auf offen. Über „Eintrag“ lässt sich ein Fehler
+  ändern: Die Felder zeigen ihn, Status und Tag der Behebung bleiben.
 - **Kontrolle:** Testabdeckung, offene Fehler nach Schwere.
 
 ## Offene Fragen an den Nutzer
