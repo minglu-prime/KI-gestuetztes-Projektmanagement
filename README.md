@@ -253,6 +253,7 @@ Einzelheiten zu Seiten, Agenten und Entwicklung:
 | Teil | Stand |
 |---|---|
 | Wechsel zur OpenAI API (20./21.11.2026) | Agenten rufen die OpenAI Responses API auf (mit Reasoning). Am 20. und 21.11.2026 liefen alle elf Agenten und eine KI-Runde des KI-Labs je einmal ohne Fehler gegen den OpenAI-kompatiblen Endpunkt der Hochschule (`gpt-6-sol`), am 21.11. mit Längengrenzen für Freitexte ([Auswertung](03-Experiment/agentenlauf-2026-11-21/README.md)) |
+| Umplanung und Durchführung (23.11.2026) | je dreimal gegen `gpt-6-sol`: Die Zusammenfassung nennt das Enddatum der Prognose in 3 von 3 Läufen; die Umplanung verteilt bei einer Abwesenheit nur in 2 von 3 Läufen um, dann ohne Puffer und mit fehlenden Fähigkeiten ([Auswertung](03-Experiment/agentenlauf-2026-11-23/README.md)) |
 | Erster Plan mit dem Agenten | gegen die Claude API gelaufen (Protokolle vom 11.11. und 18.11.2026) |
 | Frühere Läufe | am 18.11.2026 je einmal ohne Fehler gegen die Claude API: alle Agenten außer der Abwesenheit aus einem Wunsch |
 | KI-Lab | eingebettet; Ablauf, Zeitlimit und Export im Browser geprüft, eine KI-Runde gegen den OpenAI-kompatiblen Endpunkt lief am 20.11.2026 ([Prüfprotokoll](04-Prototyp/ki_lab/VERIFIKATION.md)) |

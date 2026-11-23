@@ -1,0 +1,9 @@
+lauf,agent,datei,runden,abgelehnt,abgelehnt_datum,planende,kalendertage_nach_deadline,abwesenheiten,aufgaben_umverteilt,datum_genannt
+21.11.,durchfuehrung,durchfuehrung-20261121-105149.json,1,0,0,,,,,False
+21.11.,umplanung_abwesenheit,run-20261121-105045.json,5,0,0,2026-12-24,6,1,0,
+23.11.,durchfuehrung,durchfuehrung-20261123-192429.json,1,0,0,,,,,True
+23.11.,durchfuehrung,durchfuehrung-20261123-192630.json,1,0,0,,,,,True
+23.11.,durchfuehrung,durchfuehrung-20261123-192745.json,1,0,0,,,,,True
+23.11.,umplanung_abwesenheit,run-20261123-192309.json,4,0,0,2026-12-24,6,1,0,
+23.11.,umplanung_abwesenheit,run-20261123-192438.json,6,0,0,2026-12-18,0,1,2,
+23.11.,umplanung_abwesenheit,run-20261123-192640.json,4,0,0,2026-12-18,0,1,2,
