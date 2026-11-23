@@ -119,7 +119,7 @@ class Earlier(BaseModel):
 
 class Retro(BaseModel):
     """The look back at one week: was its demo shown, and what follows from it.
-    Entered by the project lead; nothing here is Claude's."""
+    Entered by the project lead; nothing here is the agent's."""
 
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 

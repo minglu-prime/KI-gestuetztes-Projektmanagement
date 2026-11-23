@@ -278,7 +278,7 @@ def test_a_wish_left_over_from_another_plan_is_not_asked_for_a_reopened_run(
     assert not at.exception
     assert at.session_state["source"] == f"Protokoll {log.name}"
     assert "asked" not in at.session_state
-    assert at.session_state["proposal"] is None  # Claude was not asked
+    assert at.session_state["proposal"] is None  # the agent was not asked
 
 
 def test_a_change_asked_from_claude_is_shown_as_differences_before_it_counts(with_plan):
@@ -330,7 +330,7 @@ def test_claude_is_not_asked_while_the_table_holds_edits_that_were_not_checked(w
     assert not at.exception
     assert at.chat_input(key="wish").disabled
     assert any("noch nicht geprüft" in w.value for w in at.warning)
-    # Claude was not called: it would have got the plan without the edit, and taking its
+    # The agent was not called: it would have got the plan without the edit, and taking its
     # proposal would have overwritten the table.
     assert at.session_state["proposal"] is None
     assert at.session_state["plan"] == PLAN
@@ -353,7 +353,7 @@ def test_a_proposal_cannot_be_taken_over_edits_that_were_not_checked(with_plan):
 
 
 def test_a_table_nobody_touched_never_counts_as_edited(app, monkeypatch):
-    # Claude lists the assignments in another order than the tasks; the table sorts them.
+    # The agent lists the assignments in another order than the tasks; the table sorts them.
     data = plan_input()
     data["assignments"].reverse()
     shuffled = Plan.model_validate(data)
@@ -439,7 +439,7 @@ def test_taking_a_change_keeps_what_the_export_record_needs(with_plan):
     at.run()
 
     assert not at.exception
-    # runs.csv is the data of the before/after comparison: the change by Claude adds to the
+    # runs.csv is the data of the before/after comparison: the change by the agent adds to the
     # agent's time and rounds, and does not erase that the lead edited the plan by hand or
     # when the review began.
     assert at.session_state["agent_seconds"] >= 90.0
@@ -462,7 +462,7 @@ def away_on_monday_and_tuesday(monkeypatch):
 def test_an_absence_from_a_wish_is_shown_and_goes_into_the_team_with_the_plan(
     with_plan, monkeypatch
 ):
-    # The wish names an absence. Claude sets it, the check counts it, the lead takes both.
+    # The wish names an absence. The agent sets it, the check counts it, the lead takes both.
     away_on_monday_and_tuesday(monkeypatch)
     at = with_plan.chat_input(key="wish").set_value("Anna fehlt am 9. und 10.11.").run()
     shown = " ".join(m.value for m in at.markdown)
@@ -1186,7 +1186,7 @@ def test_the_advice_is_shown_as_text(tracked, monkeypatch):
 def test_each_part_of_an_agent_page_says_who_does_it(tracked):
     at = tracked.switch_page("views/kontrolle.py").run()
     roles = [h.value for h in at.html if 'class="roles"' in h.value]
-    # The agent: Claude proposes, Python checks, the project lead decides. In that order.
+    # The agent proposes, Python checks, the project lead decides. In that order.
     agent_roles = next(r for r in roles if "AGENT" in r)
     assert agent_roles.index("AGENT") < agent_roles.index("PYTHON") < agent_roles.index("DU")
     # The numbers are Python's alone.
@@ -1470,7 +1470,7 @@ def test_the_control_agent_shows_assessment_findings_and_measures(tracked, monke
         "Nachgerechnet (Python)": "Keine Umverteilung: nicht nachrechenbar",
     }
     # B is Anna's already: Python finds that giving it to her changes nothing, whatever
-    # Claude expected.
+    # the agent expected.
     assert second["Erwartete Wirkung (Agent)"] == "B wird früher fertig."
     assert second["Nachgerechnet (Python)"].startswith("Das voraussichtliche Ende bleibt der ")
 
@@ -1577,7 +1577,7 @@ def test_a_charter_from_claude_is_saved_as_draft_and_approved_by_the_lead(site, 
     saved = lifecycle.load()
     assert (saved.project, saved.charter) == (PROJECT, CHARTER)
     assert lifecycle.charter_state(saved) == "entwurf"
-    # What Claude drafted is in the fields, ready to change.
+    # What the agent drafted is in the fields, ready to change.
     assert at.text_area(key="charter_goal").value == CHARTER.goal
 
     button(at, "Projektauftrag freigeben").click()
@@ -1789,7 +1789,7 @@ def test_without_an_approved_charter_the_requirements_say_so(site, monkeypatch):
     at.checkbox(key="requirements_consent").check().run()
     button(at, "Anforderungen mit dem Agenten entwerfen").click()
     at = at.run()
-    # Claude works from the charter as it stands, approved or not.
+    # The agent works from the charter as it stands, approved or not.
     assert seen == [CHARTER]
 
 
@@ -2091,7 +2091,7 @@ def test_the_planner_gets_the_design_only_while_it_is_approved(app, monkeypatch)
 
 
 def test_check_messages_on_the_lifecycle_pages_show_no_link(site):
-    # A message quotes what the lead or Claude wrote; rendered as Markdown, a link in it
+    # A message quotes what the lead or the agent wrote; rendered as Markdown, a link in it
     # would hide where it leads.
     criteria = [*CHARTER.success_criteria, Criterion(id="K9", text="[hier](https://evil.example)")]
     charter = CHARTER.model_copy(update={"success_criteria": criteria})

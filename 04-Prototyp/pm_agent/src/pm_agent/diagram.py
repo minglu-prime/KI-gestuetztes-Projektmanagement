@@ -1,5 +1,5 @@
 """Sequence diagrams of the design, drawn by Python from the steps of a flow and the
-contracts of its interfaces. Claude never writes diagram code: what the picture shows is
+contracts of its interfaces. The agent never writes diagram code: what the picture shows is
 what the data says.
 
 Two forms: SVG for the page (no library, nothing loaded from elsewhere) and Mermaid text

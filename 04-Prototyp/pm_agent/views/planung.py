@@ -238,7 +238,7 @@ def ask(wish: str | None = None) -> None:
 
 
 def decide(accept: bool) -> None:
-    """Callback: the project lead takes or drops the change Claude proposed."""
+    """Callback: the project lead takes or drops the change the agent proposed."""
     proposal = state.proposal
     if proposal is None:
         # The second click of a double click: Streamlit calls the callback again although
@@ -871,7 +871,7 @@ with tabs[4]:
                 ]
                 if not ok
             ]
-            # Claude gets the current plan, and taking its proposal replaces the table. Hand
+            # The agent gets the current plan, and taking its proposal replaces the table. Hand
             # edits that were not checked would be ignored first and overwritten then: no
             # wish and no "Übernehmen" while they wait.
             unchecked = not table_matches_plan()
@@ -905,7 +905,7 @@ with tabs[4]:
                                 "wish": wish,
                                 "basis": state.plan,
                                 "plan": replanned.plan,
-                                # Set by Claude from the wish; the plan was checked with them.
+                                # Set by the agent from the wish; the plan was checked with them.
                                 "absences": replanned.absences,
                                 "team": team,
                                 "rounds": change_rounds,

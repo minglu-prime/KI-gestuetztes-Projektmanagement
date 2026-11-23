@@ -422,7 +422,7 @@ def test_the_csv_opens_in_german_excel_as_written():
 
 @pytest.mark.parametrize("title", ['=HYPERLINK("http://x")', "+1", "-2+3", "@SUMME(A1)"])
 def test_no_cell_of_the_csv_runs_as_a_formula(title):
-    # Titles come from Claude and from the editable table: Excel must show them, not run them.
+    # Titles come from the agent and from the editable table: Excel must show them, not run them.
     plan = tricky_plan(title)
     text = to_csv(plan, check_plan(plan, TEAM, PROJECT)).removeprefix("﻿")
     rows = list(csv.reader(io.StringIO(text), delimiter=";"))
@@ -644,7 +644,7 @@ def test_a_non_critical_task_blocking_a_critical_one_suggests_reordering():
 
 
 def test_the_table_gives_a_plan_back_in_its_own_form():
-    # Claude may list the assignments in another order than the tasks. The table has one row
+    # The agent may list the assignments in another order than the tasks. The table has one row
     # per task, so they come back in task order: the same plan, written differently.
     data = plan_input()
     data["assignments"].reverse()

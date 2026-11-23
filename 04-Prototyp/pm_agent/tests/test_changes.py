@@ -34,7 +34,7 @@ def test_person_hours_title_and_dependencies_of_a_task_are_one_line():
 
 
 def test_renumbered_tasks_are_matched_by_title_and_not_reported_as_renamed():
-    # Claude puts a kickoff first and renumbers: A becomes B, B becomes C.
+    # The agent puts a kickoff first and renumbers: A becomes B, B becomes C.
     data = plan_input()
     model, api = data["tasks"]
     data["tasks"] = [

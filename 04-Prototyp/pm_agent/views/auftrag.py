@@ -1,5 +1,5 @@
 """Page "Projektauftrag": why the project exists, what belongs to it and how its success is
-measured. Claude drafts it from idea and dates, Python checks it, the project lead changes it
+measured. The agent drafts it from idea and dates, Python checks it, the project lead changes it
 and approves it. Kept in data/vorhaben.json with the requirements built on it."""
 
 from datetime import datetime

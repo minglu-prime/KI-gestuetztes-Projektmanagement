@@ -1,4 +1,4 @@
-"""Page "Testplan": test cases for every acceptance criterion and every interface. Claude
+"""Page "Testplan": test cases for every acceptance criterion and every interface. The agent
 drafts them, Python checks the coverage, the project lead changes and approves them. The
 results are entered later, on the page Test."""
 

@@ -38,7 +38,7 @@ class Absence(_Model):
 
 
 class MemberAbsence(Absence):
-    """An absence of one member that Claude read from a wish. The project lead takes it into
+    """An absence of one member that the agent read from a wish. The project lead takes it into
     the team with the changed plan, or drops both."""
 
     member: NonEmpty
@@ -112,7 +112,7 @@ class Criterion(_Model):
 
 class Charter(_Model):
     """Projektauftrag: why the project exists, what belongs to it and when it has succeeded.
-    Claude drafts it from the idea; the project lead changes and approves it."""
+    The agent drafts it from the idea; the project lead changes and approves it."""
 
     goal: NonEmpty
     benefit: NonEmpty
@@ -243,7 +243,7 @@ class Flow(_Model):
 
 class Design(_Model):
     """Entwurf: the parts of the system, their contracts and the flows between them.
-    Python draws the sequence diagrams from it; Claude never writes diagram code."""
+    Python draws the sequence diagrams from it; the agent never writes diagram code."""
 
     components: list[Component] = Field(min_length=1)
     interfaces: list[Interface] = Field(default_factory=list)
@@ -348,7 +348,7 @@ class Finding(_Model):
 class Measure(_Model):
     task_ids: list[NonEmpty] = Field(min_length=1)
     action: NonEmpty
-    effect: NonEmpty  # what the measure is expected to change, in Claude's words
+    effect: NonEmpty  # what the measure is expected to change, in the agent's words
     # Set if the measure gives its tasks to this team member. Python then computes what that
     # does to the forecast, so the effect is not only claimed.
     reassign_to: NonEmpty | None = None

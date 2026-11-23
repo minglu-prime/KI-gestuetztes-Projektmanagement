@@ -222,7 +222,7 @@ ROLES = {"agent": "AGENT", "python": "PYTHON", "du": "DU"}
 
 
 def roles(**who: str) -> str:
-    """Who does a part of a page, as HTML for st.html: Claude proposes, Python computes and
+    """Who does a part of a page, as HTML for st.html: the agent proposes, Python computes and
     checks, the project lead ("du") enters and decides. Each keyword is a role, its value
     what that role does here; the chips keep the order of the keywords."""
     return (
@@ -508,7 +508,7 @@ SHOWN_CHANGES = 8
 
 
 def round_printer(start: Plan | None = None) -> Callable[[dict[str, Any]], None]:
-    """Returns a function that writes one agent round after the other: what Claude wrote, the
+    """Returns a function that writes one agent round after the other: what the agent wrote, the
     draft it checked, what it changed since the round before, and what the check answered.
     The first round is compared with `start`, the plan a change started from."""
     number, previous = 0, start

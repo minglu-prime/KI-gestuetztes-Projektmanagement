@@ -13,7 +13,7 @@ TEAM = [Member(name="Anna", skills={"Python": 4}, hours_per_week=40)]  # 8 h per
 
 
 def plan_input(member="Anna", hours=8):
-    """A plan the way Claude sends it as tool input: plain JSON, B depends on A."""
+    """A plan the way the agent sends it as tool input: plain JSON, B depends on A."""
     return {
         "tasks": [
             {
@@ -46,7 +46,7 @@ def test_check_plan_reports_errors_warnings_critical_path_and_load():
 
 
 def test_check_plan_reports_invalid_input_as_errors():
-    # A typical slip: the LLM names the field "hours". Claude must learn what to fix.
+    # A typical slip: the LLM names the field "hours". The agent must learn what to fix.
     broken = plan_input()
     broken["tasks"][0]["hours"] = broken["tasks"][0].pop("estimate_hours")
     report = json.loads(PlanningTools(PROJECT, TEAM).check_plan.call(broken))
@@ -88,7 +88,7 @@ def test_input_that_is_no_plan_at_all_gets_a_message_with_a_place():
 
 
 def test_a_field_named_self_is_an_unknown_field_not_a_crash():
-    # The tool functions took "self" as a keyword: Claude got a Python TypeError.
+    # The tool functions took "self" as a keyword: the agent got a Python TypeError.
     tools = PlanningTools(PROJECT, TEAM)
     with pytest.raises(ToolError) as rejected:
         tools.submit_plan.call({**plan_input(), "self": 1})
@@ -142,7 +142,7 @@ def test_submit_plan_rejects_an_unknown_requirement():
 
 
 def test_a_change_can_set_an_absence_and_the_check_counts_it():
-    # The wish "Anna is away on Monday and Tuesday" belongs to the team. Claude sets it, Python
+    # The wish "Anna is away on Monday and Tuesday" belongs to the team. The agent sets it, Python
     # checks it, and every check after it plans around it.
     tools = PlanningTools(PROJECT, TEAM, absences=True)
     with pytest.raises(ToolError, match="Unbekannte Person 'Bea'. Im Team: Anna"):

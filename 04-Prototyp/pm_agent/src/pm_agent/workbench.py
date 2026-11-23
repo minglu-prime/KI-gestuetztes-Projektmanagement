@@ -449,7 +449,7 @@ def explain_task(
 def suggested_wishes(
     plan: Plan, team: list[Member], result: CheckResult, project: Project
 ) -> list[str]:
-    """Up to four things the project lead could ask Claude to change, read off the check of
+    """Up to four things the project lead could ask the agent to change, read off the check of
     the plan: what is most pressing first. Nothing for a plan with errors."""
     if result.errors or result.end_date is None:
         return []
@@ -532,7 +532,7 @@ def suggested_wishes(
 def pair_tasks(before: Plan, after: Plan) -> dict[str, str]:
     """Which task of `after` is which task of `before`: ID in before -> ID in after.
 
-    Paired by ID and title, then by title alone, then by ID alone. Claude sometimes renumbers
+    Paired by ID and title, then by title alone, then by ID alone. The agent sometimes renumbers
     a draft; paired by ID only, every task after an inserted one would count as renamed and
     reassigned. A title pairs two tasks only if it is unique in both plans: with two tasks
     called the same, nothing says which is which."""
@@ -715,7 +715,7 @@ def check_changes(
 
 def describe_round(number: int, record: dict[str, Any], previous: Plan | None) -> dict[str, Any]:
     """One agent round for the progress view: the headline and tool messages of
-    round_summary, what Claude wrote, the size of the draft it checked or submitted, and what
+    round_summary, what the agent wrote, the size of the draft it checked or submitted, and what
     it changed since `previous` (the draft of the round before, or the plan it started from).
     `draft` is None if the round had no readable plan; the caller then keeps `previous`."""
     headline, messages = round_summary(number, record)
@@ -959,7 +959,7 @@ def _date(day: Any) -> str:
 
 
 def _inert(text: str) -> str:
-    """Text from Claude or the project lead inside a Markdown document: no link, image or
+    """Text from the agent or the project lead inside a Markdown document: no link, image or
     HTML tag. The preview would fetch an image from a foreign server and a link could hide
     where it leads; GitHub renders the downloaded file the same way."""
     for char in "[]<>":

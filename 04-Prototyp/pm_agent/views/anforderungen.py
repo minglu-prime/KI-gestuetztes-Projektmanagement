@@ -1,4 +1,4 @@
-"""Page "Anforderungen": the PRD. Claude drafts the requirements from the charter, Python
+"""Page "Anforderungen": the PRD. The agent drafts the requirements from the charter, Python
 checks that every success criterion is served, the project lead changes and approves them.
 The plan is traced to them once they are approved."""
 
