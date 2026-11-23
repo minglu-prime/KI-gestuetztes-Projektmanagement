@@ -34,6 +34,20 @@ class LabTests(unittest.TestCase):
         with self.assertRaises(Problem):
             self.lab.start(self.create(), consent=False)
 
+    def test_quote_consent_is_optional_and_saved_on_first_start(self):
+        default_token = self.create()
+        self.assertFalse(self.start(default_token)['quote_consent'])
+
+        opted_in = self.create()
+        first = self.lab.start(
+            opted_in, consent=True, pm_experience='wenig', ai_experience='oft', quote_consent=True
+        )
+        self.assertTrue(first['quote_consent'])
+        self.lab.finish_plan(opted_in, {'plan': 'Plan', 'risks': ''})
+        self.lab.submit(opted_in, {'plan': 'Plan', 'risks': 'Risiken'})
+        second = self.lab.start(opted_in)
+        self.assertTrue(second['quote_consent'])
+
     def test_manual_ai_is_blocked_at_server(self):
         token = self.create()
         self.start(token)

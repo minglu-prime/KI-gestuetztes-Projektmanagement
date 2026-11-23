@@ -102,7 +102,7 @@ def make_server(lab, port=8874, frame_ancestors=()):
                 if path != '/api/reflect' and (not isinstance(expected, dict) or set(expected) != {'case_id', 'stage'}):
                     raise Problem('Fall- und Phasenkontext fehlt.')
                 if path == '/api/start':
-                    value = lab.start(token, payload.get('consent'), payload.get('pm_experience'), payload.get('ai_experience'), expected)
+                    value = lab.start(token, payload.get('consent'), payload.get('pm_experience'), payload.get('ai_experience'), expected, bool(payload.get('quote_consent')))
                 elif path == '/api/save':
                     value = lab.save(token, payload, expected)
                 elif path == '/api/submit':

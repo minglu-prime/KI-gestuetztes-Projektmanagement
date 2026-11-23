@@ -175,7 +175,7 @@ class Lab:
             state = {'schema_version': 1, 'participant': participant or 'PILOT-' + secrets.token_hex(3),
                      'pilot': bool(pilot), 'group': group, 'created_at': self.clock(),
                      'config': self.config(), 'materials': copy.deepcopy(self.materials), 'prompt': self.prompt,
-                     'consent_at': None, 'experience': {}, 'reflection': {}, 'events': [],
+                     'consent_at': None, 'quote_consent': False, 'experience': {}, 'reflection': {}, 'events': [],
                      'rounds': [{'case_id': c, 'condition': mode, 'stage': 'plan', 'rating_id': 'R-' + secrets.token_hex(12), 'status': 'ready', 'started_at': None,
                                  'ended_at': None, 'draft': {'plan': '', 'risks': ''}, 'final': None,
                                  'first_ai_draft': None, 'ai_calls': [], 'revisions': []}
@@ -234,7 +234,7 @@ class Lab:
         if expected is not None and expected != {'case_id': r['case_id'], 'stage': r['stage']}:
             raise Problem('Veraltete Anfrage: Fall oder Aufgabenphase hat sich geändert.', 409)
 
-    def start(self, token, consent=False, pm_experience='', ai_experience='', expected=None):
+    def start(self, token, consent=False, pm_experience='', ai_experience='', expected=None, quote_consent=False):
         with self.lock:
             state = self._load(token)
             target = next((r for r in state['rounds'] if r['status'] in ('active', 'ready')), None)
@@ -247,6 +247,7 @@ class Lab:
                 if pm_experience not in ('keine', 'wenig', 'viel') or ai_experience not in ('nie', 'selten', 'oft'):
                     raise Problem('Erfahrungsangaben auswählen.')
                 state['consent_at'] = self.clock()
+                state['quote_consent'] = bool(quote_consent)
                 state['experience'] = {'pm': pm_experience, 'ai': ai_experience}
             if not state['pilot']:
                 self._formal_ready()

@@ -49,7 +49,7 @@ Bitte vor Beginn ankreuzen. Die erste Erklärung ist nötig; die zweite ist frei
 - [ ] Ich habe die Teilnahmeinformation gelesen. Ich stimme zu, dass meine Antworten wie beschrieben gespeichert und ausgewertet werden und dass in der KI-Runde Fallmaterial, Entwurf und Frage an den genannten KI-Dienst gesendet werden.
 - [ ] Gekürzte, anonyme Zitate aus meiner Reflexion dürfen im Bericht stehen.
 
-Im KI-Lab steht die erste Erklärung als Häkchen vor dem Start. Die zweite fragt das Lab derzeit **nicht** ab. Die Gruppe entscheidet, ob sie auf Papier eingeholt oder im Lab ergänzt wird (Agenda M2).
+Im KI-Lab stehen beide Erklärungen als Häkchen vor dem Start (die erste als Pflicht, die zweite als freiwillige Angabe `quote_consent`).
 
 ---
 
