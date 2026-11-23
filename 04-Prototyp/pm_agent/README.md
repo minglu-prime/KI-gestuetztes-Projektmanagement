@@ -24,7 +24,8 @@ die Skriptdatei aus einem anderen Verzeichnis aufruft. Der obige Befehl verwende
 Projektordner für `uv` und die relative Datei `.env`.
 
 Das Menü links hat acht Einträge. Vorbereiten, Kontrolle und Info fassen mehrere Seiten
-zusammen: Sie stehen als Reiter oben auf der Seite (`ui.GROUPS`). Die Seiten:
+zusammen: Sie stehen als Reiter oben auf der Seite (`ui.GROUPS`), wobei der Eintrag der Gruppe
+im Menü hervorgehoben bleibt. Die Seiten:
 
 | Seite | Inhalt |
 |---|---|
@@ -35,14 +36,15 @@ zusammen: Sie stehen als Reiter oben auf der Seite (`ui.GROUPS`). Die Seiten:
 | Vorbereiten · Testplan | Der Agent entwirft Testfälle aus den Akzeptanzkriterien (feste IDs R1.1 …) und den Schnittstellen; Python prüft, dass jedes Kriterium einer Muss-Anforderung einen Testfall hat, und meldet Schnittstellen und Fehlercodes ohne Test; Freigabe, Markdown |
 | Umsetzen · Planung | Plan mit dem Agenten erstellen, prüfen, anpassen, exportieren, als Projekt übernehmen; je Projektwoche eine Demo, die Python gegen den Zeitplan prüft |
 | Umsetzen · Durchführung | Wer in den nächsten fünf Arbeitstagen womit beginnt (aus der Prognose); Status, Fertigdatum, Ist-Stunden und geschätzten Rest je Aufgabe erfassen, mit dem voraussichtlichen Ende je Aufgabe; der Agent schlägt Zusammenfassung und nächste Schritte vor; Statusbericht und Arbeitspaketbeschreibungen aus Vorlagen (`src/pm_agent/templates`) |
-| Umsetzen · Kontrolle · Test | Ergebnisse je Testfall eintragen; jeder fehlgeschlagene Fall braucht einen Fehler (Schwere, Ursache, Aufgabe); ein Fehler öffnet seine Aufgabe auf Knopfdruck wieder |
+| Umsetzen · Kontrolle · Test | Ergebnisse je Testfall eintragen; jeder fehlgeschlagene Fall braucht einen offenen Fehler (Schwere, Ursache, Aufgabe); ein Fehler öffnet seine Aufgabe auf Knopfdruck wieder, hält beim Beheben den Tag (`fixed_on`) fest und lässt sich wieder öffnen oder über „Eintrag“ ändern |
 | Umsetzen · Kontrolle | Wochen-Demos mit Rückblick (gezeigt?, was ging schief, Ursache, Maßnahme; offene Maßnahmen zum Abhaken); Plan/Ist-Vergleich, Verzug, Prognose des Endes (restliche Arbeit ab heute, mit den Aufgaben, die auf verspätete warten) und von dort der Weg zurück in die Planung: „Rest mit dem Agenten umplanen“ lädt die unfertigen Aufgaben als Plan ab heute; Earned Value nach der 0/100-Methode (Planwert, Fertigstellungswert, Ist-Stunden, SPI, CPI); Kosten bei gesetztem Stundensatz; der Agent bewertet den Stand und schlägt Gegenmaßnahmen vor, und wo eine Maßnahme Aufgaben umverteilt, rechnet Python ihre Wirkung auf die Prognose nach; Zeit und Token aller Agentenläufe; alles zusammen als Kontrollbericht aus einer Vorlage |
-| Umsetzen · Abschluss | Abnahme je Anforderung (Python schlägt aus Tests und Fehlern vor, die Projektleitung entscheidet; zurückgestellt nur mit Grund); Lessons Learned vom Agenten mit Bezug auf Fehler und Wochen; Abschlussbericht mit tatsächlichem Ende und den Aufgaben, die später fertig wurden als geplant. Reiter „Betrieb“ (optional): Betriebshandbuch je Baustein (Verantwortliche als Rolle, Bereitstellung, Überwachung, Rücknahme) und Störungen. Reiter „Nächster Durchlauf“: nächster Backlog mit Herkunft; ein neuer Durchlauf legt die Dateien unter `data/archiv/<Datum>` ab und beginnt ein Vorhaben mit dem Backlog |
+| Umsetzen · Abschluss | Abnahme je Anforderung (Python schlägt aus Tests und Fehlern vor, die Projektleitung entscheidet; zurückgestellt nur mit Grund); Lessons Learned vom Agenten mit Bezug auf Fehler und Wochen; Abschlussbericht mit tatsächlichem Ende und den Aufgaben, die später fertig wurden als geplant. Reiter „Betrieb“ (optional): Betriebshandbuch je Baustein (Verantwortliche als Rolle, Bereitstellung, Überwachung, Rücknahme) und Störungen (lassen sich als behoben markieren, wieder öffnen und über „Eintrag“ ändern). Reiter „Nächster Durchlauf“: nächster Backlog mit Herkunft; ein neuer Durchlauf legt die Dateien unter `data/archiv/<Datum>` ab und beginnt ein Vorhaben mit dem Backlog |
 | KI-Lab | startet den Studienserver aus `../ki_lab` und zeigt ihn eingebettet |
 | Info · Über uns, Impressum | Projektkontext; Impressumsangaben trägt das Team noch ein |
 
-Über jeder Seite einer Phase steht der Projektpfad Auftrag → Anforderungen → Entwurf →
-Planen → Ausführen → Prüfen: Was erledigt ist, trägt ein Häkchen, die aktuelle Seite ist umrandet. Eine
+Über jeder Seite einer Phase steht der Projektpfad mit allen neun Schritten (Projektauftrag →
+Anforderungen → Entwurf → Testplan → Planung → Durchführung → Test → Kontrolle → Abschluss):
+Was erledigt ist, trägt ein Häkchen, die aktuelle Seite ist umrandet. Eine
 Phase vor dem Plan, die nicht freigegeben ist (ein Entwurf, seit der Freigabe geändert, oder
 übersprungen, obwohl schon ein Projekt läuft), ist gestrichelt und sagt „nicht freigegeben“.
 Übersprungen werden darf sie: Die Planung arbeitet dann wie ohne Anforderungen bzw. ohne Entwurf. Mit einem übernommenen Projekt folgt eine
@@ -85,7 +87,7 @@ Sechs Schritte als Reiter:
    übernimmt die Tests“, „Was, wenn das Backend doppelt so lange dauert?“); der Agent ändert
    den Plan, Python prüft ihn und zeigt die Unterschiede zum bisherigen Plan, erst
    „Übernehmen“ macht ihn gültig. Von Hand: Tabelle ändern und erneut prüfen, ohne LLM.
-6. **Export**: Markdown oder CSV. Jeder Export wird mit Dauer und Änderungen in `logs/runs.csv`
+6. **Übernehmen**: Plan als Projekt übernehmen oder als Markdown bzw. CSV herunterladen. Jeder Export wird mit Dauer und Änderungen in `logs/runs.csv`
    vermerkt, als Datengrundlage für den Vorher-nachher-Vergleich. Die Datei wird nur
    fortgeschrieben, nie umgeschrieben: Passt sie nicht mehr (andere Spalten, von Hand oder
    in einem Tabellenprogramm verändert), wird sie unter `logs/runs-bis-<Zeit>.csv`
@@ -109,11 +111,13 @@ einer `AgentError` ab. Jeder Lauf wird in `logs/` protokolliert.
 | Agent | Aufruf | Werkzeuge | Die Prüfung verlangt |
 |---|---|---|---|
 | Planung | `run_planning(project, team)`; für Änderungen `run_replanning(project, team, plan, wish)`, gibt Plan und die Abwesenheiten aus dem Wunsch zurück | `check_plan`, `submit_plan`; beim Ändern auch `set_absence` (nur Personen aus dem Team, im Projektzeitraum; die Projektleitung übernimmt sie mit dem Plan ins Team) | einen Plan ohne Fehler; Warnungen (Überlastung, Deadline, kein Puffer, fehlende Skills) bleiben für die Projektleitung stehen |
-| Durchführung | `run_status_summary(tracking, today)` in `followup.py` | `submit_status` | einen nächsten Schritt für jede Aufgabe im Verzug, keinen für fertige Aufgaben |
-| Kontrolle | `run_control_report(tracking, today)` in `followup.py` | `submit_control` | eine Gegenmaßnahme für jede Aufgabe im Verzug; bei Verzug nicht die Bewertung „im Plan“ |
+| Durchführung | `run_status_summary(tracking, today)` in `followup.py` | `submit_status` | einen nächsten Schritt für jede Aufgabe im Verzug, keinen für fertige Aufgaben; liegt die Prognose nach der Deadline, das genaue Enddatum in der Zusammenfassung |
+| Kontrolle | `run_control_report(tracking, today)` in `followup.py` | `submit_control` | eine Gegenmaßnahme für jede Aufgabe im Verzug; bei Verzug oder einer Prognose nach der Deadline nicht die Bewertung „im Plan“ |
 | Projektauftrag | `run_charter(project)` in `lifecycle.py` | `submit_auftrag` | eindeutige IDs der Erfolgskriterien |
 | Anforderungen | `run_requirements(project, charter)` in `lifecycle.py` | `submit_anforderungen` | jedes Erfolgskriterium abgedeckt, nur bekannte genannt, eindeutige IDs, mindestens eine Muss-Anforderung |
 | Entwurf | `run_design(project, charter, requirements)` in `lifecycle.py` | `submit_entwurf` | bekannte Bausteine und Schnittstellen, jeder Schritt passt zum Vertrag, jede Schnittstelle in einem Ablauf, jede Muss-Anforderung mit Ablauf, eindeutige IDs |
+| Testplan | `run_cases(project, requirements, design)` in `lifecycle.py` | `submit_testplan` | jedes Akzeptanzkriterium einer Muss-Anforderung hat einen Testfall, nur bekannte Kriterien, Schnittstellen und Fehlercodes genannt, eindeutige IDs |
+| Lessons Learned | `run_lessons(tracking, today)` in `closing.py` | `submit_lessons` | jeder schwere Fehler und jede ausgefallene Demo kommt in mindestens einer Lehre vor, nur bekannte Bezüge genannt |
 
 Sind Anforderungen freigegeben, ordnet der Planungs-Agent jede Aufgabe ihnen zu
 (`requirement_ids`). `check_plan` meldet dann eine unbekannte Anforderung als Fehler und eine
