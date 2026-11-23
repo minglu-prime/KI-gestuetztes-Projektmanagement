@@ -508,6 +508,16 @@ def suggested_wishes(
             plan.model_copy(update={"tasks": reordered}), team, project, dates_only=True
         )
         if checked.end_date is not None and checked.end_date < result.end_date:
+            before = set(result.order[: result.order.index(critical.id)])
+            after = set(checked.order[checked.order.index(critical.id) + 1 :])
+            earlier = next(
+                (
+                    t
+                    for t in plan.tasks[:index]
+                    if owner[t.id] == owner[critical.id] and t.id in before & after
+                ),
+                earlier,
+            )
             wishes.append(
                 f"Zieh {critical.id} ({critical.title}) vor {earlier.id} ({earlier.title}): "
                 "Das verkürzt den Plan."

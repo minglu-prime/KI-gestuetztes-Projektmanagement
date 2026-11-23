@@ -63,7 +63,7 @@ zehn Phasen und wie sie zusammenhängen in `04-Prototyp/pm_agent/docs/lebenszykl
 - **Seiten.**
   - Neun Schritte, vom Projektauftrag bis zum Abschluss.
   - Das Menü hat acht Einträge: Startseite; Vorbereiten; Planung, Durchführung, Kontrolle, Abschluss; KI-Lab; Info.
-  - Die übrigen Seiten einer Gruppe sind im Menü verborgen (`st.Page(visibility="hidden")`) und erscheinen als Reiter oben auf der Seite (`ui.GROUPS`, `ui.group_tabs`):
+  - Die übrigen Seiten einer Gruppe sind im Menü verborgen (`st.Page(visibility="hidden")`) und erscheinen als Reiter oben auf der Seite (`ui.GROUPS`, `ui.group_tabs`), wobei der zugehörige Gruppeneintrag im Menü hervorgehoben bleibt:
     - Vorbereiten: Projektauftrag, Anforderungen, Entwurf, Testplan
     - Kontrolle: Test
     - Info: Impressum
@@ -74,7 +74,7 @@ zehn Phasen und wie sie zusammenhängen in `04-Prototyp/pm_agent/docs/lebenszykl
   - `forecast_verdict` nennt neben der Prognose auch Mehraufwand: Fertige Aufgaben mehr als `ui.COST_TOLERANCE` (10 %, Vorschlag) über Plan geben „Zu entscheiden“. Der CPI zählt Begonnenes als 0 und ist früh zu niedrig, deshalb nicht er (PR 82).
   - Der Abschluss zählt Lücken im Betriebshandbuch als Warnungen der Ergebniszeile; den neuen Durchlauf blockieren sie nicht (PR 82, 84).
   - In der Planung heißt Schritt 6 „Übernehmen“ (dort liegt „Plan als Projekt übernehmen“).
-  - Test: Ein fehlgeschlagener Fall mit nur behobenem Fehler bleibt ein Fehler, die Meldung sagt „Testfall wiederholen“ (PR 84). Fehler haben kein Datum; „wieder fehlgeschlagen“ und „noch nicht wiederholt“ sind nicht zu trennen.
+  - Test: Ein fehlgeschlagener Fall mit nur behobenem Fehler bleibt ein Fehler (PR 84). Fehler haben ein Behebungsdatum (`fixed_on`); damit trennt die Prüfung „noch nicht wiederholt“ (`Testfall wiederholen`) von „an einem späteren Tag wieder fehlgeschlagen“ (`neuen Fehler erfassen oder Fehler wieder öffnen`), am selben Tag nennt die Meldung beides. Bestehende Fehler und Störungen lassen sich im Formular auswählen, ändern und wieder öffnen.
   - Eine Quellregel verlangt sie überall, wo `messages(` steht.
   - Die Runden eines Laufs stehen nur noch im Statuskasten (nach Erfolg zugeklappt).
   - Markdown-Vorschauen unter Downloads sind entfernt (Quellregel).
@@ -152,17 +152,15 @@ nur auf Wort der Projektleitung). Chat Completions nimmt bei diesem Modell Werkz
 2. **Teilnahmeinformation fertig machen (#8).** Die Einwilligungen nennen seit PR 77 den richtigen Dienst. In `03-Experiment/teilnahmeinformation.md` fehlen noch Kontakt, Löschdatum und Name des Dienstes. Die Einwilligung zu Zitaten fragt das Lab nicht ab: auf Papier einholen oder im Lab ergänzen (Agenda M2).
 3. **Mehrere Läufe je Agent.** Ein Lauf je Agent und Tag reicht nicht für Aussagen über Runden, Token oder Dauer. `03-Experiment/agentenlauf-2026-11-21/run_agents.py` wiederholt den Lauf (kostet Kontingent, nur auf Wort der Projektleitung).
 4. **Agenten fachlich.**
-   - Bei einer Abwesenheit trägt die Umplanung sie ein, verteilt aber keine Aufgabe um: Das Ende rückt hinter die Deadline (21.11.: 24.12.2026). Prompt `replanning.md` oder eine Warnung prüfen.
-   - Die neue Zusammenfassung der Durchführung nennt das Ende nur als „nach der Deadline“, ohne Datum.
+   - Bei einer Abwesenheit trägt die Umplanung sie ein, verteilt aber keine Aufgabe um: Das Ende rückt hinter die Deadline (21.11.: 24.12.2026). `replanning.md` verlangt jetzt die Umverteilung blockierter Aufgaben (noch nicht live geprüft).
+   - Die neue Zusammenfassung der Durchführung nannte das Ende nur als „nach der Deadline“, ohne Datum. `check_summary` verlangt jetzt das Prognosedatum, wenn das Ende nach der Deadline liegt (noch nicht live geprüft).
 5. **Einen Stand festhalten.** Es gibt kein Release. Ein `v0.1` mit „was geht, mit welchem Modell geprüft“ (öffentlich: nur auf Wort der Projektleitung).
 6. **Issues pflegen.** Zuständige eintragen; die Meilenstein-Issues in Aufgaben für einen Tag zerlegen.
 7. **Code, nicht dringend.**
    - `views/planung.py` (rund 1 200 Zeilen) teilen, wenn dort wieder gearbeitet wird.
    - Englische Kommentare und Docstrings sagen noch „Claude“.
-   - Auf einer verborgenen Seite (z. B. Entwurf) ist im Menü kein Eintrag hervorgehoben.
    - Firefox und WebKit nach den Menü-Änderungen erneut prüfen, gern in der CI.
    - `tracking.LOG_DIR` und `workbench.LOG_DIR` sind Kopien von `agent.LOG_DIR`: auf einen Namen zurückführen (ändert die Test-Fixtures).
-   - Fehler bekommen ein Datum „behoben am“, damit der Test „wieder fehlgeschlagen“ von „noch nicht wiederholt“ trennt (ändert das Datenformat; Entscheidung der Projektleitung).
    - Ein direkter Aufruf einer Unterseite (etwa `/planung`) erzeugt zwei 404 auf `/planung/_stcore/…` in der Konsole; die Seite lädt normal. Vermutlich Streamlit selbst, nicht geprüft.
 8. **Betrieb im Netz.** Plan in `04-Prototyp/pm_agent/docs/betrieb-cloud.md`, Weg A (Streamlit-Container, Supabase). Vorher klären, Antwort steht aus:
    - Darf der KI:connect-Schlüssel auf einem Server für die Gruppe genutzt werden, und ist die API von außerhalb des Hochschulnetzes erreichbar? Ansprechpartner: KI:connect-Verantwortliche der HSBI, sonst `kiconnect@cls.rwth-aachen.de`.
