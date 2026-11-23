@@ -161,6 +161,7 @@ class Defect(BaseModel):
     cause: str
     task_id: str | None = None
     status: Literal["offen", "behoben"] = "offen"
+    fixed_on: date | None = None
 
 
 class Signoff(BaseModel):
@@ -572,6 +573,8 @@ def record_defect(tracking: Tracking, defect: Defect) -> Tracking:
     if not defect.id:
         numbers = [int(d.id[1:]) for d in tracking.defects if d.id[1:].isdigit()]
         defect = defect.model_copy(update={"id": f"F{max(numbers, default=0) + 1}"})
+    if defect.status == "offen" and defect.fixed_on is not None:
+        defect = defect.model_copy(update={"fixed_on": None})
     others = [d for d in tracking.defects if d.id != defect.id]
     return tracking.model_copy(update={"defects": [*others, defect]})
 
@@ -603,10 +606,25 @@ def check_results(tracking: Tracking, plan: CasePlan) -> RetroCheck:
     for c in plan.cases:
         if c.id not in latest or latest[c.id].result != "fehlgeschlagen" or c.id in found:
             continue
-        # A fixed defect does not count: the case may fail again after the fix. Defects have
-        # no date, so "not tested again yet" looks the same; the message says what to do.
-        fixed = [d.id for d in tracking.defects if d.case_id == c.id]
-        if fixed:
+        # A fixed defect does not count: the case may fail again after the fix. With fixed_on
+        # set, "not tested again since the fix" and "failed again after the fix" are distinct.
+        fixed_defects = [d for d in tracking.defects if d.case_id == c.id]
+        fixed = [d.id for d in fixed_defects]
+        fixed_dates = [d.fixed_on for d in fixed_defects if d.fixed_on is not None]
+        if fixed and len(fixed_dates) == len(fixed_defects):
+            last_fix = max(fixed_dates)
+            if latest[c.id].on > last_fix:
+                errors.append(
+                    f"Testfall '{c.id}' ist am {_date(latest[c.id].on)} nach der Behebung von "
+                    f"{', '.join(fixed)} (am {_date(last_fix)}) wieder fehlgeschlagen: neuen "
+                    "Fehler erfassen oder Fehler wieder öffnen"
+                )
+            else:
+                errors.append(
+                    f"Testfall '{c.id}' ist fehlgeschlagen, sein Fehler {', '.join(fixed)} ist "
+                    f"seit {_date(last_fix)} behoben: Testfall wiederholen"
+                )
+        elif fixed:
             errors.append(
                 f"Testfall '{c.id}' ist fehlgeschlagen, sein Fehler {', '.join(fixed)} ist "
                 "behoben: Testfall wiederholen. Schlägt er wieder fehl, einen neuen Fehler "

@@ -49,7 +49,7 @@ function material(c) { return `<section class="card materials"><p class="card-nu
 function work() {
   const r = active(), index = state.rounds.indexOf(r);
   nav(index+1);
-  $('app').innerHTML = `<section class="work-head"><div><p class="eyebrow">Runde ${index+1} / 2 · ${r.condition === 'ai' ? 'KI-Assistenz' : 'Manuelle Bearbeitung'}</p><h1>${esc(state.case.title)}</h1><p class="small muted">Beide Aufgaben innerhalb einer Runde bearbeiten. Ihre Entscheidung zählt.</p></div><div class="timer"><span id="clock"></span><small>verbleibende Zeit</small></div></section><div class="workspace">${material(state.case)}<div><section class="card editor"><div class="toolbar"><h2>Ihr Arbeitsergebnis</h2><span class="badge">${r.condition === 'ai' ? 'MENSCH + KI' : 'MANUELL'}</span></div><p class="small muted">Texte können Tabellenzeilen enthalten. Alle Zeiten als T1, T2 … angeben.</p><label for="plan">01 · Basisplan & Meilensteine</label><textarea id="plan" maxlength="50000" placeholder="Paket | Start | Ende | Verantwortlich\n…\nMeilensteine: …"></textarea><label for="risks">02 · Risiken & angepasster Plan</label><p class="small muted">${r.stage==='plan' ? 'Nach verbindlichem Abschluss des Basisplans werden Ausgangsplan und Änderungen freigegeben. Die Zeit läuft weiter.' : 'Ihr Basisplan ist gesperrt. Verwenden Sie für diese Aufgabe den bereitgestellten Ausgangsplan.'}</p><textarea id="risks" ${r.stage==='plan' ? 'disabled' : ''} maxlength="50000" placeholder="Risiko | Beleg | Priorität | Auswirkung | Maßnahme | Verantwortlich\n…\nAktualisierte Termine / Expressentscheidung / Eskalation: …"></textarea><div class="actions"><button id="save">Jetzt speichern</button><button class="primary" id="submit">${r.stage==='plan' ? 'Basisplan abschließen →' : 'Runde verbindlich abgeben →'}</button></div><p id="save-state" class="save-state" role="status">Auf dem Server gespeichert.</p></section>${r.condition==='ai' ? `<section class="card ai-panel"><p class="card-number">ASSISTENZ · ENTSCHEIDUNG BLEIBT BEI IHNEN</p><h2>Eine zweite Perspektive</h2><p class="small muted">Fallmaterialien und Ihr gespeicherter Entwurf werden mitgesendet. Vorschläge prüfen und selbst in Ihre Antwort übertragen.</p><label for="question">Ihre Frage an die KI</label><textarea id="question" maxlength="4000" placeholder="Prüfe meinen Plan auf Abhängigkeiten und Ressourcenkonflikte."></textarea><div class="actions"><button class="primary" id="ask">KI fragen</button><span class="small" id="ai-status" role="status"></span></div><div id="chat"></div></section>` : `<div class="note">Manuelle Bedingung: KI-Funktionen sind für diese Runde serverseitig gesperrt. Nutzen Sie ausschließlich die bereitgestellten Materialien.</div>`}</div></div>`;
+  $('app').innerHTML = `<section class="work-head"><div><p class="eyebrow">Runde ${index+1} / 2 · ${r.condition === 'ai' ? 'KI-Assistenz' : 'Manuelle Bearbeitung'}</p><h1>${esc(state.case.title)}</h1><p class="small muted">Beide Aufgaben innerhalb einer Runde bearbeiten. Ihre Entscheidung zählt.</p></div><div class="timer"><span id="clock"></span><small>verbleibende Zeit</small></div></section><div class="workspace">${material(state.case)}<div><section class="card editor"><div class="toolbar"><h2>Ihr Arbeitsergebnis</h2><span class="badge">${r.condition === 'ai' ? 'MENSCH + KI' : 'MANUELL'}</span></div><p class="small muted">Texte können Tabellenzeilen enthalten. Alle Zeiten als T1, T2 … angeben.</p><label for="plan">01 · Basisplan & Meilensteine</label><textarea id="plan" maxlength="50000" placeholder="Paket | Start | Ende | Verantwortlich\n…\nMeilensteine: …"></textarea><label for="risks">02 · Risiken & angepasster Plan</label><p class="small muted">${r.stage==='plan' ? 'Nach verbindlichem Abschluss des Basisplans werden Ausgangsplan und Änderungen freigegeben. Die Zeit läuft weiter.' : 'Ihr Basisplan ist gesperrt. Verwenden Sie für diese Aufgabe den bereitgestellten Ausgangsplan.'}</p><textarea id="risks" ${r.stage==='plan' ? 'disabled' : ''} maxlength="50000" placeholder="Risiko | Beleg | Priorität | Auswirkung | Maßnahme | Verantwortlich\n…\nAktualisierte Termine / Expressentscheidung / Eskalation: …"></textarea><div class="actions"><button id="save">Jetzt speichern</button><button class="primary" id="submit">${r.stage==='plan' ? 'Basisplan abschließen →' : 'Runde verbindlich abgeben →'}</button></div><p id="save-state" class="save-state" role="status">Auf dem Server gespeichert.</p></section>${r.condition==='ai' ? `<section class="card ai-panel"><p class="card-number">ASSISTENZ · ENTSCHEIDUNG BLEIBT BEI IHNEN</p><h2>Eine zweite Perspektive</h2><p class="small muted">Fallmaterialien und Ihr gespeicherter Entwurf werden mitgesendet. Vorschläge prüfen und selbst in Ihre Antwort übertragen.</p><label id="question-label" for="question">Ihre Frage an die KI</label><textarea id="question" maxlength="4000" placeholder="Prüfe meinen Plan auf Abhängigkeiten und Ressourcenkonflikte."></textarea><div class="actions"><button class="primary" id="ask">KI fragen</button><span class="small" id="ai-status" role="status"></span></div><div id="chat"></div></section>` : `<div class="note">Manuelle Bedingung: KI-Funktionen sind für diese Runde serverseitig gesperrt. Nutzen Sie ausschließlich die bereitgestellten Materialien.</div>`}</div></div>`;
   let draft = r.draft;
   const backup = sessionStorage.getItem(backupKey());
   if (backup) { try { draft = JSON.parse(backup); dirty=true; } catch { /* retain server draft */ } }
@@ -70,14 +70,19 @@ function work() {
     finally { if ($('submit') && generation===currentGeneration) { $('submit').disabled=false; $('plan').disabled=active()?.stage==='risks'; $('risks').disabled=active()?.stage==='plan'; } }
   });
   bind('ask', async () => {
-    const question=$('question').value, currentGeneration=generation, requestContext=context(), requestToken=token;
-    $('ask').disabled=true; $('ai-status').textContent='Anfrage läuft …';
+    const question=$('question').value, currentGeneration=generation, requestContext=context(), requestToken=token, started=Date.now();
+    $('ask').disabled=true; $('ai-status').textContent='Anfrage läuft (0 s) …';
+    const waitTimer=setInterval(() => {
+      if (generation===currentGeneration && $('ai-status')) $('ai-status').textContent=`Anfrage läuft (${Math.floor((Date.now()-started)/1000)} s) …`;
+      else clearInterval(waitTimer);
+    }, 1000);
     try { await flush(); await api('ai',{question,_context:requestContext},requestToken); if(generation===currentGeneration && $('question')) $('question').value=''; }
     catch(err) { if(generation===currentGeneration) error(err.message); }
     finally {
+      clearInterval(waitTimer);
       if(generation===currentGeneration) {
         const next=await api('session',undefined,requestToken);
-        if(generation===currentGeneration) { state=next; if (!active()) render(); else { renderChat(); if($('ask')) $('ask').disabled=false; if($('ai-status')) $('ai-status').textContent=''; } }
+        if(generation===currentGeneration) { state=next; if (!active()) render(); else { renderChat(); if($('ai-status')) $('ai-status').textContent=''; } }
       }
     }
   });
@@ -99,7 +104,10 @@ function flush() {
 }
 function renderChat() {
   if (!$('chat')) return;
-  $('chat').innerHTML=active().ai_calls.map(c=>`<div class="chat-entry"><strong>Ihre Frage</strong><p>${esc(c.question)}</p><strong>${c.status==='completed' ? 'KI-Vorschlag' : 'Status: '+esc(c.status)}</strong><pre>${esc(c.status==='completed' ? c.answer : c.error || 'Anfrage läuft oder wurde unterbrochen. Nach 90 Sekunden ist ein neuer Versuch möglich.')}</pre></div>`).join('');
+  const calls = active().ai_calls, left = Math.max(0, 12 - calls.length);
+  if ($('question-label')) $('question-label').textContent = `Ihre Frage an die KI (${calls.length} / 12 genutzt)`;
+  if ($('ask')) { $('ask').textContent = `KI fragen (${left} frei)`; $('ask').disabled = left === 0; }
+  $('chat').innerHTML=calls.map(c=>`<div class="chat-entry"><strong>Ihre Frage</strong><p>${esc(c.question)}</p><strong>${c.status==='completed' ? 'KI-Vorschlag' : 'Status: '+esc(c.status)}</strong><pre>${esc(c.status==='completed' ? c.answer : c.error || 'Anfrage läuft oder wurde unterbrochen. Nach 90 Sekunden ist ein neuer Versuch möglich.')}</pre></div>`).join('');
 }
 function startClock() {
   deadline=Date.now() + state.remaining_seconds*1000;

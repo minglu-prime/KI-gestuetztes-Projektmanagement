@@ -120,6 +120,7 @@ if "closing_error" in state:
 
 def on_incident() -> None:
     incident = Incident(
+        id=state.get("incident_id", ""),
         on=date.today(),
         component_id=state.incident_component,
         impact=state.incident_impact,
@@ -130,7 +131,7 @@ def on_incident() -> None:
         state.closing_error = "Beschreib die Auswirkung der Störung."
         return
     if change(lambda t: closing.record_incident(t, incident, design)):
-        for key in ["incident_impact", "incident_cause", "incident_measure"]:
+        for key in ["incident_id", "incident_impact", "incident_cause", "incident_measure"]:
             state[key] = ""
 
 
@@ -140,6 +141,14 @@ def on_fixed(incident_id: str) -> None:
         return closing.record_incident(t, incident.model_copy(update={"status": "behoben"}), design)
 
     change(fix)
+
+
+def on_unfix(incident_id: str) -> None:
+    def unfix(t):
+        incident = next(i for i in t.incidents if i.id == incident_id)
+        return closing.record_incident(t, incident.model_copy(update={"status": "offen"}), design)
+
+    change(unfix)
 
 
 # The result on top: can the project be closed? The handbook in the Betrieb tab counts as
@@ -276,6 +285,16 @@ with operations_tab:
     with st.container(border=True, key="panel-incidents"):
         heading("warning", "Störungen", du="erfasst")
         if design is not None:
+            incidents_by_id = {i.id: i for i in tracking.incidents}
+            if incidents_by_id:
+                st.selectbox(
+                    "Eintrag",
+                    ["", *incidents_by_id],
+                    format_func=lambda i: (
+                        f"{i} ändern ({incidents_by_id[i].impact})" if i else "Neue Störung"
+                    ),
+                    key="incident_id",
+                )
             names = {c.id: c.name for c in design.components}
             st.selectbox(
                 "Baustein",
@@ -293,6 +312,14 @@ with operations_tab:
                 key=f"incident_fixed_{incident.id}",
                 icon=":material/check:",
                 on_click=on_fixed,
+                args=(incident.id,),
+            )
+        for incident in [i for i in tracking.incidents if i.status == "behoben"]:
+            st.button(
+                f"{incident.id}: wieder öffnen",
+                key=f"incident_unfix_{incident.id}",
+                icon=":material/undo:",
+                on_click=on_unfix,
                 args=(incident.id,),
             )
         if tracking.incidents:

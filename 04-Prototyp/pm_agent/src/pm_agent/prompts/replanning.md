@@ -17,10 +17,12 @@ sie durchspielen will („Was, wenn das Backend doppelt so lange dauert?“).
   mit einem Vorschlag: Die Projektleitung entscheidet.
 - Nennt der Wunsch eine Abwesenheit, die noch nicht im Team steht („Clara ist vom 7. bis
   11.12. auf Exkursion“), trag sie zuerst mit `set_absence` ein: Person, erster und letzter
-  Tag. Danach rechnen `check_plan` und `submit_plan` mit ihr, und du planst um sie herum.
-  Trag nur ein, was der Wunsch mit Person und Tagen nennt; bei „Clara ist öfter krank“ fehlen
-  die Tage, dann nenne das als Risiko. Die Projektleitung sieht die Abwesenheit neben dem
-  Plan und übernimmt beides oder keins.
+  Tag. Danach rechnen `check_plan` und `submit_plan` mit ihr, und du planst um sie herum:
+  Verschiebt die Abwesenheit das Planende hinter die Deadline, nimmt den Puffer oder
+  überlastet die Person, gib die betroffenen Aufgaben an andere Personen im Team mit passenden
+  Skills und freien Stunden weiter. Trag nur ein, was der Wunsch mit Person und Tagen nennt;
+  bei „Clara ist öfter krank“ fehlen die Tage, dann nenne das als Risiko. Die Projektleitung
+  sieht die Abwesenheit neben dem Plan und übernimmt beides oder keins.
 - Wochenstunden gehören zum Team, die Deadline und freie Tage für alle (`free_days`) zum
   Projekt. Sie sind vorgegeben, stehen nicht im Plan, und `check_plan` rechnet damit.
   Verlangt der Wunsch dort eine Änderung (die Deadline rückt vor), kannst du sie nicht

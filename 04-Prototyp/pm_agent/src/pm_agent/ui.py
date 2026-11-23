@@ -276,15 +276,24 @@ GROUPS = {
 
 def group_tabs(page: str) -> None:
     """The pages of the group `page` belongs to, as a row of tabs; nothing outside a group.
-    The others are links, this page is marked: a link to itself would only reload it."""
+    The others are links, this page is marked: a link to itself would only reload it. On a
+    hidden page of the group, the group's entry in the sidebar menu is highlighted too."""
     group = next((pages for pages in GROUPS.values() if page in dict(pages)), None)
     if group is None:
         return
+    head = group[0][0]
     with st.container(horizontal=True, gap="small", key="group-tabs"):
         for slug, label in group:
             if slug == page:
+                sidebar = (
+                    f'<style>[data-testid="stSidebarNavLink"][href$="/{head}"] '
+                    "{ background-color: var(--mint); font-weight: 600; }</style>"
+                    if slug != head
+                    else ""
+                )
                 st.html(
-                    f'<span class="group-tab here" aria-current="page">{escape(label)}</span>',
+                    f'{sidebar}<span class="group-tab here" aria-current="page">'
+                    f"{escape(label)}</span>",
                     width="content",
                 )
             else:

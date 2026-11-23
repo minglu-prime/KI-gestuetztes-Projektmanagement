@@ -613,6 +613,31 @@ def test_an_uneven_load_suggests_moving_work_and_a_broken_plan_suggests_nothing(
     assert suggested_wishes(broken, TEAM, check_plan(broken, TEAM, PROJECT), PROJECT) == []
 
 
+def test_a_non_critical_task_blocking_a_critical_one_suggests_reordering():
+    # Anna does C (8 h, no followers) before A (8 h), which Ben's D (16 h) waits for.
+    # Starting with A lets Ben work while Anna does C and finishes a day earlier.
+    ben = Member(name="Ben", skills={"SQL": 3}, hours_per_week=40)
+    team = [Member(name="Anna", skills={"SQL": 3}, hours_per_week=40), ben]
+    plan = Plan.model_validate(
+        {
+            "tasks": [
+                {"id": "C", "title": "Doku", "estimate_hours": 8},
+                {"id": "A", "title": "Datenmodell", "estimate_hours": 8},
+                {"id": "D", "title": "Frontend", "estimate_hours": 16, "depends_on": ["A"]},
+            ],
+            "assignments": [
+                {"task_id": "C", "member": "Anna", "reason": "r"},
+                {"task_id": "A", "member": "Anna", "reason": "r"},
+                {"task_id": "D", "member": "Ben", "reason": "r"},
+            ],
+        }
+    )
+    result = check_plan(plan, team, PROJECT)
+    assert "Zieh A (Datenmodell) vor C (Doku): Das verkürzt den Plan." in suggested_wishes(
+        plan, team, result, PROJECT
+    )
+
+
 def test_the_table_gives_a_plan_back_in_its_own_form():
     # Claude may list the assignments in another order than the tasks. The table has one row
     # per task, so they come back in task order: the same plan, written differently.

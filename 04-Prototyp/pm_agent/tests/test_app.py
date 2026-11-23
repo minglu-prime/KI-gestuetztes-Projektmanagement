@@ -1102,6 +1102,7 @@ def test_a_page_of_a_group_links_the_other_pages_of_its_group_as_tabs(site):
         assert [link.proto.page for link in at.page_link][: len(others)] == others, path
         tabs = next(h.value for h in at.html if 'class="group-tab here"' in h.value)
         assert f'aria-current="page">{here}<' in tabs, path
+        assert f'[data-testid="stSidebarNavLink"][href$="/{others[0]}"]' in tabs, path
     # A page outside the groups has no tabs.
     at = site.switch_page(PLANUNG).run()
     assert not any('class="group-tab' in h.value for h in at.html)
@@ -2258,6 +2259,24 @@ def test_a_failed_case_needs_a_defect_which_can_reopen_its_task(tracked):
     button(at, "F1: behoben").click()
     at = at.run()
     assert tracking.load().defects[0].status == "behoben"
+    assert tracking.load().defects[0].fixed_on == date.today()
+
+    # A fixed defect can be reopened, and an existing defect can be edited in place.
+    button(at, "F1: wieder öffnen").click()
+    at = at.run()
+    assert tracking.load().defects[0].status == "offen"
+    assert tracking.load().defects[0].fixed_on is None
+    at.selectbox(key="defect_id").set_value("F1").run()
+    at.radio(key="defect_severity").set_value("leicht").run()
+    at.text_input(key="defect_cause").input("Nur Tippfehler").run()
+    button(at, "Fehler erfassen").click()
+    at = at.run()
+    (edited_defect,) = tracking.load().defects
+    assert (edited_defect.id, edited_defect.severity, edited_defect.cause) == (
+        "F1",
+        "leicht",
+        "Nur Tippfehler",
+    )
 
 
 def test_without_a_test_plan_the_test_page_leads_to_it(tracked):
@@ -2382,6 +2401,15 @@ def test_the_operations_page_checks_the_handbook_and_records_incidents(tracked):
     button(at, "ST1: behoben").click()
     at = at.run()
     assert tracking.load().incidents[0].status == "behoben"
+    button(at, "ST1: wieder öffnen").click()
+    at = at.run()
+    assert tracking.load().incidents[0].status == "offen"
+    at.selectbox(key="incident_id").set_value("ST1").run()
+    at.text_input(key="incident_impact").input("Buchen langsam").run()
+    button(at, "Störung erfassen").click()
+    at = at.run()
+    (edited_incident,) = tracking.load().incidents
+    assert (edited_incident.id, edited_incident.impact) == ("ST1", "Buchen langsam")
 
 
 def test_a_new_run_starts_from_the_backlog(site, monkeypatch, tmp_path):
