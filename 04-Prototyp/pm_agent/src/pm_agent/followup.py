@@ -27,7 +27,6 @@ from pm_agent.tracking import (
     requirement_progress,
     signed_hours,
 )
-from pm_agent.workbench import _date
 
 
 def run_status_summary(
@@ -94,7 +93,7 @@ def check_summary(
         if t.id not in covered
     ]
     if outlook is not None and outlook.end is not None and outlook.deadline_gap > 0:
-        end = _date(outlook.end)
+        end = as_shown(outlook.end)
         if end not in summary.summary:
             errors.append(
                 f"Die Prognose endet nach der Deadline am {end}, die Zusammenfassung nennt "
