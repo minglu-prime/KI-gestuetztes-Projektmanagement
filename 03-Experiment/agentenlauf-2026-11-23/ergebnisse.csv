@@ -1,0 +1,7 @@
+lauf,agent,modell,ergebnis,sekunden,runden,abgelehnt,abgelehnt_zu_lang,eingabe_token,ausgabe_token,freitexte,freitext_zeichen,freitext_max,ueber_grenze,planende,fehler,warnungen
+23.11.,durchfuehrung,gpt-6-sol,ok,9.2,1,0,0,5968,694,9,1095,265,0,,,
+23.11.,durchfuehrung,gpt-6-sol,ok,10.1,1,0,0,5968,925,9,1081,280,0,,,
+23.11.,durchfuehrung,gpt-6-sol,ok,8.8,1,0,0,5968,865,9,1096,267,0,,,
+23.11.,umplanung_abwesenheit,gpt-6-sol,ok,79.7,4,0,0,52923,9121,40,3362,127,0,2026-12-24,0,3
+23.11.,umplanung_abwesenheit,gpt-6-sol,ok,111.6,6,0,0,96238,14507,40,3471,129,0,2026-12-18,0,4
+23.11.,umplanung_abwesenheit,gpt-6-sol,ok,65.3,4,0,0,52126,8601,40,3462,127,0,2026-12-18,0,4
