@@ -16,20 +16,35 @@
   --paper: #fbfcf8;
   --lift: 0 10px 24px -16px rgba(24, 53, 45, 0.42);
   --soft: 0 1px 2px rgba(24, 53, 45, 0.04), 0 8px 24px -20px rgba(24, 53, 45, 0.3);
+  /* Motion. One curve for everything that arrives or settles: fast at first, soft at the
+     end. Durations by how often a thing happens: what the pointer does all the time is the
+     fastest, a page change still brief. A new part travels a few pixels up into place: it
+     comes from just below, where the page grows. */
   --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --press: 70ms; /* a button gives way under the pointer */
+  --hover: 140ms; /* lift on hover, and back */
+  --state: 200ms; /* a chip, tab or verdict changes its state */
+  --enter: 260ms; /* a message or a panel appears */
+  --page: 320ms; /* a page or a tab of steps */
+  --rise: 4px;
+  --lift-y: -1px; /* a button under the pointer */
+  --lift-y-card: -2px; /* a card or tile under the pointer */
+  --pushed: 0.98; /* a pressed button */
+  --nudge: 4px; /* the arrow of a card, towards the page it opens */
 }
 
 /* ---- Motion ---------------------------------------------------------------------------- */
 
 @keyframes rise {
-  from { opacity: 0; transform: translateY(6px); }
+  from { opacity: 0; transform: translateY(var(--rise)); }
   to { opacity: 1; transform: none; }
 }
 @keyframes fade {
   from { opacity: 0; }
   to { opacity: 1; }
 }
-/* One node of the hero diagram after the other lights up: propose, check, decide. */
+/* One node of the hero diagram after the other lights up: propose, check, decide. Once,
+   when the Startseite opens: it shows the order, then the page is still. */
 @keyframes step {
   0%, 28%, 100% { background: #f8faf3; border-color: #b7c9b2; box-shadow: none; }
   6%, 22% { background: #fff; border-color: var(--green); box-shadow: var(--lift); }
@@ -40,11 +55,16 @@
    parts of a page top first, so they already come in one after the other. No delay by
    position: Streamlit inserts parts while others still run, an :nth-child delay then
    changes mid-animation and the part jumps back (measured: opacity 0.35 to 0.11). */
-[class*="st-key-page-"] > * { animation: rise 0.55s var(--ease) both; }
+[class*="st-key-page-"] > * { animation: rise var(--page) var(--ease) both; }
+/* A tab of steps or an opened detail: its content is there at once, it only fades in. */
 [data-testid="stTabPanel"],
-[data-testid="stExpanderDetails"] { animation: fade 0.3s ease-out both; }
-/* A message that appears after a click (saved, rejected) eases in instead of jumping. */
-[data-testid="stAlert"] { animation: rise 0.35s var(--ease) both; }
+[data-testid="stExpanderDetails"] { animation: fade var(--state) var(--ease) both; }
+/* A message after a click (saved, rejected) and a new turn of the conversation with the
+   agent rise into place instead of jumping in. */
+[data-testid="stAlert"],
+[data-testid="stChatMessage"] { animation: rise var(--enter) var(--ease) both; }
+/* A verdict that changes after a save is a new line: it fades in where the old one stood. */
+.verdict { animation: fade var(--state) var(--ease) both; }
 
 /* ---- Top bar --------------------------------------------------------------------------- */
 
@@ -127,11 +147,9 @@
 .stFormSubmitButton > button,
 .stLinkButton > a {
   font-weight: 600;
-  transition:
-    transform 0.15s var(--ease),
-    box-shadow 0.15s var(--ease),
-    background-color 0.15s,
-    border-color 0.15s;
+  transition-property: transform, box-shadow, background-color, border-color, color;
+  transition-duration: var(--hover);
+  transition-timing-function: var(--ease);
 }
 .stButton > button:hover:not(:disabled),
 .stDownloadButton > button:hover:not(:disabled),
@@ -139,14 +157,15 @@
 .stLinkButton > a:hover {
   border-color: var(--line-strong);
   box-shadow: var(--soft);
-  transform: translateY(-1px);
+  transform: translateY(var(--lift-y));
 }
 .stButton > button:active:not(:disabled),
 .stDownloadButton > button:active:not(:disabled),
 .stFormSubmitButton > button:active:not(:disabled),
 .stLinkButton > a:active {
   box-shadow: none;
-  transform: none;
+  transform: scale(var(--pushed));
+  transition-duration: var(--press); /* gives way at once, comes back softly */
 }
 .stButton > button[kind="primary"]:hover:not(:disabled),
 .stFormSubmitButton > button[kind="primaryFormSubmit"]:hover:not(:disabled) {
@@ -189,10 +208,10 @@
   padding: 16px;
   color: var(--ink);
   font-size: 13px;
-  animation: step 7.5s ease-in-out infinite;
+  animation: step 7.5s ease-in-out 0.4s 1;
 }
-.flow-node:nth-child(2) { animation-delay: 2.5s; }
-.flow-node:nth-child(3) { animation-delay: 5s; }
+.flow-node:nth-child(2) { animation-delay: 2.9s; }
+.flow-node:nth-child(3) { animation-delay: 5.4s; }
 .flow-node strong {
   display: block;
   font: normal 23px Georgia, serif;
@@ -209,15 +228,25 @@
 [class*="st-key-card-"] {
   background: #fff;
   border-radius: 12px;
-  transition:
-    transform 0.2s var(--ease),
-    box-shadow 0.2s var(--ease),
-    border-color 0.2s;
 }
-[class*="st-key-card-"]:hover {
+/* A card or tile that opens a page lifts under the pointer and gives way when pressed, like
+   a button: the same curve, a little more travel for the larger surface. */
+[class*="st-key-card-"],
+[class*="st-key-tile-"] {
+  transition-property: transform, box-shadow, border-color;
+  transition-duration: var(--hover);
+  transition-timing-function: var(--ease);
+}
+[class*="st-key-card-"]:hover,
+[class*="st-key-tile-"]:hover {
   border-color: var(--line-strong);
   box-shadow: var(--lift);
-  transform: translateY(-2px);
+  transform: translateY(var(--lift-y-card));
+}
+[class*="st-key-tile-"]:active {
+  box-shadow: none;
+  transform: scale(var(--pushed));
+  transition-duration: var(--press);
 }
 .st-key-card-lab { background: var(--sage); }
 /* The eleven steps of the Startseite in even columns; the whole tile opens its page. */
@@ -232,15 +261,6 @@
   gap: 2px;
   background: #fff;
   border-radius: 12px;
-  transition:
-    transform 0.2s var(--ease),
-    box-shadow 0.2s var(--ease),
-    border-color 0.2s;
-}
-[class*="st-key-tile-"]:hover {
-  border-color: var(--line-strong);
-  box-shadow: var(--lift);
-  transform: translateY(-2px);
 }
 [class*="st-key-tile-"] [data-testid="stPageLink-NavLink"] {
   padding: 0;
@@ -270,10 +290,10 @@
 [class*="st-key-card-"] [data-testid="stPageLink-NavLink"] p { font-weight: 600; }
 /* The arrow moves towards the page the card opens. */
 [class*="st-key-card-"] [data-testid="stPageLink-NavLink"] [data-testid="stIconMaterial"] {
-  transition: transform 0.2s var(--ease);
+  transition: transform var(--hover) var(--ease);
 }
 [class*="st-key-card-"]:hover [data-testid="stPageLink-NavLink"] [data-testid="stIconMaterial"] {
-  transform: translateX(4px);
+  transform: translateX(var(--nudge));
 }
 
 /* ---- Numbers --------------------------------------------------------------------------- */
@@ -298,6 +318,8 @@
 [data-testid="stMetricValue"] {
   font-weight: 500;
   letter-spacing: -1px;
+  /* Digits of one width: a changed number does not shift the card or its neighbours. */
+  font-variant-numeric: tabular-nums;
 }
 
 /* ---- Tabs: the six steps of the Planung page ------------------------------------------- */
@@ -313,9 +335,9 @@
   height: auto;
   border-radius: 8px;
   padding: 8px 14px;
-  transition:
-    background-color 0.15s,
-    color 0.15s;
+  transition-property: background-color, color;
+  transition-duration: var(--hover);
+  transition-timing-function: var(--ease);
 }
 .stTabs [data-testid="stTab"]:hover { background: #edf3ed; }
 .stTabs [data-testid="stTab"][aria-selected="true"] {
@@ -326,7 +348,8 @@
 
 /* ---- Menu and messages ----------------------------------------------------------------- */
 
-[data-testid="stSidebarNavLink"] { transition: background-color 0.2s; }
+/* The menu stays while the page changes: the highlight moves to the new entry. */
+[data-testid="stSidebarNavLink"] { transition: background-color var(--state) var(--ease); }
 [data-testid="stAlertContainer"] {
   border-left: 3px solid currentColor;
   border-radius: 6px;
@@ -362,10 +385,6 @@
   color: var(--muted);
   font-size: 12px;
   font-weight: 600;
-  transition:
-    background-color 0.2s,
-    border-color 0.2s,
-    color 0.2s;
 }
 .chip.on {
   border-color: #b7c9b2;
@@ -442,9 +461,6 @@
   border-radius: 20px;
   padding: 3px 9px;
   color: var(--muted);
-  transition:
-    border-color 0.2s,
-    background-color 0.2s;
 }
 .journey .step b { font-weight: 600; font-variant-numeric: tabular-nums; }
 .journey .step.done {
@@ -533,14 +549,19 @@
   .badge { display: none; }
 }
 
-/* People who asked their system for less motion get none. */
+/* People who asked their system for less motion: nothing travels, lifts or gives way, and
+   the diagram of the Startseite stands still. What appears only fades in place, briefly, as
+   the system does it itself. Streamlit's spinners keep turning (it slows them down on its
+   own): a spinner that stands still looks like a page that hangs. */
 @media (prefers-reduced-motion: reduce) {
-  .stApp *,
-  .stApp *::before,
-  .stApp *::after {
-    animation: none !important;
-    transition: none !important;
+  :root {
+    --rise: 0px;
+    --lift-y: 0px;
+    --lift-y-card: 0px;
+    --pushed: 1;
+    --nudge: 0px;
   }
+  .flow-node { animation: none; }
 }
 
 /* Sequence diagrams of the Entwurf: wider than a phone, so they scroll on their own. */

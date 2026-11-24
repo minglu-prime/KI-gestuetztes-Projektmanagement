@@ -60,8 +60,11 @@ erfassten Fortschritt. Ein Logo erscheint oben rechts, sobald `assets/logo.svg` 
 `assets/logo.png` existiert.
 
 Farben und Schrift stehen in `.streamlit/config.toml`. Hervorhebung, Karten, Schaltflächen und
-Übergänge (Seitenwechsel, Reiter, Hover) stehen in `assets/style.css`; `app.py` lädt die Datei
-bei jedem Lauf. Wer im System weniger Bewegung eingestellt hat, bekommt keine Animationen.
+Übergänge (Seitenwechsel, Reiter, Meldungen, Hover, Drücken) stehen in `assets/style.css`;
+`app.py` lädt die Datei bei jedem Lauf. Alle Übergänge nutzen eine Kurve und wenige Dauern
+(`--press` bis `--page` in `:root`): je häufiger etwas passiert, desto kürzer. Wer im System
+weniger Bewegung eingestellt hat, sieht nichts mehr wandern, sich heben oder nachgeben; Neues
+blendet nur kurz ein, und das Diagramm der Startseite steht still.
 
 Für KI-Runden im KI-Lab zusätzlich `OPENAI_API_KEY` und `PM_MODEL` in `.env` eintragen. Ohne
 sie funktionieren die Runden ohne KI, KI-Runden melden einen Fehler.
