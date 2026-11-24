@@ -27,6 +27,11 @@ FLOW = """
 </div>
 """
 
+try:
+    tracking, unreadable = load(), None
+except InputError as err:
+    tracking, unreadable = None, str(err)
+
 with st.container(key="hero"):
     words, diagram = st.columns([3, 2], gap="large", vertical_alignment="center")
     with words:
@@ -37,7 +42,9 @@ with st.container(key="hero"):
             "Durchführung und Kontrolle bis zur nächsten Iteration.</p>"
         )
         with st.container(horizontal=True):
-            if st.button("Projekt planen", type="primary", icon=":material/arrow_forward:"):
+            # The first step while there is no project; with one, its next step below leads.
+            first = "primary" if tracking is None else "secondary"
+            if st.button("Projekt planen", type=first, icon=":material/arrow_forward:"):
                 st.switch_page("views/planung.py")
             if st.button("KI-Lab öffnen", icon=":material/science:"):
                 st.switch_page("views/ki_lab.py")
@@ -45,11 +52,8 @@ with st.container(key="hero"):
 
 with st.container(key="project"):
     st.subheader("Aktuelles Projekt")
-    try:
-        tracking = load()
-    except InputError as err:
-        tracking = None
-        st.error(f"Das übernommene Projekt konnte nicht gelesen werden: {as_text(str(err))}")
+    if unreadable:
+        st.error(f"Das übernommene Projekt konnte nicht gelesen werden: {as_text(unreadable)}")
     else:
         if tracking is None:
             st.info("Noch kein Projekt übernommen.")

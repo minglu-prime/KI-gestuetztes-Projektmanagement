@@ -13,11 +13,13 @@ import streamlit as st
 
 from pm_agent import lifecycle
 from pm_agent.tracking import (
+    CasePlan,
     CaseResult,
     Defect,
     Tracking,
     case_status,
     check_results,
+    current_results,
     load,
     record_defect,
     record_result,
@@ -30,6 +32,7 @@ from pm_agent.ui import (
     check_verdict,
     heading,
     messages,
+    next_open,
     notify,
     verdict,
 )
@@ -57,7 +60,8 @@ def change(make, done: Callable[[Tracking], str]) -> Tracking | None:
     return saved
 
 
-def on_result(versions: dict[str, str]) -> None:
+def on_result(plan: CasePlan) -> None:
+    versions = plan.versions
     result = CaseResult(
         case_id=state.test_case, result=state.test_result, on=date.today(), note=state.test_note
     )
@@ -68,8 +72,15 @@ def on_result(versions: dict[str, str]) -> None:
             raise InputError("Der Testfall wurde inzwischen geändert. Prüfe ihn erneut.")
         return record_result(t, result, current)
 
-    if change(record, lambda t: f"Ergebnis gespeichert: {result.case_id} {result.result}."):
+    saved = change(record, lambda t: f"Ergebnis gespeichert: {result.case_id} {result.result}.")
+    if saved is not None:
         state.test_note = ""
+        # On to the next case without a result; a failure waits for its defect below.
+        state.test_case = next_open(
+            [c.id for c in plan.cases], set(current_results(saved, plan)), result.case_id
+        )
+        if result.result == "fehlgeschlagen":
+            state.defect_case = result.case_id
 
 
 def on_defect() -> None:
@@ -173,9 +184,7 @@ with st.container(border=True, key="panel-results"):
         "Ergebnis", ["bestanden", "fehlgeschlagen", "blockiert"], horizontal=True, key="test_result"
     )
     st.text_input("Notiz", key="test_note")
-    st.button(
-        "Ergebnis speichern", icon=":material/save:", on_click=on_result, args=(plan.versions,)
-    )
+    st.button("Ergebnis speichern", icon=":material/save:", on_click=on_result, args=(plan,))
 
 with st.container(border=True, key="panel-defects"):
     heading("bug_report", "Fehler", du="erfasst und entscheidest", python="prüft")
@@ -190,6 +199,20 @@ with st.container(border=True, key="panel-defects"):
             key="defect_id",
             on_change=on_pick_defect,
             args=(defects_by_id, titles),
+        )
+    if state.get("defect_case") not in titles:
+        # A failed case without an open defect is what the form is most likely for.
+        latest = current_results(tracking, plan)
+        open_cases = {d.case_id for d in tracking.defects if d.status == "offen"}
+        state.defect_case = next(
+            (
+                c.id
+                for c in plan.cases
+                if c.id in latest
+                and latest[c.id].result == "fehlgeschlagen"
+                and c.id not in open_cases
+            ),
+            plan.cases[0].id,
         )
     st.selectbox(
         "Gefunden von", list(titles), format_func=lambda c: f"{c} · {titles[c]}", key="defect_case"

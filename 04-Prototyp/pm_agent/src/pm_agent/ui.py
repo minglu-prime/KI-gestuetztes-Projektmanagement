@@ -84,6 +84,13 @@ def show_notice() -> None:
         st.toast(as_text(text), icon=":material/check_circle:")
 
 
+def next_open(order: Sequence[str], done: set[str], current: str) -> str:
+    """The entry to fill in after `current`: the next one in `order` that is not `done`,
+    from the start again after the last. `current` when all are done."""
+    later = [*order[order.index(current) + 1 :], *order] if current in order else list(order)
+    return next((entry for entry in later if entry not in done), current)
+
+
 def messages(errors: Sequence[str], warnings: Sequence[str] = ()) -> None:
     """The findings of a check: the errors in one red box, the warnings in one yellow box.
     One box each made a stack of eleven boxes beside the table they came from."""

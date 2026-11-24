@@ -48,6 +48,7 @@ from pm_agent.ui import (
     heading,
     kept_editor,
     messages,
+    next_open,
     notify,
     run_with_progress,
     verdict,
@@ -85,7 +86,22 @@ def save_lessons(basis: Tracking, items: list[Lesson]) -> bool:
     return True
 
 
-def on_signoff(requirements: dict[str, Requirement]) -> None:
+def pick_requirement(requirement_id: str, advice: dict[str, str]) -> None:
+    """The sign-off form for one requirement. Python's proposal is the preset only where it
+    says "abnehmbar"; anything else waits for the project lead's choice."""
+    state.signoff_req = requirement_id
+    state.signoff_decision = "abgenommen" if advice.get(requirement_id) == "abnehmbar" else None
+    state.signoff_reason = ""
+
+
+def on_pick_requirement(advice: dict[str, str]) -> None:
+    pick_requirement(state.signoff_req, advice)
+
+
+def on_signoff(requirements: dict[str, Requirement], advice: dict[str, str]) -> None:
+    if state.signoff_decision is None:
+        state.closing_error = f"Wähle für {state.signoff_req} „abgenommen“ oder „zurückgestellt“."
+        return
     signoff = Signoff(
         requirement_id=state.signoff_req,
         decision=state.signoff_decision,
@@ -99,8 +115,11 @@ def on_signoff(requirements: dict[str, Requirement]) -> None:
         return closing.record_signoff(t, signoff)
 
     said = f"Entscheidung für {signoff.requirement_id} gespeichert: {signoff.decision}."
-    if change(record, lambda t: said):
-        state.signoff_reason = ""
+    saved = change(record, lambda t: said)
+    if saved is not None:
+        # On to the next requirement without a decision.
+        decided = {s.requirement_id for s in closing.current_signoffs(saved)}
+        pick_requirement(next_open(list(requirements), decided, signoff.requirement_id), advice)
 
 
 st.header("Abschluss")
@@ -199,11 +218,19 @@ with closing_tab:
         if tracking.requirements:
             st.dataframe(pd.DataFrame(signoff_rows(tracking, plan)), hide_index=True)
             titles = {n.id: n.title for n in tracking.requirements}
+            advice = closing.suggestions(tracking, plan)
+            if state.get("signoff_req") not in titles:
+                decided = {s.requirement_id for s in closing.current_signoffs(tracking)}
+                pick_requirement(
+                    next((r for r in titles if r not in decided), next(iter(titles))), advice
+                )
             st.selectbox(
                 "Anforderung",
                 list(titles),
                 format_func=lambda r: f"{r} · {titles[r]}",
                 key="signoff_req",
+                on_change=on_pick_requirement,
+                args=(advice,),
             )
             st.radio(
                 "Entscheidung",
@@ -216,7 +243,7 @@ with closing_tab:
                 "Entscheidung speichern",
                 icon=":material/save:",
                 on_click=on_signoff,
-                args=({need.id: need for need in tracking.requirements},),
+                args=({need.id: need for need in tracking.requirements}, advice),
             )
         messages(errors, warnings)
 
