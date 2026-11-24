@@ -84,6 +84,22 @@ def test_the_run_stops_after_the_last_round_without_an_accepted_plan(api, tmp_pa
     assert len(read_log(tmp_path)["rounds"]) == agent.MAX_ROUNDS
 
 
+def test_the_last_rejection_is_named_when_the_rounds_run_out(api, tmp_path):
+    replies, _ = api
+    # Ten rejected plans: the project lead reads why below the box, not only in round ten.
+    replies += [
+        reply([submit(plan_input(member="Zoe"), f"call_{n}")]) for n in range(agent.MAX_ROUNDS)
+    ]
+
+    with pytest.raises(PlanningError) as err:
+        run_planning(PROJECT, TEAM, log_dir=tmp_path)
+
+    message = str(err.value)
+    assert f"nach {agent.MAX_ROUNDS} Runden" in message
+    assert "Zuletzt abgelehnt:" in message
+    assert "Zoe" in message
+
+
 def test_missing_credentials_are_a_planning_error_in_german(monkeypatch, tmp_path):
     for name in [n for n in os.environ if n.startswith("OPENAI_")]:
         monkeypatch.delenv(name)

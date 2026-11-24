@@ -247,7 +247,7 @@ def _run(
         "include": ["reasoning.encrypted_content"],
         "max_output_tokens": 16_000,
     }
-    said = ""
+    said = rejected = ""
     for _ in range(MAX_ROUNDS):
         response = client.responses.create(input=items, **base)
         calls = [
@@ -265,6 +265,8 @@ def _run(
             rounds[-1]["tool_results"].append(
                 {"tool": item.name, "is_error": is_error, "content": content}
             )
+            if is_error:
+                rejected = content
         on_round(rounds[-1])
         accepted = result()
         if accepted is not None:
@@ -273,7 +275,10 @@ def _run(
             raise AgentError(
                 f"Der Agent hat aufgehört, ohne einen {noun} einzureichen. {said}".rstrip()
             )
-    raise AgentError(f"Der Agent hat nach {MAX_ROUNDS} Runden noch keinen gültigen {noun}.")
+    # The last reason goes along: the project lead reads it below the box, without opening
+    # every round.
+    last = f" Zuletzt abgelehnt: {rejected}" if rejected else ""
+    raise AgentError(f"Der Agent hat nach {MAX_ROUNDS} Runden noch keinen gültigen {noun}.{last}")
 
 
 def _effort() -> str:
