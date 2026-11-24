@@ -88,7 +88,7 @@ zehn Phasen und wie sie zusammenhängen in `04-Prototyp/pm_agent/docs/lebenszykl
   - Freitexte der Agenten haben Längengrenzen: `tools.LIMITS`, etwa ein Satz, die Zusammenfassung 400 Zeichen. Jedes Einreichungswerkzeug schickt zu Langes zurück (`tools.too_long`); die Modelle nehmen längere Texte weiter an.
   - Eingaben der Agenten vor und nach dem Plan schreiben Daten und Zahlen deutsch (`tracking.as_shown`, `key_figures`; Quellregel). Der Planungsagent behält ISO-Daten für `set_absence`.
   - Liegt die Prognose hinter der Deadline, muss die Zusammenfassung der Durchführung ihr Enddatum nennen (`followup.check_summary`, PR 86).
-  - `replanning.md` verlangt nach `set_absence` eine Umverteilung, wenn Deadline oder Puffer reißen (PR 86); nur im Prompt, nicht live geprüft.
+  - Nach `set_absence` weist `submit_plan` einen Plan zurück, den die Abwesenheit hinter die Deadline schiebt (`PlanningTools._late_by_absence`, Entscheidung der Projektleitung 23.11.2026); ist er auch ohne sie zu spät, bleibt es eine Warnung. Kein Puffer und fehlende Skills bleiben Warnungen. `replanning.md` verlangt die Umverteilung (PR 86).
   - `suggested_wishes` schlägt vor, eine kritische Aufgabe vor eine unkritische derselben Person zu ziehen, wenn das den Plan verkürzt, und nennt die Aufgabe, die dabei tatsächlich nach hinten rückt (PR 86, 88).
 - **Echte Läufe am 21.11.2026** (Endpunkt der Hochschule, `gpt-6-sol`):
   - Alle elf Agenten und das KI-Lab je einmal ohne Fehler, Auswertung in `03-Experiment/agentenlauf-2026-11-21/`.
@@ -140,7 +140,7 @@ nur auf Wort der Projektleitung). Chat Completions nimmt bei diesem Modell Werkz
   - `pm_agent` 9 638 (Paket und Seiten)
   - `ki_lab` 656
   - dazu 9 Prompts, 8 Vorlagen, CSS
-- **Tests:** 715, alle ohne Netz (670 `pm_agent`, 45 `ki_lab`); dazu ein Live-Test, der sich ohne Schlüssel überspringt, und drei Browser-Tests (`tests/test_browsers.py`), die ohne `PM_BROWSERS` überspringen. CI: `pm-agent.yml` (Lint, Tests; Job `browsers`: jede Seite in Chromium, Firefox und WebKit bei 1440 px und 375 px, auf einem leeren Temp-Ordner über `smoke_app.py`) und `static.yml` (README als Pages).
+- **Tests:** 716, alle ohne Netz (671 `pm_agent`, 45 `ki_lab`); dazu ein Live-Test, der sich ohne Schlüssel überspringt, und drei Browser-Tests (`tests/test_browsers.py`), die ohne `PM_BROWSERS` überspringen. CI: `pm-agent.yml` (Lint, Tests; Job `browsers`: jede Seite in Chromium, Firefox und WebKit bei 1440 px und 375 px, auf einem leeren Temp-Ordner über `smoke_app.py`) und `static.yml` (README als Pages).
 - **Betrieb:** läuft lokal als Streamlit-Seite. Das Menü in 8 Einträgen ist in Chrome geprüft (1440 px und 375 px), am 22.11. auch in Edge (Codex, 13 Seiten bei 375 px ohne waagrechtes Scrollen); Firefox und WebKit seit dem 23.11. im CI-Job `browsers`. Kein öffentlicher Betrieb.
 - **Issues:** 11 (#1–#11, Meilensteine M1–M4).
   - #9 geschlossen.
@@ -164,7 +164,7 @@ nur auf Wort der Projektleitung). Chat Completions nimmt bei diesem Modell Werkz
 2. **Teilnahmeinformation fertig machen (#8).** Die Einwilligungen nennen seit PR 77 den richtigen Dienst, und das Lab fragt die freiwillige Einwilligung zu anonymen Zitaten (`quote_consent`) vor dem Start mit ab. In `03-Experiment/teilnahmeinformation.md` fehlen noch Kontakt, Löschdatum und Name des Dienstes (Agenda M2).
 3. **Mehrere Läufe je Agent.** Ein Lauf je Agent und Tag reicht nicht für Aussagen über Runden, Token oder Dauer. Am 23.11. liefen zwei Agenten je dreimal; die übrigen einmal. `03-Experiment/agentenlauf-2026-11-21/run_agents.py` wiederholt den ganzen Lauf (kostet Kontingent, nur auf Wort der Projektleitung).
 4. **Agenten fachlich.**
-   - Umplanung bei Abwesenheit: Der Prompt (PR 86) reicht nicht, am 23.11. verteilte sie in 1 von 3 Läufen nichts um, und Python nimmt ein Ende nach der Deadline als Warnung an. Vorschlag (Entscheidung der Projektleitung): Nach `set_absence` weist `submit_plan` einen Plan nach der Deadline zurück, solange das Team freie Stunden hat; offen, ob auch fehlende Fähigkeiten oder kein Puffer zurückgehen.
+   - Umplanung bei Abwesenheit: Am 23.11. verteilte sie in 1 von 3 Läufen nichts um. Seitdem weist `submit_plan` einen solchen Plan zurück; ein echter Lauf damit steht aus (kostet Kontingent, nur auf Wort der Projektleitung). Kann das Team die Arbeit gar nicht auffangen, findet der Agent keinen annehmbaren Plan und der Lauf endet mit einem Fehler.
 5. **Einen Stand festhalten.** Es gibt kein Release. Ein `v0.1` mit „was geht, mit welchem Modell geprüft“ (öffentlich: nur auf Wort der Projektleitung).
 6. **Issues pflegen.** Zuständige eintragen; die Meilenstein-Issues in Aufgaben für einen Tag zerlegen.
 7. **Code, nicht dringend.**

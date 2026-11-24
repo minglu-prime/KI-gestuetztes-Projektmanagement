@@ -158,6 +158,27 @@ def test_a_change_can_set_an_absence_and_the_check_counts_it():
     assert report["end_date"] == "2026-11-13"  # two workdays later than without
 
 
+def test_an_absence_must_not_push_the_plan_past_the_deadline():
+    # On 23.11.2026 the agent set an absence and left the plan four workdays after the
+    # deadline in one of three runs: a warning was not enough. Now submit_plan sends it back.
+    tools = PlanningTools(PROJECT, TEAM, absences=True)
+    tight = plan_input(hours=216)  # 232 h for Anna: ends 17.12., one day before the deadline
+    assert json.loads(tools.check_plan.call(tight))["end_date"] == "2026-12-17"
+    tools.set_absence.call({"member": "Anna", "first": "2026-12-07", "last": "2026-12-08"})
+    with pytest.raises(ToolError) as err:
+        tools.submit_plan.call(tight)
+    assert "Mit den Abwesenheiten endet der Plan am 21.12.2026, nach der Deadline" in (
+        err.value.content
+    )
+    assert tools.plan is None
+    # Late anyway, also without the absence: not its fault, a warning as before.
+    late = plan_input(hours=300)
+    assert tools.submit_plan.call(late) == "Plan angenommen."
+    # Without an absence nothing changes: the tight plan is accepted.
+    plain = PlanningTools(PROJECT, TEAM, absences=True)
+    assert plain.submit_plan.call(tight) == "Plan angenommen."
+
+
 def test_a_new_plan_cannot_set_an_absence():
     # A new plan starts from the team table; only a wish can name an absence.
     assert PlanningTools(PROJECT, TEAM).set_absence is None

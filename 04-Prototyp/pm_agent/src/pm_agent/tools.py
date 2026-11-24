@@ -122,7 +122,9 @@ class PlanningTools:
             name="submit_plan",
             description=(
                 "Reicht den fertigen Plan bei der Projektleitung ein. Lehnt einen Plan mit "
-                "Fehlern ab und nennt die Gründe. Warnungen hindern die Einreichung nicht."
+                "Fehlern ab und nennt die Gründe, ebenso einen Plan, den eine mit set_absence "
+                "eingetragene Abwesenheit hinter die Deadline schiebt. Warnungen hindern die "
+                "Einreichung nicht."
             ),
             input_schema=Plan,
         )
@@ -153,6 +155,8 @@ class PlanningTools:
     def _submit(self, /, **plan: Any) -> str:
         parsed, result = self._review(plan)
         errors = (too_long(parsed) if parsed else []) + result.errors
+        if parsed and not errors:
+            errors = self._late_by_absence(parsed, result)
         if errors:
             raise ToolError(
                 "Plan abgelehnt. Behebe diese Fehler und reiche ihn erneut ein:\n"
@@ -160,6 +164,25 @@ class PlanningTools:
             )
         self.plan = parsed
         return "Plan angenommen."
+
+    def _late_by_absence(self, plan: Plan, result: CheckResult) -> list[str]:
+        """An absence this run set must not push the plan past the deadline: then the agent
+        has to move work to others (decision of the project lead, 23.11.2026). A plan that is
+        late without the absences too stays a warning, as every late plan."""
+        deadline = self.project.deadline
+        if not self.absences or result.end_date is None or result.end_date <= deadline:
+            return []
+        without = check_plan(
+            plan, self.team, self.project, requirements=self.requirements, covered=self.covered
+        )
+        if without.end_date is None or without.end_date > deadline:
+            return []
+        return [
+            f"Mit den Abwesenheiten endet der Plan am {result.end_date:%d.%m.%Y}, nach der "
+            f"Deadline ({deadline:%d.%m.%Y}); ohne sie am {without.end_date:%d.%m.%Y}. Gib "
+            "Aufgaben der abwesenden Person an andere im Team mit freien Stunden, möglichst "
+            "mit passenden Fähigkeiten"
+        ]
 
     def _review(self, data: dict[str, Any]) -> tuple[Plan | None, CheckResult]:
         try:

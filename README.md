@@ -101,6 +101,9 @@ Beispielprojekt vom 20.11.2026.
 Sechs Schritte: Team, Projekt, Planung, Ergebnis, Anpassen, Übernehmen. Eine Leiste zeigt, was noch
 fehlt, und jeder Schritt führt in den nächsten. Zum Team gehören Skills, Wochenstunden und
 Abwesenheiten: An Tagen, an denen jemand fehlt, wird für die Person keine Arbeit eingeplant.
+Nennt ein Änderungswunsch eine neue Abwesenheit, nimmt Python keinen Plan an, den sie hinter die
+Deadline schiebt: Der Agent muss Aufgaben an andere im Team geben. Kein Puffer oder fehlende
+Skills bleiben Warnungen.
 
 <div align="center">
 <img src="04-Prototyp/pm_agent/assets/screenshots/planung-ergebnis.jpg" width="820" alt="Schritt Ergebnis: Planende, Fehler und Warnungen als Kennzahlen, darunter der Terminplan als Gantt-Diagramm mit Deadline-Linie">
