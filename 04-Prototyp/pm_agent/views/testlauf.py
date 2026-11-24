@@ -66,21 +66,35 @@ def on_result(plan: CasePlan) -> None:
         case_id=state.test_case, result=state.test_result, on=date.today(), note=state.test_note
     )
 
+    checked = []  # the test plan as it stood when saving
+
     def record(t: Tracking) -> Tracking:
         current = lifecycle.case_plan(lifecycle.load())
         if current is None or current.versions.get(result.case_id) != versions.get(result.case_id):
             raise InputError("Der Testfall wurde inzwischen geändert. Prüfe ihn erneut.")
+        checked.append(current)
         return record_result(t, result, current)
 
     saved = change(record, lambda t: f"Ergebnis gespeichert: {result.case_id} {result.result}.")
     if saved is not None:
         state.test_note = ""
-        # On to the next case without a result; a failure waits for its defect below.
-        state.test_case = next_open(
-            [c.id for c in plan.cases], set(current_results(saved, plan)), result.case_id
-        )
-        if result.result == "fehlgeschlagen":
+        # On to the next case without a result, counted against the cases as they are now.
+        state.test_case = first_open(checked[-1], saved, after=result.case_id)
+        # A failure without an open defect waits for one in the form below.
+        if result.result == "fehlgeschlagen" and result.case_id not in open_defects(saved):
             state.defect_case = result.case_id
+
+
+def first_open(plan: CasePlan, tracking: Tracking, after: str = "") -> str:
+    """The case to run next: the first one after `after` without a current result."""
+    order, done = [c.id for c in plan.cases], set(current_results(tracking, plan))
+    found = next_open(order, done, after or order[-1])
+    return found if after or found not in done else order[0]  # all done: from the top
+
+
+def open_defects(tracking: Tracking) -> set[str]:
+    """The cases that have an open defect."""
+    return {d.case_id for d in tracking.defects if d.status == "offen"}
 
 
 def on_defect() -> None:
@@ -170,6 +184,8 @@ if lifecycle.cases_state(life) != "freigegeben":
         "geprüft wird gegen die Testfälle, wie sie gerade stehen."
     )
 titles = {c.id: c.title for c in plan.cases}
+if state.get("test_case") not in titles:  # a first visit, or the case is gone
+    state.test_case = first_open(plan, tracking)
 errors, warnings = check_results(tracking, plan)
 fine = "Jeder Testfall hat ein Ergebnis, jeder fehlgeschlagene einen Fehlereintrag."
 verdict(*check_verdict(errors, warnings, fine))
@@ -203,7 +219,7 @@ with st.container(border=True, key="panel-defects"):
     if state.get("defect_case") not in titles:
         # A failed case without an open defect is what the form is most likely for.
         latest = current_results(tracking, plan)
-        open_cases = {d.case_id for d in tracking.defects if d.status == "offen"}
+        open_cases = open_defects(tracking)
         state.defect_case = next(
             (
                 c.id

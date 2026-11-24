@@ -92,6 +92,8 @@ def pick_requirement(requirement_id: str, advice: dict[str, str]) -> None:
     state.signoff_req = requirement_id
     state.signoff_decision = "abgenommen" if advice.get(requirement_id) == "abnehmbar" else None
     state.signoff_reason = ""
+    # What the preset rests on: a new test result or defect sets it again.
+    state.signoff_basis = (requirement_id, advice.get(requirement_id))
 
 
 def on_pick_requirement(advice: dict[str, str]) -> None:
@@ -221,9 +223,10 @@ with closing_tab:
             advice = closing.suggestions(tracking, plan)
             if state.get("signoff_req") not in titles:
                 decided = {s.requirement_id for s in closing.current_signoffs(tracking)}
-                pick_requirement(
-                    next((r for r in titles if r not in decided), next(iter(titles))), advice
-                )
+                first = next((r for r in titles if r not in decided), next(iter(titles)))
+                pick_requirement(first, advice)
+            elif state.get("signoff_basis") != (state.signoff_req, advice[state.signoff_req]):
+                pick_requirement(state.signoff_req, advice)
             st.selectbox(
                 "Anforderung",
                 list(titles),

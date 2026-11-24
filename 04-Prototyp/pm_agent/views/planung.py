@@ -32,6 +32,7 @@ from pm_agent.tracking import (
     rest_project,
 )
 from pm_agent.tracking import load as load_tracking
+from pm_agent.tracking import next_step as project_step
 from pm_agent.ui import (
     BUSY_HINT,
     LEGEND,
@@ -1161,8 +1162,13 @@ try:
     baseline = load_tracking()
 except InputError:
     baseline = None  # ui.journey shows the error above this page
-# Nothing else on the table than the adopted plan: the planning is done for now.
-planned = baseline is not None and state.plan in (None, baseline.plan)
+# Nothing else on the table than the adopted project: the planning is done for now. The
+# rest of a project to plan again can be the same plan, from another day: project and team
+# count too.
+planned = baseline is not None and (
+    state.plan is None
+    or (state.plan, project, team) == (baseline.plan, baseline.project, baseline.team)
+)
 if state.plan is None and baseline is not None:
     # The path ticks "Planen" for it; "Plan offen" beside the tick said the opposite.
     plan_chip = chip("Plan übernommen", "on")
@@ -1209,11 +1215,10 @@ with status:
 with next_line:
     with st.container(horizontal=True, vertical_alignment="center", key="next-step-planung"):
         if planned:
-            st.markdown(
-                "**Jetzt dran:** Der Plan ist als Projekt übernommen. Trag den Fortschritt in "
-                "der Durchführung ein; neu planen lässt sich der Rest über die Kontrolle."
-            )
-            target, label = PAGES["durchfuehrung"]
+            # The same next step as on the Startseite and the pages of the project.
+            advice, where = project_step(baseline, date.today())
+            st.markdown(f"**Jetzt dran:** Der Plan ist als Projekt übernommen. {as_text(advice)}")
+            target, label = PAGES[where]
             if st.button(label, key="planung-go", type="primary", icon=":material/arrow_forward:"):
                 st.switch_page(target)
         else:
