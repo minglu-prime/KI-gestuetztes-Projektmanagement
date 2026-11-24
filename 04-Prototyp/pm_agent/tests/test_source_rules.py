@@ -456,10 +456,10 @@ def test_every_save_that_reruns_the_page_says_so():
                 block = getattr(node, field, None)
                 if not isinstance(block, list):
                     continue
-                for stmt in block:
+                for index, stmt in enumerate(block):
                     if not (isinstance(stmt, ast.Expr) and _calls(stmt, "rerun")):
                         continue
-                    told = any(_calls(other, "notify") for other in block)
+                    told = any(_calls(before, "notify") for before in block[:index])
                     if isinstance(node, ast.If) and _calls(node.test, "change"):
                         told = True
                     if not told:
@@ -467,6 +467,29 @@ def test_every_save_that_reruns_the_page_says_so():
     assert sorted(silent) == ["ki_lab.py", "planung.py"], (
         "Call ui.notify('… gespeichert.') right before st.rerun()"
     )
+
+
+def test_every_callback_that_saves_says_so():
+    # The same for buttons that save in a callback (review of PR 99): through the page's
+    # change() helper, which notifies, or with ui.notify of its own.
+    saves = {"save_if_current", "store", "save_team", "adopt", "append_run"}
+    silent = []
+    for path in (ROOT / "views").glob("*.py"):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        callbacks = {
+            keyword.value.id
+            for call in ast.walk(tree)
+            if isinstance(call, ast.Call)
+            for keyword in call.keywords
+            if keyword.arg in ("on_click", "on_change") and isinstance(keyword.value, ast.Name)
+        }
+        for function in ast.walk(tree):
+            if not (isinstance(function, ast.FunctionDef) and function.name in callbacks):
+                continue
+            if any(_calls(function, name) for name in saves) and not _calls(function, "notify"):
+                silent.append(f"{path.name}:{function.name}")
+    # The export of the Planung is answered by the download itself.
+    assert silent == ["planung.py:record_export"], "Call ui.notify in the callback"
 
 
 def test_notices_go_through_one_helper():
@@ -483,16 +506,27 @@ def test_notices_go_through_one_helper():
 
 def test_an_approved_phase_hides_its_approval_instead_of_greying_it_out():
     # PR 99: "… freigeben" stayed on four pages, greyed out, under "Freigegeben am …".
-    found = [
-        f"{path.name}:{keyword.value.lineno}"
-        for path in (ROOT / "views").glob("*.py")
-        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8")))
-        if isinstance(node, ast.Call)
-        for keyword in node.keywords
-        if keyword.arg == "disabled"
-        and any(
-            isinstance(part, ast.Constant) and part.value == "freigegeben"
-            for part in ast.walk(keyword.value)
-        )
-    ]
-    assert found == [], "Leave the button out once approved: `if phase != 'freigegeben' and …`"
+    shown = []
+    for path in (ROOT / "views").glob("*.py"):
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if not isinstance(node, ast.If):
+                continue
+            for call in ast.walk(node.test):
+                label = call.args[0] if isinstance(call, ast.Call) and call.args else None
+                if not (
+                    getattr(call, "func", None) is not None
+                    and getattr(call.func, "attr", None) == "button"
+                    and isinstance(label, ast.Constant)
+                    and str(label.value).endswith(" freigeben")
+                ):
+                    continue
+                guard = node.test.values[0] if isinstance(node.test, ast.BoolOp) else None
+                if not (
+                    isinstance(node.test.op if guard else None, ast.And)
+                    and isinstance(guard, ast.Compare)
+                    and isinstance(guard.ops[0], ast.NotEq)
+                    and getattr(guard.comparators[0], "value", None) == "freigegeben"
+                ):
+                    shown.append(f"{path.name}:{call.lineno}")
+    assert len(list((ROOT / "views").glob("*.py"))) > 10
+    assert shown == [], "Leave the button out once approved: `if phase != 'freigegeben' and …`"

@@ -1593,7 +1593,9 @@ def test_a_charter_changed_after_approval_says_so(site):
     at.text_area(key="charter_goal").input("Räume und Geräte online buchen")
     at = at.run()
     assert any("nicht gespeichert" in c.value for c in at.caption)
-    assert button(at, "Projektauftrag freigeben").disabled  # unsaved edits first
+    # Approved: the button comes back once the change is saved, and the caption says so.
+    assert "Projektauftrag freigeben" not in [b.label for b in at.button]
+    assert any("Erst speichern, dann freigeben" in c.value for c in at.caption)
     button(at, "Änderungen speichern und prüfen").click()
     at = at.run()
     assert lifecycle.load().charter.goal == "Räume und Geräte online buchen"
@@ -2417,6 +2419,7 @@ def test_the_operations_page_checks_the_handbook_and_records_incidents(tracked):
     at.text_input(key="incident_impact").input("Buchen geht nicht").run()
     button(at, "Störung erfassen").click()
     at = at.run()
+    assert notices(at) == ["Störung ST1 erfasst."]
     (incident,) = tracking.load().incidents
     assert (incident.id, incident.component_id) == ("ST1", "B1")
     incidents_table = next(f.value for f in at.dataframe if "Auswirkung" in f.value.columns)
@@ -2434,9 +2437,11 @@ def test_the_operations_page_checks_the_handbook_and_records_incidents(tracked):
     button(at, "ST1: behoben").click()
     at = at.run()
     assert tracking.load().incidents[0].status == "behoben"
+    assert notices(at) == ["Störung ST1 ist behoben."]
     button(at, "ST1: wieder öffnen").click()
     at = at.run()
     assert tracking.load().incidents[0].status == "offen"
+    assert notices(at) == ["Störung ST1 ist wieder offen."]
     at.selectbox(key="incident_id").set_value("ST1").run()
     at.text_input(key="incident_impact").input("Buchen langsam").run()
     button(at, "Störung erfassen").click()
@@ -3182,6 +3187,8 @@ def test_every_entry_of_the_test_page_answers(tracked):
     button(at, "Fehler erfassen").click()
     at = at.run()
     assert notices(at) == ["Fehler F1 erfasst."]
+    button(at, "F1: Aufgabe B wieder öffnen").click()
+    assert notices(at.run()) == ["Aufgabe B ist wieder in Arbeit."]
     button(at, "F1: behoben").click()
     assert notices(at.run()) == ["Fehler F1 ist behoben."]
     button(at, "F1: wieder öffnen").click()
@@ -3230,3 +3237,16 @@ def test_a_measure_ticked_as_done_can_be_opened_again(site):
     at = at.checkbox(key="measure_done_20261116").uncheck().run()
     assert tracking.load().retros[0].measure_done is False
     assert notices(at) == ["Maßnahme wieder offen: Schema zuerst klären."]
+
+
+def test_a_notice_shows_what_was_typed_as_written(site):
+    # A measure written as a Markdown link became a link in the notice (review of PR 99).
+    tracking.adopt(PROJECT, TEAM, DEMO_PLAN)
+    at = site.switch_page("views/kontrolle.py").run()
+    at.selectbox(key="retro_week").set_value(2).run()
+    at.radio(key="retro_shown_2").set_value("nein").run()
+    at.text_input(key="retro_measure_2").input("[Plan](https://x.test) *jetzt*").run()
+    button(at, "Rückblick speichern").click()
+    at = at.run()
+    at = at.checkbox(key="measure_done_20261116").check().run()
+    assert notices(at) == [ui.as_text("Maßnahme erledigt: [Plan](https://x.test) *jetzt*.")]

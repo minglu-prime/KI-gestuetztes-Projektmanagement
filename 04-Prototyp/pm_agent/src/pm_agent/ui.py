@@ -80,7 +80,8 @@ def show_notice() -> None:
     """The notice of `notify`, once. app.py calls it before the page (callbacks, a save that
     reran) and after it (a save without a rerun)."""
     if text := st.session_state.pop("notice", None):
-        st.toast(text, icon=":material/check_circle:")
+        # It can quote what was typed, as typed: Markdown in it is not applied.
+        st.toast(as_text(text), icon=":material/check_circle:")
 
 
 def messages(errors: Sequence[str], warnings: Sequence[str] = ()) -> None:

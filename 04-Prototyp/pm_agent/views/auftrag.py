@@ -205,8 +205,8 @@ with st.container(border=True, key="panel-approve"):
     blocked = life.charter is None or bool(errors) or unsaved
     if unsaved:
         st.caption("Erst speichern, dann freigeben.")
-    # Approved and unchanged: nothing to approve, and the button goes.
-    if (phase != "freigegeben" or unsaved) and st.button(
+    # Approved: nothing to approve until a saved change. The caption above says so.
+    if phase != "freigegeben" and st.button(
         "Projektauftrag freigeben",
         icon=":material/verified:",
         type="primary",
