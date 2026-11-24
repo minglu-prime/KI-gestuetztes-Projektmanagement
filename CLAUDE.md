@@ -140,7 +140,7 @@ nur auf Wort der Projektleitung). Chat Completions nimmt bei diesem Modell Werkz
   - `pm_agent` 9 638 (Paket und Seiten)
   - `ki_lab` 656
   - dazu 9 Prompts, 8 Vorlagen, CSS
-- **Tests:** 716, alle ohne Netz (671 `pm_agent`, 45 `ki_lab`); dazu ein Live-Test, der sich ohne Schlüssel überspringt, und drei Browser-Tests (`tests/test_browsers.py`), die ohne `PM_BROWSERS` überspringen. CI: `pm-agent.yml` (Lint, Tests; Job `browsers`: jede Seite in Chromium, Firefox und WebKit bei 1440 px und 375 px, auf einem leeren Temp-Ordner über `smoke_app.py`) und `static.yml` (README als Pages).
+- **Tests:** 717, alle ohne Netz (672 `pm_agent`, 45 `ki_lab`); dazu ein Live-Test, der sich ohne Schlüssel überspringt, und drei Browser-Tests (`tests/test_browsers.py`), die ohne `PM_BROWSERS` überspringen. CI: `pm-agent.yml` (Lint, Tests; Job `browsers`: jede Seite in Chromium, Firefox und WebKit bei 1440 px und 375 px, auf einem leeren Temp-Ordner über `smoke_app.py`) und `static.yml` (README als Pages).
 - **Betrieb:** läuft lokal als Streamlit-Seite. Das Menü in 8 Einträgen ist in Chrome geprüft (1440 px und 375 px), am 22.11. auch in Edge (Codex, 13 Seiten bei 375 px ohne waagrechtes Scrollen); Firefox und WebKit seit dem 23.11. im CI-Job `browsers`. Kein öffentlicher Betrieb.
 - **Issues:** 11 (#1–#11, Meilensteine M1–M4).
   - #9 geschlossen.

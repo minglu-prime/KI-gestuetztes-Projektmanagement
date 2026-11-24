@@ -106,7 +106,8 @@ Alle Agenten laufen in derselben Schleife (`run_agent` in `src/pm_agent/agent.py
 entwirft ein Ergebnis, ein Werkzeug prüft es deterministisch, der Agent korrigiert, bis das
 Einreichen-Werkzeug es annimmt. Liegt nach 10 Runden kein gültiges Ergebnis vor, hört der Agent
 ohne Ergebnis auf oder wird eine Antwort abgeschnitten oder abgelehnt, bricht der Agent mit
-einer `AgentError` ab. Jeder Lauf wird in `logs/` protokolliert.
+einer `AgentError` ab. Nach 10 Runden nennt die Meldung den letzten Grund, aus dem ein Werkzeug
+die Eingabe abgelehnt hat. Jeder Lauf wird in `logs/` protokolliert.
 
 | Agent | Aufruf | Werkzeuge | Die Prüfung verlangt |
 |---|---|---|---|
