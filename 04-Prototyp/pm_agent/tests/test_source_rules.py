@@ -432,3 +432,67 @@ def test_no_view_builds_a_dataframe_from_a_raw_model_dump():
         )
     ]
     assert found == []
+
+
+def _calls(node: ast.AST, name: str) -> bool:
+    """Whether `node` calls a function or method of this name somewhere inside."""
+    return any(
+        isinstance(call, ast.Call)
+        and (getattr(call.func, "id", None) == name or getattr(call.func, "attr", None) == name)
+        for call in ast.walk(node)
+    )
+
+
+def test_every_save_that_reruns_the_page_says_so():
+    # PR 99 (UX review): saves and approvals on nine pages reran the page without a word. Say
+    # it with ui.notify before st.rerun() (a page's change() helper does that itself). Reruns
+    # that show their own result need no notice: the KI-Lab once started, and the proposal of
+    # the agent in the Planung.
+    silent = []
+    for path in [*(ROOT / "views").glob("*.py"), ROOT / "src" / "pm_agent" / "ui.py"]:
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            for field in ("body", "orelse"):
+                block = getattr(node, field, None)
+                if not isinstance(block, list):
+                    continue
+                for stmt in block:
+                    if not (isinstance(stmt, ast.Expr) and _calls(stmt, "rerun")):
+                        continue
+                    told = any(_calls(other, "notify") for other in block)
+                    if isinstance(node, ast.If) and _calls(node.test, "change"):
+                        told = True
+                    if not told:
+                        silent.append(path.name)
+    assert sorted(silent) == ["ki_lab.py", "planung.py"], (
+        "Call ui.notify('… gespeichert.') right before st.rerun()"
+    )
+
+
+def test_notices_go_through_one_helper():
+    # One look and one place for them: ui.notify, shown by app.py.
+    found = [
+        f"{source.name}:{node.lineno}"
+        for source in SOURCES
+        if source.name != "ui.py"
+        for node in ast.walk(ast.parse(source.read_text(encoding="utf-8")))
+        if isinstance(node, ast.Attribute) and node.attr == "toast"
+    ]
+    assert found == [], "Use ui.notify instead of st.toast"
+
+
+def test_an_approved_phase_hides_its_approval_instead_of_greying_it_out():
+    # PR 99: "… freigeben" stayed on four pages, greyed out, under "Freigegeben am …".
+    found = [
+        f"{path.name}:{keyword.value.lineno}"
+        for path in (ROOT / "views").glob("*.py")
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8")))
+        if isinstance(node, ast.Call)
+        for keyword in node.keywords
+        if keyword.arg == "disabled"
+        and any(
+            isinstance(part, ast.Constant) and part.value == "freigegeben"
+            for part in ast.walk(keyword.value)
+        )
+    ]
+    assert found == [], "Leave the button out once approved: `if phase != 'freigegeben' and …`"

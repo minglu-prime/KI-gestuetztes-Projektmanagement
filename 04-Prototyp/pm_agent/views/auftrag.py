@@ -24,6 +24,7 @@ from pm_agent.ui import (
     consent,
     heading,
     messages,
+    notify,
     phase_chip,
     phase_verdict,
     run_with_progress,
@@ -185,6 +186,7 @@ with st.container(border=True, key="panel-charter"):
         disabled=edited is None or not unsaved,
     ):
         if store(life, life.model_copy(update={"charter": edited})) is not None:
+            notify("Projektauftrag gespeichert.")
             st.rerun()
     errors = check_charter(life.charter).errors if life.charter is not None else []
     messages(errors)
@@ -200,16 +202,18 @@ with st.container(border=True, key="panel-approve"):
             f"Seit der Freigabe am {life.charter_ok.at:%d.%m.%Y %H:%M} geändert. Prüfe den "
             "Auftrag und gib ihn erneut frei: Anforderungen und Plan bauen auf ihm auf."
         )
-    blocked = life.charter is None or bool(errors) or unsaved or phase == "freigegeben"
+    blocked = life.charter is None or bool(errors) or unsaved
     if unsaved:
         st.caption("Erst speichern, dann freigeben.")
-    if st.button(
+    # Approved and unchanged: nothing to approve, and the button goes.
+    if (phase != "freigegeben" or unsaved) and st.button(
         "Projektauftrag freigeben",
         icon=":material/verified:",
         type="primary",
         disabled=blocked,
     ):
         if store(life, approve_charter(life, datetime.now())) is not None:
+            notify("Projektauftrag freigegeben.")
             st.rerun()
 
 # 5 · Dokument ---------------------------------------------------------------------------

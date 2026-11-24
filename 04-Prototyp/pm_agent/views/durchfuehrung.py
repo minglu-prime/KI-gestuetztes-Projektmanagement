@@ -33,6 +33,7 @@ from pm_agent.ui import (
     heading,
     history_table,
     kept_editor,
+    notify,
     run_with_progress,
     strip,
     verdict,
@@ -100,8 +101,6 @@ with st.container(border=True, key="panel-ahead"):
 
 with st.container(border=True, key="panel-progress"):
     heading("edit_note", "Fortschritt", du="trägst Status und Stunden ein")
-    if state.pop("progress_saved", False):
-        st.success("Fortschritt gespeichert (lokal in data/projekt.json, nicht im Repository).")
     # Unsaved edits survive a visit to another page; the forecast columns are computed anew.
     # Saving raises the version: the editor starts again from the saved state.
     edited, conflict = kept_editor(
@@ -151,7 +150,7 @@ with st.container(border=True, key="panel-progress"):
             except (InputError, OSError) as err:
                 st.error(f"Der Fortschritt konnte nicht gespeichert werden: {as_text(str(err))}")
             else:
-                state.progress_saved = True
+                notify("Fortschritt gespeichert (lokal in data/projekt.json).")
                 state.progress_version = state.get("progress_version", 0) + 1
                 st.rerun()
 

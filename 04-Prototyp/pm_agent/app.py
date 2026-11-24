@@ -9,7 +9,7 @@ from pathlib import Path
 
 import streamlit as st
 
-from pm_agent.ui import PAGES, group_tabs, journey
+from pm_agent.ui import PAGES, group_tabs, journey, show_notice
 
 ROOT = Path(__file__).parent
 
@@ -70,8 +70,11 @@ state.page_changed = state.get("page") != page.url_path
 state.page = page.url_path
 # A container of its own per page: a page change mounts new content, which is what the
 # page transition in assets/style.css hangs on.
+show_notice()
 with st.container(key=f"page-{page.url_path or 'startseite'}"):
     group_tabs(page.url_path)
     if page.url_path in PAGES:  # the pages of a phase
         journey(page.url_path)
     page.run()
+# Not reached when the page reruns: its notice then waits for the next run, above.
+show_notice()

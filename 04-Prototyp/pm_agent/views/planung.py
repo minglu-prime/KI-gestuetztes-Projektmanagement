@@ -41,6 +41,7 @@ from pm_agent.ui import (
     chip,
     heading,
     messages,
+    notify,
     on_panel,
     phase_chip,
     roles,
@@ -393,7 +394,7 @@ with tabs[0]:
                 "Die gespeicherte Datei bleibt, wie sie ist."
             )
         else:
-            st.success(f"Gespeichert in {place} (lokal, nicht im Repository).")
+            notify(f"Team gespeichert (lokal in {place}).")
     consent = ask_consent(
         "consent",
         "ihre Angaben (Name, Skills, Stunden, Notiz) zur Planung",
@@ -822,6 +823,16 @@ with tabs[4]:
                     edited=changed,
                     hand_edited=state.get("hand_edited", False) or changed,
                 )
+                # The result stands in step 4, not here: the notice says what came out.
+                if team and project:
+                    found = check_plan(new, team, project, **trace)
+                    count = len(found.warnings)
+                    notify(
+                        f"Geprüft: {len(found.errors)} Fehler, {count} "
+                        f"Warnung{'' if count == 1 else 'en'}. Details in Schritt 4."
+                    )
+                else:
+                    notify("Gespeichert. Prüfen lässt sich der Plan mit Team und Projekt.")
                 st.rerun()
         next_step("Ergebnis ansehen", STEPS[3], False, "back_to_result")
 

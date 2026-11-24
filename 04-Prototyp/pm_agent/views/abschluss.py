@@ -47,6 +47,7 @@ from pm_agent.ui import (
     heading,
     kept_editor,
     messages,
+    notify,
     run_with_progress,
     verdict,
 )
@@ -55,7 +56,9 @@ from pm_agent.workbench import DATA_DIR, InputError
 state = st.session_state
 
 
-def change(make) -> bool:
+def change(make, done: str) -> bool:
+    """Apply `make` to the project as saved now, save it and say `done`. A refusal or a
+    failed save is shown on the next run."""
     try:
         current = load()
         if current is None:
@@ -67,6 +70,7 @@ def change(make) -> bool:
     except OSError as err:
         state.closing_error = f"Das Projekt konnte nicht gespeichert werden: {err}."
         return False
+    notify(done)
     return True
 
 
@@ -92,7 +96,8 @@ def on_signoff(requirements: dict[str, Requirement]) -> None:
             raise InputError("Die Anforderung wurde inzwischen geändert. Prüfe sie erneut.")
         return closing.record_signoff(t, signoff)
 
-    if change(record):
+    said = f"Entscheidung für {signoff.requirement_id} gespeichert: {signoff.decision}."
+    if change(record, said):
         state.signoff_reason = ""
 
 
@@ -140,7 +145,8 @@ def on_incident() -> None:
         )
         return closing.record_incident(t, incident, design)
 
-    if change(record):
+    said = f"Störung {chosen} geändert." if chosen else "Störung erfasst."
+    if change(record, said):
         for key in ["incident_id", "incident_impact", "incident_cause", "incident_measure"]:
             state[key] = ""
 
@@ -159,7 +165,7 @@ def on_fixed(incident_id: str) -> None:
         incident = next(i for i in t.incidents if i.id == incident_id)
         return closing.record_incident(t, incident.model_copy(update={"status": "behoben"}), design)
 
-    change(fix)
+    change(fix, f"Störung {incident_id} ist behoben.")
 
 
 def on_unfix(incident_id: str) -> None:
@@ -167,7 +173,7 @@ def on_unfix(incident_id: str) -> None:
         incident = next(i for i in t.incidents if i.id == incident_id)
         return closing.record_incident(t, incident.model_copy(update={"status": "offen"}), design)
 
-    change(unfix)
+    change(unfix, f"Störung {incident_id} ist wieder offen.")
 
 
 # The result on top: can the project be closed? The handbook in the Betrieb tab counts as
@@ -238,6 +244,7 @@ with closing_tab:
             )
             if drafted is not None and save_lessons(tracking, drafted.items):
                 state.lessons_version = state.get("lessons_version", 0) + 1
+                notify("Lessons Learned entworfen und gespeichert.")
                 st.rerun()
         edited, conflict = kept_editor(
             "lessons_editor_",
@@ -255,6 +262,7 @@ with closing_tab:
             else:
                 if save_lessons(tracking, items):
                     state.lessons_version = state.get("lessons_version", 0) + 1
+                    notify("Lessons Learned gespeichert.")
                     st.rerun()
         if tracking.lessons:
             messages([], check_lessons(Lessons(items=tracking.lessons), tracking))
@@ -298,7 +306,8 @@ with operations_tab:
                 and not handbook_conflict
             ):
                 items = rows_to_operations(handbook.to_dict("records"))
-                if change(lambda t: t.model_copy(update={"operations": items})):
+                done = "Betriebshandbuch gespeichert."
+                if change(lambda t: t.model_copy(update={"operations": items}), done):
                     state.operations_version = state.get("operations_version", 0) + 1
                     st.rerun()
             messages(*check_operations(design, tracking.operations))

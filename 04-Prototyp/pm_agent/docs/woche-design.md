@@ -20,7 +20,7 @@ wir?
   nein), was schiefging, vermutete Ursache, Maßnahme. Die Fakten trägt der Mensch ein.
 - Python rechnet für jede Demo vorab, ob ihre Aufgaben laut Fortschritt fertig sind; der
   Mensch sieht so vor dem Termin, welche Demo wackelt.
-- Offene Maßnahmen bleiben sichtbar, bis sie erledigt sind (Grundlage für Batch 5 Iteration).
+- Maßnahmen bleiben sichtbar, erledigte mit Haken; ein entfernter Haken öffnet sie wieder (Grundlage für Batch 5 Iteration).
 
 ## Nicht-Ziele (Batch 3)
 
@@ -84,7 +84,7 @@ Soft Gate wie bisher: Ein Plan ohne Demos bleibt gültig; die Statusleiste der P
   lassen sich im Chat ändern („Demo in Woche 2 nur mit der Liste“), von Hand in einer Tabelle.
 - **Kontrolle**, neues Panel „Wochenrückblick“: je vergangener Woche die Demo, was Python
   aus dem Fortschritt sieht (alle Aufgaben fertig / x von y), und ein Formular für gezeigt,
-  was schiefging, Ursache, Maßnahme; darunter offene Maßnahmen mit Haken „erledigt“.
+  was schiefging, Ursache, Maßnahme; darunter die Maßnahmen mit Haken „erledigt“, der sich wieder entfernen lässt.
 - **Durchführung**: In „Die nächsten fünf Arbeitstage“ ein Hinweis auf die Demo dieser Woche.
 - Kontrollbericht und Statusbericht bekommen einen Abschnitt „Demos“.
 

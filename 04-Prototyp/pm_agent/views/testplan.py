@@ -25,6 +25,7 @@ from pm_agent.ui import (
     heading,
     kept_editor,
     messages,
+    notify,
     phase_chip,
     phase_verdict,
     run_with_progress,
@@ -159,6 +160,7 @@ with st.container(border=True, key="panel-cases"):
     ):
         if store(life, life.model_copy(update={"cases": edited})) is not None:
             state.cases_version = state.get("cases_version", 0) + 1
+            notify("Testplan gespeichert.")
             st.rerun()
     errors = []
     if life.cases is not None:
@@ -181,13 +183,15 @@ with st.container(border=True, key="panel-approve"):
         )
     if unsaved:
         st.caption("Erst speichern, dann freigeben.")
-    if st.button(
+    # Approved and unchanged: nothing to approve, and the button goes.
+    if (phase != "freigegeben" or unsaved) and st.button(
         "Testplan freigeben",
         icon=":material/verified:",
         type="primary",
-        disabled=life.cases is None or bool(errors) or unsaved or phase == "freigegeben",
+        disabled=life.cases is None or bool(errors) or unsaved,
     ):
         if store(life, approve_cases(life, datetime.now())) is not None:
+            notify("Testplan freigegeben.")
             st.rerun()
 
 # 5 · Dokument ---------------------------------------------------------------------------
