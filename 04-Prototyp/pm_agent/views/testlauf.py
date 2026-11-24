@@ -13,11 +13,13 @@ import streamlit as st
 
 from pm_agent import lifecycle
 from pm_agent.tracking import (
+    CasePlan,
     CaseResult,
     Defect,
     Tracking,
     case_status,
     check_results,
+    current_results,
     load,
     record_defect,
     record_result,
@@ -30,6 +32,7 @@ from pm_agent.ui import (
     check_verdict,
     heading,
     messages,
+    next_open,
     notify,
     verdict,
 )
@@ -57,19 +60,41 @@ def change(make, done: Callable[[Tracking], str]) -> Tracking | None:
     return saved
 
 
-def on_result(versions: dict[str, str]) -> None:
+def on_result(plan: CasePlan) -> None:
+    versions = plan.versions
     result = CaseResult(
         case_id=state.test_case, result=state.test_result, on=date.today(), note=state.test_note
     )
+
+    checked = []  # the test plan as it stood when saving
 
     def record(t: Tracking) -> Tracking:
         current = lifecycle.case_plan(lifecycle.load())
         if current is None or current.versions.get(result.case_id) != versions.get(result.case_id):
             raise InputError("Der Testfall wurde inzwischen geändert. Prüfe ihn erneut.")
+        checked.append(current)
         return record_result(t, result, current)
 
-    if change(record, lambda t: f"Ergebnis gespeichert: {result.case_id} {result.result}."):
+    saved = change(record, lambda t: f"Ergebnis gespeichert: {result.case_id} {result.result}.")
+    if saved is not None:
         state.test_note = ""
+        # On to the next case without a result, counted against the cases as they are now.
+        state.test_case = first_open(checked[-1], saved, after=result.case_id)
+        # A failure without an open defect waits for one in the form below.
+        if result.result == "fehlgeschlagen" and result.case_id not in open_defects(saved):
+            state.defect_case = result.case_id
+
+
+def first_open(plan: CasePlan, tracking: Tracking, after: str = "") -> str:
+    """The case to run next: the first one after `after` without a current result."""
+    order, done = [c.id for c in plan.cases], set(current_results(tracking, plan))
+    found = next_open(order, done, after or order[-1])
+    return found if after or found not in done else order[0]  # all done: from the top
+
+
+def open_defects(tracking: Tracking) -> set[str]:
+    """The cases that have an open defect."""
+    return {d.case_id for d in tracking.defects if d.status == "offen"}
 
 
 def on_defect() -> None:
@@ -159,6 +184,8 @@ if lifecycle.cases_state(life) != "freigegeben":
         "geprüft wird gegen die Testfälle, wie sie gerade stehen."
     )
 titles = {c.id: c.title for c in plan.cases}
+if state.get("test_case") not in titles:  # a first visit, or the case is gone
+    state.test_case = first_open(plan, tracking)
 errors, warnings = check_results(tracking, plan)
 fine = "Jeder Testfall hat ein Ergebnis, jeder fehlgeschlagene einen Fehlereintrag."
 verdict(*check_verdict(errors, warnings, fine))
@@ -173,9 +200,7 @@ with st.container(border=True, key="panel-results"):
         "Ergebnis", ["bestanden", "fehlgeschlagen", "blockiert"], horizontal=True, key="test_result"
     )
     st.text_input("Notiz", key="test_note")
-    st.button(
-        "Ergebnis speichern", icon=":material/save:", on_click=on_result, args=(plan.versions,)
-    )
+    st.button("Ergebnis speichern", icon=":material/save:", on_click=on_result, args=(plan,))
 
 with st.container(border=True, key="panel-defects"):
     heading("bug_report", "Fehler", du="erfasst und entscheidest", python="prüft")
@@ -190,6 +215,20 @@ with st.container(border=True, key="panel-defects"):
             key="defect_id",
             on_change=on_pick_defect,
             args=(defects_by_id, titles),
+        )
+    if state.get("defect_case") not in titles:
+        # A failed case without an open defect is what the form is most likely for.
+        latest = current_results(tracking, plan)
+        open_cases = open_defects(tracking)
+        state.defect_case = next(
+            (
+                c.id
+                for c in plan.cases
+                if c.id in latest
+                and latest[c.id].result == "fehlgeschlagen"
+                and c.id not in open_cases
+            ),
+            plan.cases[0].id,
         )
     st.selectbox(
         "Gefunden von", list(titles), format_func=lambda c: f"{c} · {titles[c]}", key="defect_case"

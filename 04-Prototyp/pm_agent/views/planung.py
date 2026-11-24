@@ -32,9 +32,11 @@ from pm_agent.tracking import (
     rest_project,
 )
 from pm_agent.tracking import load as load_tracking
+from pm_agent.tracking import next_step as project_step
 from pm_agent.ui import (
     BUSY_HINT,
     LEGEND,
+    PAGES,
     TASK_AXIS,
     as_text,
     check_verdict,
@@ -307,6 +309,9 @@ try:
     life = lifecycle.load()
 except InputError:
     life = None  # the project path above the page says why
+# Step 2 starts with what the Projektauftrag says; typed in here, it stays as typed.
+if life is not None and life.project is not None and not state.idea.strip() and not state.deadline:
+    take_dates(life.project)
 needs = lifecycle.approved_requirements(life)
 # Only with approved requirements does the plan get traced; without, all stays as before.
 state.covered = frozenset()
@@ -407,12 +412,17 @@ with tabs[1]:
     st.subheader("Projekt")
     st.html(roles(du="beschreibst Ziel und Termine"))
     st.caption("Was soll bis wann entstehen? Aus der Idee leitet der Agent die Aufgaben ab.")
-    if life is not None and life.project is not None:
+    charter = life.project if life is not None else None
+    if charter is not None and (state.idea, state.start, state.deadline) != (
+        charter.idea,
+        charter.start_date,
+        charter.deadline,
+    ):
         st.button(
             "Eckdaten aus dem Projektauftrag übernehmen",
             icon=":material/input:",
             on_click=take_dates,
-            args=(life.project,),
+            args=(charter,),
             help="Idee, Start und Deadline, wie sie auf der Seite Projektauftrag stehen. "
             "Freie Tage bleiben, wie sie hier stehen.",
         )
@@ -1149,10 +1159,17 @@ with tabs[5]:
 
 # Where the planning stands, above the steps.
 try:
-    adopted_exists = load_tracking() is not None
+    baseline = load_tracking()
 except InputError:
-    adopted_exists = False  # ui.journey shows the error above this page
-if state.plan is None and adopted_exists:
+    baseline = None  # ui.journey shows the error above this page
+# Nothing else on the table than the adopted project: the planning is done for now. The
+# rest of a project to plan again can be the same plan, from another day: project and team
+# count too.
+planned = baseline is not None and (
+    state.plan is None
+    or (state.plan, project, team) == (baseline.plan, baseline.project, baseline.team)
+)
+if state.plan is None and baseline is not None:
     # The path ticks "Planen" for it; "Plan offen" beside the tick said the opposite.
     plan_chip = chip("Plan übernommen", "on")
 elif state.plan is None:
@@ -1197,8 +1214,16 @@ with status:
     )
 with next_line:
     with st.container(horizontal=True, vertical_alignment="center", key="next-step-planung"):
-        st.markdown(f"**Jetzt dran (Schritt {step + 1}):** {todo}")
-        if state.get("step", STEPS[0]) != STEPS[step]:
+        if planned:
+            # The same next step as on the Startseite and the pages of the project.
+            advice, where = project_step(baseline, date.today())
+            st.markdown(f"**Jetzt dran:** Der Plan ist als Projekt übernommen. {as_text(advice)}")
+            target, label = PAGES[where]
+            if st.button(label, key="planung-go", type="primary", icon=":material/arrow_forward:"):
+                st.switch_page(target)
+        else:
+            st.markdown(f"**Jetzt dran (Schritt {step + 1}):** {todo}")
+        if not planned and state.get("step", STEPS[0]) != STEPS[step]:
             st.button(
                 f"Zu Schritt {step + 1}",
                 key="planung-go",

@@ -4,7 +4,7 @@ from datetime import date
 from types import SimpleNamespace
 
 from pm_agent.tracking import Forecast
-from pm_agent.ui import check_verdict, forecast_verdict
+from pm_agent.ui import check_verdict, forecast_verdict, next_open
 
 DEADLINE = date(2026, 12, 18)
 
@@ -63,3 +63,11 @@ def test_a_check_says_its_first_finding_and_how_many_there_are():
     assert check_verdict(["A fehlt", "B fehlt"], ["C"], "gut") == ("bad", "2 Fehler: A fehlt …")
     assert check_verdict([], ["C zu spät"], "gut") == ("warn", "1 Warnung: C zu spät")
     assert check_verdict([], [], "Keine Fehler.") == ("ok", "Keine Fehler.")
+
+
+def test_the_next_open_entry_comes_after_the_current_one_and_wraps():
+    order = ["T1", "T2", "T3", "T4"]
+    assert next_open(order, {"T1", "T2"}, "T2") == "T3"
+    assert next_open(order, {"T3", "T4"}, "T4") == "T1"  # from the start again
+    assert next_open(order, set(order), "T2") == "T2"  # all done: stays
+    assert next_open(order, set(), "T9") == "T1"  # unknown: the first open one

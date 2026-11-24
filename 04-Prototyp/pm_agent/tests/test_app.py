@@ -1899,8 +1899,6 @@ def test_the_auftrag_prefills_step_2(app):
     at = app.run()
     at.text_input(key="free_days").input("24.12.2026")
     at = at.run()
-    button(at, "Eckdaten aus dem Projektauftrag übernehmen").click()
-    at = at.run()
     assert at.text_area(key="idea").value == PROJECT.idea
     assert at.date_input(key="deadline").value == PROJECT.deadline
     # Free days are entered here, in the Planung: taking the dates leaves them alone.
@@ -2598,8 +2596,7 @@ def test_one_project_goes_from_the_auftrag_to_the_next_run(site, monkeypatch, tm
 
     # 5 Planung: the dates come from the Auftrag, the agent gets requirements and design.
     at = at.switch_page(PLANUNG).run()
-    button(at, "Eckdaten aus dem Projektauftrag übernehmen").click()
-    at = at.run()
+    assert at.text_area(key="idea").value == PROJECT.idea  # taken over by itself
     at.checkbox(key="consent").check().run()
     button(at, "Plan mit dem Agenten erstellen").click()
     at = at.run()
@@ -3250,3 +3247,164 @@ def test_a_notice_shows_what_was_typed_as_written(site):
     at = at.run()
     at = at.checkbox(key="measure_done_20261116").check().run()
     assert notices(at) == [ui.as_text("Maßnahme erledigt: [Plan](https://x.test) *jetzt*.")]
+
+
+def labels(at) -> list[str]:
+    return [b.label for b in at.button]
+
+
+def test_the_planung_takes_idea_and_dates_from_the_auftrag_by_itself(site):
+    # Step 2 stood empty although the Projektauftrag held idea, start and deadline; a button
+    # had to copy them over.
+    lifecycle.save(lifecycle.Lifecycle(project=PROJECT))
+    at = site.switch_page(PLANUNG).run()
+    assert at.text_area(key="idea").value == PROJECT.idea
+    assert at.date_input(key="start").value == PROJECT.start_date
+    assert at.date_input(key="deadline").value == PROJECT.deadline
+    assert "Eckdaten aus dem Projektauftrag übernehmen" not in labels(at)
+    # Changed here, the button offers the Auftrag again; nothing is overwritten by itself.
+    at = at.text_area(key="idea").input("Nur die Raumliste").run()
+    assert at.text_area(key="idea").value == "Nur die Raumliste"
+    assert "Eckdaten aus dem Projektauftrag übernehmen" in labels(at)
+
+
+def test_the_planung_of_an_adopted_project_leads_on_instead_of_asking_for_consent(tracked):
+    at = tracked.switch_page(PLANUNG).run()
+    (line,) = [m.value for m in at.markdown if "Jetzt dran" in m.value]
+    assert "als Projekt übernommen" in line and "Zustimmung" not in line
+    # Where the Startseite leads too (review of PR 2): a late project goes to the Kontrolle.
+    advice, where = tracking.next_step(tracking.load(), date.today())
+    assert ui.as_text(advice) in line
+    assert ui.PAGES[where][1] in labels(at)
+
+
+def test_the_rest_of_the_project_to_plan_again_is_not_taken_as_adopted(tracked):
+    # Without progress the rest is the same plan, from today (review of PR 2): the line
+    # said "übernommen" and led away from the planning that had just begun.
+    at = tracked.switch_page("views/kontrolle.py").run()
+    at.session_state["rest_requested"] = True
+    at = at.switch_page(PLANUNG).run()
+    (line,) = [m.value for m in at.markdown if "Jetzt dran" in m.value]
+    assert "übernommen" not in line
+
+
+def test_the_test_page_moves_on_to_the_next_case_and_the_defect_of_a_failure(tracked):
+    from test_lifecycle import design
+    from test_testplan import cases
+
+    lifecycle.save(
+        lifecycle.Lifecycle(project=PROJECT, requirements=NEEDS, design=design(), cases=cases())
+    )
+    at = tracked.switch_page("views/testlauf.py").run()
+    assert at.selectbox(key="test_case").value == "T1"
+    button(at, "Ergebnis speichern").click()
+    at = at.run()
+    assert at.selectbox(key="test_case").value == "T2"  # the next one without a result
+    at.radio(key="test_result").set_value("fehlgeschlagen").run()
+    button(at, "Ergebnis speichern").click()
+    at = at.run()
+    assert at.selectbox(key="test_case").value == "T3"
+    # The defect form starts on the case that failed and has no defect yet.
+    assert at.selectbox(key="defect_case").value == "T2"
+    at = tracked.switch_page("views/startseite.py").run().switch_page("views/testlauf.py").run()
+    assert at.selectbox(key="defect_case").value == "T2"
+    assert at.selectbox(key="test_case").value == "T3"  # back on the page: the next open one
+    # A failure of a case whose defect is still open does not pull the form to it again.
+    at.text_input(key="defect_cause").input("Schema fehlt").run()
+    at.selectbox(key="defect_task").set_value("B").run()
+    button(at, "Fehler erfassen").click()
+    at = at.run()
+    at.selectbox(key="defect_case").set_value("T1").run()
+    at.selectbox(key="test_case").set_value("T2").run()
+    at.radio(key="test_result").set_value("fehlgeschlagen").run()
+    button(at, "Ergebnis speichern").click()
+    at = at.run()
+    assert at.selectbox(key="defect_case").value == "T1"
+
+
+def test_the_next_case_counts_results_of_the_cases_as_they_are_when_saving(tracked):
+    # The form moved on with the test plan of the page: a case changed meanwhile kept its old
+    # result and was skipped (review of PR 2).
+    from test_lifecycle import design
+    from test_testplan import cases
+
+    from pm_agent.tracking import CaseResult, record_result, save
+
+    lifecycle.save(
+        lifecycle.Lifecycle(project=PROJECT, requirements=NEEDS, design=design(), cases=cases())
+    )
+    plan = lifecycle.case_plan(lifecycle.load())
+    passed = CaseResult(case_id="T2", result="bestanden", on=date.today())
+    save(record_result(tracking.load(), passed, plan))
+    at = tracked.switch_page("views/testlauf.py").run()
+    assert at.selectbox(key="test_case").value == "T1"
+    changed = cases().model_copy(deep=True)
+    changed.cases[1].expected = "Eine andere Antwort"
+    lifecycle.save(lifecycle.load().model_copy(update={"cases": changed}))
+    button(at, "Ergebnis speichern").click()
+    at = at.run()
+    assert at.selectbox(key="test_case").value == "T2"
+
+
+def test_the_closing_page_presets_what_python_proposes_and_moves_on(site):
+    from test_lifecycle import design
+    from test_testplan import cases
+
+    from pm_agent.tracking import CaseResult, record_result, save
+
+    two = NEEDS.model_copy(
+        update={"items": [*NEEDS.items, NEEDS.items[0].model_copy(update={"id": "R2"})]}
+    )
+    lifecycle.save(
+        lifecycle.Lifecycle(project=PROJECT, requirements=two, design=design(), cases=cases())
+    )
+    adopted = tracking.adopt(PROJECT, TEAM, PLAN, requirements=two.items)
+    plan = lifecycle.case_plan(lifecycle.load())
+    for case in ["T1", "T2", "T3"]:
+        result = CaseResult(case_id=case, result="bestanden", on=date.today())
+        adopted = record_result(adopted, result, plan)
+    save(adopted)
+    at = site.switch_page("views/abschluss.py").run()
+    # R1 is "abnehmbar": accepting it is preset. R2 has no case: the lead chooses.
+    assert at.selectbox(key="signoff_req").value == "R1"
+    assert at.radio(key="signoff_decision").value == "abgenommen"
+    button(at, "Entscheidung speichern").click()
+    at = at.run()
+    assert at.selectbox(key="signoff_req").value == "R2"
+    assert at.radio(key="signoff_decision").value is None
+    button(at, "Entscheidung speichern").click()
+    at = at.run()
+    assert any("abgenommen" in e.value and "zurückgestellt" in e.value for e in at.error)
+    assert [s.requirement_id for s in tracking.load().signoffs] == ["R1"]
+
+
+def test_a_preset_acceptance_goes_when_the_evidence_changes(site):
+    # The radio kept "abgenommen" after the case of an "abnehmbar" requirement failed
+    # (review of PR 2): one click accepted what Python no longer proposes.
+    from test_lifecycle import design
+    from test_testplan import cases
+
+    from pm_agent.tracking import CaseResult, record_result, save
+
+    lifecycle.save(
+        lifecycle.Lifecycle(project=PROJECT, requirements=NEEDS, design=design(), cases=cases())
+    )
+    adopted = tracking.adopt(PROJECT, TEAM, PLAN, requirements=NEEDS.items)
+    plan = lifecycle.case_plan(lifecycle.load())
+    for case in ["T1", "T2", "T3"]:
+        adopted = record_result(
+            adopted, CaseResult(case_id=case, result="bestanden", on=date.today()), plan
+        )
+    save(adopted)
+    at = site.switch_page("views/abschluss.py").run()
+    assert at.radio(key="signoff_decision").value == "abgenommen"
+    failed = CaseResult(case_id="T1", result="fehlgeschlagen", on=date.today())
+    save(record_result(tracking.load(), failed, plan))
+    at = at.run()
+    assert at.radio(key="signoff_decision").value is None
+
+
+def test_the_startseite_has_one_primary_button(tracked):
+    at = tracked.switch_page("views/startseite.py").run()
+    primary = [b.label for b in at.button if b.proto.type == "primary"]
+    assert primary == ["Stand prüfen"]
