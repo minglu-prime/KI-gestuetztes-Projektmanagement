@@ -191,6 +191,16 @@ def test_results_and_defects_are_checked_against_the_cases(adopted):
     assert [(r.case_id, r.result) for r in again.results] == [("T2", "bestanden")]
 
 
+def test_many_cases_without_a_result_name_the_first_and_count_the_rest(adopted):
+    # The verdict of the Test page listed all 47 cases of the demo project in one line.
+    from pm_agent.tracking import check_results
+
+    plan = evidence(*({**ACCEPT, "id": f"T{n}"} for n in range(1, 9)))
+    assert check_results(adopted, plan).warnings == [
+        "8 Testfälle ohne Ergebnis: T1, T2, T3, T4, T5 und 3 weitere"
+    ]
+
+
 def test_a_defect_needs_a_known_task_and_a_severe_one_needs_one_at_all(adopted):
     from pm_agent.tracking import Defect, record_defect
 

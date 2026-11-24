@@ -69,6 +69,21 @@ def as_text(text: str) -> str:
     return re.sub(r"([\\`*_\[\]~|#!])", r"\\\1", text)
 
 
+def notify(text: str) -> None:
+    """Answer a click that saved or changed something: a notice that fades by itself, so the
+    page under it does not move. Kept until app.py shows it (`show_notice`): a toast sent
+    right before st.rerun() is lost, and a callback runs before the page."""
+    st.session_state["notice"] = text
+
+
+def show_notice() -> None:
+    """The notice of `notify`, once. app.py calls it before the page (callbacks, a save that
+    reran) and after it (a save without a rerun)."""
+    if text := st.session_state.pop("notice", None):
+        # It can quote what was typed, as typed: Markdown in it is not applied.
+        st.toast(as_text(text), icon=":material/check_circle:")
+
+
 def messages(errors: Sequence[str], warnings: Sequence[str] = ()) -> None:
     """The findings of a check: the errors in one red box, the warnings in one yellow box.
     One box each made a stack of eleven boxes beside the table they came from."""
@@ -169,6 +184,7 @@ def saved_lifecycle() -> Lifecycle | None:
                 # The fields still hold the old project; the next run would save it again.
                 for key in [k for k in st.session_state if k.startswith(FIELD_PREFIXES)]:
                     del st.session_state[key]
+                notify("Neues, leeres Vorhaben angelegt.")
                 st.rerun()
         return None
 

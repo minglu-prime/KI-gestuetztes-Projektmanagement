@@ -862,7 +862,7 @@ def test_nonzero_progress_survives_reopen_and_reaches_control_and_documents(flow
     button(at, "Fortschritt speichern").click()
     at.run()
     assert not at.exception and not at.error
-    assert any("Fortschritt gespeichert" in s.value for s in at.success)
+    assert any("Fortschritt gespeichert" in text for text in notices(at))
 
     after_save = tracking.PROJECT_FILE.read_bytes()
     stored = json.loads(after_save)
@@ -1593,7 +1593,9 @@ def test_a_charter_changed_after_approval_says_so(site):
     at.text_area(key="charter_goal").input("Räume und Geräte online buchen")
     at = at.run()
     assert any("nicht gespeichert" in c.value for c in at.caption)
-    assert button(at, "Projektauftrag freigeben").disabled  # unsaved edits first
+    # Approved: the button comes back once the change is saved, and the caption says so.
+    assert "Projektauftrag freigeben" not in [b.label for b in at.button]
+    assert any("Erst speichern, dann freigeben" in c.value for c in at.caption)
     button(at, "Änderungen speichern und prüfen").click()
     at = at.run()
     assert lifecycle.load().charter.goal == "Räume und Geräte online buchen"
@@ -2417,6 +2419,7 @@ def test_the_operations_page_checks_the_handbook_and_records_incidents(tracked):
     at.text_input(key="incident_impact").input("Buchen geht nicht").run()
     button(at, "Störung erfassen").click()
     at = at.run()
+    assert notices(at) == ["Störung ST1 erfasst."]
     (incident,) = tracking.load().incidents
     assert (incident.id, incident.component_id) == ("ST1", "B1")
     incidents_table = next(f.value for f in at.dataframe if "Auswirkung" in f.value.columns)
@@ -2434,9 +2437,11 @@ def test_the_operations_page_checks_the_handbook_and_records_incidents(tracked):
     button(at, "ST1: behoben").click()
     at = at.run()
     assert tracking.load().incidents[0].status == "behoben"
+    assert notices(at) == ["Störung ST1 ist behoben."]
     button(at, "ST1: wieder öffnen").click()
     at = at.run()
     assert tracking.load().incidents[0].status == "offen"
+    assert notices(at) == ["Störung ST1 ist wieder offen."]
     at.selectbox(key="incident_id").set_value("ST1").run()
     at.text_input(key="incident_impact").input("Buchen langsam").run()
     button(at, "Störung erfassen").click()
@@ -2901,7 +2906,7 @@ def test_progress_edit_does_not_move_to_another_task_after_reordering(site):
     assert tracking.load() == current
     assert progress_editor(at).iloc[0]["ID"] == "B"
     assert any("inzwischen geändert" in warning.value for warning in at.warning)
-    assert not any("Fortschritt gespeichert" in message.value for message in at.success)
+    assert not any("Fortschritt gespeichert" in text for text in notices(at))
 
 
 def test_iteration_confirmation_cannot_archive_a_replacement_project(site, tmp_path, monkeypatch):
@@ -3140,3 +3145,108 @@ def test_saving_an_edited_table_does_not_warn_that_the_saved_state_changed(site)
         at = at.run()
         assert not at.exception, page
         assert not [w.value for w in at.warning if "inzwischen geändert" in w.value], page
+
+
+def notices(at) -> list[str]:
+    """The short notices of this run (ui.notify), as the toasts show them."""
+    return [toast.value for toast in at.toast]
+
+
+def test_saving_and_approving_answer_and_an_approved_phase_offers_no_approval(site):
+    # A save reran the page without a word, and "freigeben" stayed on the page, greyed out,
+    # under the green box that said it was approved.
+    lifecycle.save(lifecycle.Lifecycle(project=PROJECT, charter=CHARTER))
+    at = site.switch_page("views/auftrag.py").run()
+    at.text_area(key="charter_goal").input("Räume online buchen")
+    at = at.run()
+    button(at, "Änderungen speichern und prüfen").click()
+    at = at.run()
+    assert notices(at) == ["Projektauftrag gespeichert."]
+    button(at, "Projektauftrag freigeben").click()
+    at = at.run()
+    assert notices(at) == ["Projektauftrag freigegeben."]
+    assert "Projektauftrag freigeben" not in [b.label for b in at.button]
+    assert notices(at.run()) == []  # shown once
+
+
+def test_every_entry_of_the_test_page_answers(tracked):
+    from test_lifecycle import design
+    from test_testplan import cases
+
+    lifecycle.save(
+        lifecycle.Lifecycle(project=PROJECT, requirements=NEEDS, design=design(), cases=cases())
+    )
+    at = tracked.switch_page("views/testlauf.py").run()
+    at.selectbox(key="test_case").set_value("T2").run()
+    at.radio(key="test_result").set_value("fehlgeschlagen").run()
+    button(at, "Ergebnis speichern").click()
+    at = at.run()
+    assert notices(at) == ["Ergebnis gespeichert: T2 fehlgeschlagen."]
+    at.text_input(key="defect_cause").input("Schema fehlt").run()
+    at.selectbox(key="defect_task").set_value("B").run()
+    button(at, "Fehler erfassen").click()
+    at = at.run()
+    assert notices(at) == ["Fehler F1 erfasst."]
+    button(at, "F1: Aufgabe B wieder öffnen").click()
+    assert notices(at.run()) == ["Aufgabe B ist wieder in Arbeit."]
+    button(at, "F1: behoben").click()
+    assert notices(at.run()) == ["Fehler F1 ist behoben."]
+    button(at, "F1: wieder öffnen").click()
+    assert notices(at.run()) == ["Fehler F1 ist wieder offen."]
+
+
+def test_progress_team_retro_and_signoff_answer_the_same_way(site):
+    tracking.adopt(PROJECT, TEAM, DEMO_PLAN, requirements=NEEDS.items)
+    at = site.switch_page("views/durchfuehrung.py").run()
+    button(at, "Fortschritt speichern").click()
+    at = at.run()
+    assert notices(at) == ["Fortschritt gespeichert (lokal in data/projekt.json)."]
+    assert not at.success  # the box above the table pushed it down
+
+    at = at.switch_page("views/kontrolle.py").run()
+    at.selectbox(key="retro_week").set_value(2).run()
+    at.radio(key="retro_shown_2").set_value("nein").run()
+    at.text_input(key="retro_measure_2").input("Schema zuerst klären").run()
+    button(at, "Rückblick speichern").click()
+    assert notices(at.run()) == ["Rückblick für Woche 2 gespeichert."]
+
+    at = at.switch_page("views/abschluss.py").run()
+    at.radio(key="signoff_decision").set_value("zurückgestellt").run()
+    at.text_input(key="signoff_reason").input("keine Zeit").run()
+    button(at, "Entscheidung speichern").click()
+    assert notices(at.run()) == ["Entscheidung für R1 gespeichert: zurückgestellt."]
+
+    at = at.switch_page(PLANUNG).run()
+    button(at, "Team lokal speichern").click()
+    assert notices(at.run()) == ["Team gespeichert (lokal in data/team.json)."]
+
+
+def test_a_measure_ticked_as_done_can_be_opened_again(site):
+    # Ticking a measure saved it as done and took it off the page: a slip could not be undone.
+    tracking.adopt(PROJECT, TEAM, DEMO_PLAN)
+    at = site.switch_page("views/kontrolle.py").run()
+    at.selectbox(key="retro_week").set_value(2).run()
+    at.radio(key="retro_shown_2").set_value("nein").run()
+    at.text_input(key="retro_measure_2").input("Schema zuerst klären").run()
+    button(at, "Rückblick speichern").click()
+    at = at.run()
+    at = at.checkbox(key="measure_done_20261116").check().run()
+    assert tracking.load().retros[0].measure_done is True
+    assert notices(at) == ["Maßnahme erledigt: Schema zuerst klären."]
+    assert at.checkbox(key="measure_done_20261116").value is True  # still there, ticked
+    at = at.checkbox(key="measure_done_20261116").uncheck().run()
+    assert tracking.load().retros[0].measure_done is False
+    assert notices(at) == ["Maßnahme wieder offen: Schema zuerst klären."]
+
+
+def test_a_notice_shows_what_was_typed_as_written(site):
+    # A measure written as a Markdown link became a link in the notice (review of PR 99).
+    tracking.adopt(PROJECT, TEAM, DEMO_PLAN)
+    at = site.switch_page("views/kontrolle.py").run()
+    at.selectbox(key="retro_week").set_value(2).run()
+    at.radio(key="retro_shown_2").set_value("nein").run()
+    at.text_input(key="retro_measure_2").input("[Plan](https://x.test) *jetzt*").run()
+    button(at, "Rückblick speichern").click()
+    at = at.run()
+    at = at.checkbox(key="measure_done_20261116").check().run()
+    assert notices(at) == [ui.as_text("Maßnahme erledigt: [Plan](https://x.test) *jetzt*.")]

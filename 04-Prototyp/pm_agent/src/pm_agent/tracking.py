@@ -644,7 +644,9 @@ def check_results(tracking: Tracking, plan: CasePlan) -> RetroCheck:
     missing = [c.id for c in plan.cases if c.id not in latest]
     if missing:
         subject = "1 Testfall" if len(missing) == 1 else f"{len(missing)} Testfälle"
-        warnings.append(f"{subject} ohne Ergebnis: {', '.join(missing)}")
+        # The table above lists them all; the line names where to begin.
+        shown = ", ".join(missing[:5]) + (f" und {len(missing) - 5} weitere" * (len(missing) > 5))
+        warnings.append(f"{subject} ohne Ergebnis: {shown}")
     warnings += [
         f"Fehler {d.id} ist offen, seine Aufgabe '{d.task_id}' ist aber fertig"
         for d in tracking.defects

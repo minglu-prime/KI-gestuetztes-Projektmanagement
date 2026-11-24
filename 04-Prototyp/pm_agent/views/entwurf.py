@@ -28,6 +28,7 @@ from pm_agent.ui import (
     heading,
     kept_editor,
     messages,
+    notify,
     phase_chip,
     phase_verdict,
     run_with_progress,
@@ -186,6 +187,7 @@ with st.container(border=True, key="panel-design"):
     ):
         if store(life, life.model_copy(update={"design": edited})) is not None:
             state.design_version = state.get("design_version", 0) + 1
+            notify("Entwurf gespeichert.")
             st.rerun()
     errors = []
     if life.design is not None:
@@ -230,13 +232,15 @@ with st.container(border=True, key="panel-approve"):
         )
     if unsaved:
         st.caption("Erst speichern, dann freigeben.")
-    if st.button(
+    # Approved: nothing to approve until a saved change. The caption above says so.
+    if phase != "freigegeben" and st.button(
         "Entwurf freigeben",
         icon=":material/verified:",
         type="primary",
-        disabled=life.design is None or bool(errors) or unsaved or phase == "freigegeben",
+        disabled=life.design is None or bool(errors) or unsaved,
     ):
         if store(life, approve_design(life, datetime.now())) is not None:
+            notify("Entwurf freigegeben.")
             st.rerun()
 
 # 6 · Dokument ---------------------------------------------------------------------------

@@ -24,8 +24,8 @@ from pm_agent.tracking import (
     has_progress,
     hours_text,
     index_text,
+    load,
     measure_effect,
-    open_measures,
     percent,
     planned_curve,
     quality_summary,
@@ -44,6 +44,7 @@ from pm_agent.ui import (
     heading,
     history_table,
     messages,
+    notify,
     on_panel,
     roles,
     run_with_progress,
@@ -52,6 +53,24 @@ from pm_agent.ui import (
 from pm_agent.workbench import InputError
 
 state = st.session_state
+
+
+def tick_measure(monday: date, key: str) -> None:
+    """Callback: a measure is done, or open again, as its box now says."""
+    try:
+        current = load()
+        if current is None:
+            raise InputError("Es ist kein Projekt übernommen")
+        retro = next((r for r in current.retros if r.monday == monday), None)
+        if retro is None:
+            raise InputError("Der Rückblick wurde inzwischen geändert. Prüfe ihn erneut")
+        done = retro.model_copy(update={"measure_done": state[key]})
+        save_if_current(current, record_retro(current, done))
+    except (InputError, OSError) as err:
+        state.measure_error = str(err)
+        return
+    said = "erledigt" if done.measure_done else "wieder offen"
+    notify(f"Maßnahme {said}: {retro.measure}.")
 
 
 def days(count: int) -> str:
@@ -436,24 +455,26 @@ if tracking is not None:
                 except OSError as err:
                     st.error(f"Der Rückblick konnte nicht gespeichert werden: {as_text(str(err))}.")
                 else:
+                    notify(f"Rückblick für Woche {week} gespeichert.")
                     st.rerun()
-        measures = open_measures(tracking)
+        # Done ones stay, ticked: unticking opens a measure again.
+        measures = [retro for retro in tracking.retros if retro.measure]
         if measures:
-            st.markdown("**Offene Maßnahmen**")
+            st.markdown("**Maßnahmen**")
+            if "measure_error" in state:
+                st.error(
+                    "Die Maßnahme konnte nicht gespeichert werden: "
+                    f"{as_text(state.pop('measure_error'))}."
+                )
             for retro in measures:
-                if st.checkbox(
+                key = f"measure_done_{retro.monday:%Y%m%d}"
+                state[key] = retro.measure_done  # as saved, also after a new measure
+                st.checkbox(
                     f"Woche ab {retro.monday:%d.%m.%Y}: {as_text(retro.measure)}",
-                    key=f"measure_done_{retro.monday:%Y%m%d}",
-                ):
-                    done = retro.model_copy(update={"measure_done": True})
-                    try:
-                        save_if_current(tracking, record_retro(tracking, done))
-                    except (InputError, OSError) as err:
-                        st.error(
-                            f"Die Maßnahme konnte nicht gespeichert werden: {as_text(str(err))}."
-                        )
-                    else:
-                        st.rerun()
+                    key=key,
+                    on_change=tick_measure,
+                    args=(retro.monday, key),
+                )
 
     with st.container(border=True, key="panel-cost"):
         heading("euro", "Kosten", du="setzt den Stundensatz", python="rechnet")

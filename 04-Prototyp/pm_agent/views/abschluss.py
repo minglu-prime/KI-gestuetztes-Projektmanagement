@@ -9,6 +9,7 @@ this run's files into data/archiv and begins a new Vorhaben with that backlog.
 Buttons work through callbacks (see views/testlauf.py): they run before the page is drawn
 again and can empty the fields they used."""
 
+from collections.abc import Callable
 from datetime import date, datetime
 
 import pandas as pd
@@ -47,6 +48,7 @@ from pm_agent.ui import (
     heading,
     kept_editor,
     messages,
+    notify,
     run_with_progress,
     verdict,
 )
@@ -55,19 +57,23 @@ from pm_agent.workbench import DATA_DIR, InputError
 state = st.session_state
 
 
-def change(make) -> bool:
+def change(make, done: Callable[[Tracking], str]) -> Tracking | None:
+    """Apply `make` to the project as saved now, save it and say so (`done` words it from
+    the saved project). A refusal or a failed save is shown on the next run, and gives None."""
     try:
         current = load()
         if current is None:
             raise InputError("Es ist kein Projekt übernommen")
-        save_if_current(current, make(current))
+        saved = make(current)
+        save_if_current(current, saved)
     except InputError as err:
         state.closing_error = str(err)
-        return False
+        return None
     except OSError as err:
         state.closing_error = f"Das Projekt konnte nicht gespeichert werden: {err}."
-        return False
-    return True
+        return None
+    notify(done(saved))
+    return saved
 
 
 def save_lessons(basis: Tracking, items: list[Lesson]) -> bool:
@@ -92,7 +98,8 @@ def on_signoff(requirements: dict[str, Requirement]) -> None:
             raise InputError("Die Anforderung wurde inzwischen geändert. Prüfe sie erneut.")
         return closing.record_signoff(t, signoff)
 
-    if change(record):
+    said = f"Entscheidung für {signoff.requirement_id} gespeichert: {signoff.decision}."
+    if change(record, lambda t: said):
         state.signoff_reason = ""
 
 
@@ -140,7 +147,9 @@ def on_incident() -> None:
         )
         return closing.record_incident(t, incident, design)
 
-    if change(record):
+    # A new incident gets the next number: the last one in the list.
+    said = "geändert" if chosen else "erfasst"
+    if change(record, lambda t: f"Störung {chosen or t.incidents[-1].id} {said}."):
         for key in ["incident_id", "incident_impact", "incident_cause", "incident_measure"]:
             state[key] = ""
 
@@ -159,7 +168,7 @@ def on_fixed(incident_id: str) -> None:
         incident = next(i for i in t.incidents if i.id == incident_id)
         return closing.record_incident(t, incident.model_copy(update={"status": "behoben"}), design)
 
-    change(fix)
+    change(fix, lambda t: f"Störung {incident_id} ist behoben.")
 
 
 def on_unfix(incident_id: str) -> None:
@@ -167,7 +176,7 @@ def on_unfix(incident_id: str) -> None:
         incident = next(i for i in t.incidents if i.id == incident_id)
         return closing.record_incident(t, incident.model_copy(update={"status": "offen"}), design)
 
-    change(unfix)
+    change(unfix, lambda t: f"Störung {incident_id} ist wieder offen.")
 
 
 # The result on top: can the project be closed? The handbook in the Betrieb tab counts as
@@ -238,6 +247,7 @@ with closing_tab:
             )
             if drafted is not None and save_lessons(tracking, drafted.items):
                 state.lessons_version = state.get("lessons_version", 0) + 1
+                notify("Lessons Learned entworfen und gespeichert.")
                 st.rerun()
         edited, conflict = kept_editor(
             "lessons_editor_",
@@ -255,6 +265,7 @@ with closing_tab:
             else:
                 if save_lessons(tracking, items):
                     state.lessons_version = state.get("lessons_version", 0) + 1
+                    notify("Lessons Learned gespeichert.")
                     st.rerun()
         if tracking.lessons:
             messages([], check_lessons(Lessons(items=tracking.lessons), tracking))
@@ -298,7 +309,8 @@ with operations_tab:
                 and not handbook_conflict
             ):
                 items = rows_to_operations(handbook.to_dict("records"))
-                if change(lambda t: t.model_copy(update={"operations": items})):
+                done = "Betriebshandbuch gespeichert."
+                if change(lambda t: t.model_copy(update={"operations": items}), lambda t: done):
                     state.operations_version = state.get("operations_version", 0) + 1
                     st.rerun()
             messages(*check_operations(design, tracking.operations))

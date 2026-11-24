@@ -5,6 +5,7 @@ open defect, and a defect can put its task back to "in Arbeit".
 The buttons work through callbacks: they run before the page is drawn again, so they can
 empty the fields they used (a second click would otherwise record the same defect twice)."""
 
+from collections.abc import Callable
 from datetime import date
 
 import pandas as pd
@@ -23,27 +24,37 @@ from pm_agent.tracking import (
     reopen,
     save_if_current,
 )
-from pm_agent.ui import adopted_project, as_text, check_verdict, heading, messages, verdict
+from pm_agent.ui import (
+    adopted_project,
+    as_text,
+    check_verdict,
+    heading,
+    messages,
+    notify,
+    verdict,
+)
 from pm_agent.workbench import InputError
 
 state = st.session_state
 
 
-def change(make) -> bool:
-    """Apply `make` to the project as saved now, and save it. A refusal or a failed save
-    is shown on the next run."""
+def change(make, done: Callable[[Tracking], str]) -> Tracking | None:
+    """Apply `make` to the project as saved now, save it and say so (`done` words it from
+    the saved project). A refusal or a failed save is shown on the next run, and gives None."""
     try:
         current = load()
         if current is None:
             raise InputError("Es ist kein Projekt übernommen")
-        save_if_current(current, make(current))
+        saved = make(current)
+        save_if_current(current, saved)
     except InputError as err:
         state.test_page_error = str(err)
-        return False
+        return None
     except OSError as err:
         state.test_page_error = f"Das Projekt konnte nicht gespeichert werden: {err}."
-        return False
-    return True
+        return None
+    notify(done(saved))
+    return saved
 
 
 def on_result(versions: dict[str, str]) -> None:
@@ -57,7 +68,7 @@ def on_result(versions: dict[str, str]) -> None:
             raise InputError("Der Testfall wurde inzwischen geändert. Prüfe ihn erneut.")
         return record_result(t, result, current)
 
-    if change(record):
+    if change(record, lambda t: f"Ergebnis gespeichert: {result.case_id} {result.result}."):
         state.test_note = ""
 
 
@@ -76,7 +87,9 @@ def on_defect() -> None:
         defect = Defect(**{**old.model_dump(), **fields}) if old else Defect(**fields)
         return record_defect(t, defect)
 
-    if change(record):
+    # A new defect gets the next number: the last one in the list.
+    said = "geändert" if chosen else "erfasst"
+    if change(record, lambda t: f"Fehler {chosen or t.defects[-1].id} {said}."):
         state.defect_id = ""
         state.defect_cause = ""
         state.defect_task = ""
@@ -94,7 +107,11 @@ def on_pick_defect(defects: dict[str, Defect], cases: dict[str, str]) -> None:
 
 
 def on_reopen(defect_id: str) -> None:
-    change(lambda t: reopen(t, defect_id))
+    def opened(t: Tracking) -> str:
+        task = next(d.task_id for d in t.defects if d.id == defect_id)
+        return f"Aufgabe {task} ist wieder in Arbeit."
+
+    change(lambda t: reopen(t, defect_id), opened)
 
 
 def on_fixed(defect_id: str) -> None:
@@ -104,7 +121,7 @@ def on_fixed(defect_id: str) -> None:
             t, defect.model_copy(update={"status": "behoben", "fixed_on": date.today()})
         )
 
-    change(fix)
+    change(fix, lambda t: f"Fehler {defect_id} ist behoben.")
 
 
 def on_unfix(defect_id: str) -> None:
@@ -112,7 +129,7 @@ def on_unfix(defect_id: str) -> None:
         defect = next(d for d in t.defects if d.id == defect_id)
         return record_defect(t, defect.model_copy(update={"status": "offen", "fixed_on": None}))
 
-    change(unfix)
+    change(unfix, lambda t: f"Fehler {defect_id} ist wieder offen.")
 
 
 st.header("Test")
