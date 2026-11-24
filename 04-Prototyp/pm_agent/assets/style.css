@@ -31,6 +31,7 @@
   --lift-y-card: -2px; /* a card or tile under the pointer */
   --pushed: 0.98; /* a pressed button */
   --nudge: 4px; /* the arrow of a card, towards the page it opens */
+  --tour: 1.6s; /* each node of the diagram on the Startseite, once */
 }
 
 /* ---- Motion ---------------------------------------------------------------------------- */
@@ -50,21 +51,18 @@
   6%, 22% { background: #fff; border-color: var(--green); box-shadow: var(--lift); }
 }
 
-/* app.py wraps every page in a container with its own key. A page change mounts new
-   content, so this runs once per page change and not on every rerun. Streamlit sends the
-   parts of a page top first, so they already come in one after the other. No delay by
-   position: Streamlit inserts parts while others still run, an :nth-child delay then
-   changes mid-animation and the part jumps back (measured: opacity 0.35 to 0.11). */
-[class*="st-key-page-"] > * { animation: rise var(--page) var(--ease) both; }
+/* A new page rises in as a whole. app.py gives every page a container with its own key, so
+   a page change mounts a new one and this runs once. Not its parts: a rerun mounts parts
+   anew when something appears above them (Streamlit keys them by position), and they rose
+   again from nothing (measured). Parts that stream in while it runs come with it. */
+[class*="st-key-page-"] { animation: rise var(--page) var(--ease) both; }
 /* A tab of steps or an opened detail: its content is there at once, it only fades in. */
 [data-testid="stTabPanel"],
 [data-testid="stExpanderDetails"] { animation: fade var(--state) var(--ease) both; }
-/* A message after a click (saved, rejected) and a new turn of the conversation with the
-   agent rise into place instead of jumping in. */
-[data-testid="stAlert"],
+/* A new turn of the conversation with the agent rises into place below the last one. Not a
+   message box: when something appears above it, Streamlit mounts it anew, and boxes that had
+   stood there for a while rose again (measured). The notice of a save is the answer. */
 [data-testid="stChatMessage"] { animation: rise var(--enter) var(--ease) both; }
-/* A verdict that changes after a save is a new line: it fades in where the old one stood. */
-.verdict { animation: fade var(--state) var(--ease) both; }
 
 /* ---- Top bar --------------------------------------------------------------------------- */
 
@@ -208,10 +206,10 @@
   padding: 16px;
   color: var(--ink);
   font-size: 13px;
-  animation: step 7.5s ease-in-out 0.4s 1;
+  animation: step calc(var(--tour) * 3) var(--ease) var(--page) 1;
 }
-.flow-node:nth-child(2) { animation-delay: 2.9s; }
-.flow-node:nth-child(3) { animation-delay: 5.4s; }
+.flow-node:nth-child(2) { animation-delay: calc(var(--page) + var(--tour)); }
+.flow-node:nth-child(3) { animation-delay: calc(var(--page) + var(--tour) * 2); }
 .flow-node strong {
   display: block;
   font: normal 23px Georgia, serif;
