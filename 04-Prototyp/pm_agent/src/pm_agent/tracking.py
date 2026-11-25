@@ -597,6 +597,22 @@ def reopen(tracking: Tracking, defect_id: str) -> Tracking:
     return tracking.model_copy(update={"progress": progress})
 
 
+def first_five(ids: list[str]) -> str:
+    """IDs for one line beside the table that lists them all: "A, B, C, D, E und 2 weitere"."""
+    return ", ".join(ids[:5]) + (f" und {len(ids) - 5} weitere" * (len(ids) > 5))
+
+
+def untested(tracking: Tracking, plan: CasePlan) -> list[str]:
+    """The warning of check_results about cases without a result, or none. The table of
+    results lists them all; the line names where to begin."""
+    latest = current_results(tracking, plan)
+    missing = [c.id for c in plan.cases if c.id not in latest]
+    if not missing:
+        return []
+    subject = "1 Testfall" if len(missing) == 1 else f"{len(missing)} Testfälle"
+    return [f"{subject} ohne Ergebnis: {first_five(missing)}"]
+
+
 def check_results(tracking: Tracking, plan: CasePlan) -> RetroCheck:
     """Errors: a failed case without an open defect. Warnings: cases without a result, open
     defects whose task is finished."""
@@ -640,13 +656,7 @@ def check_results(tracking: Tracking, plan: CasePlan) -> RetroCheck:
             errors.append(
                 f"Testfall '{c.id}' ist fehlgeschlagen, aber es gibt keinen Fehlereintrag"
             )
-    warnings = []
-    missing = [c.id for c in plan.cases if c.id not in latest]
-    if missing:
-        subject = "1 Testfall" if len(missing) == 1 else f"{len(missing)} Testfälle"
-        # The table above lists them all; the line names where to begin.
-        shown = ", ".join(missing[:5]) + (f" und {len(missing) - 5} weitere" * (len(missing) > 5))
-        warnings.append(f"{subject} ohne Ergebnis: {shown}")
+    warnings = untested(tracking, plan)
     warnings += [
         f"Fehler {d.id} ist offen, seine Aufgabe '{d.task_id}' ist aber fertig"
         for d in tracking.defects
@@ -1205,58 +1215,76 @@ def reassignment_effect(tracking: Tracking, today: date, task_ids: list[str], me
     return text
 
 
-def next_step(tracking: Tracking, today: date) -> tuple[str, str]:
+def next_step(tracking: Tracking, today: date, forecast_shown: bool = False) -> tuple[str, str]:
     """What the project lead should look at next, and on which page ("durchfuehrung",
     "kontrolle" or "testlauf"). The most urgent reason wins. The text names no page: it may
-    be shown on the page it points to."""
+    be shown on the page it points to. `forecast_shown`: the page shows the forecast
+    already (forecast_text), so a reason that only repeats it is left out."""
     outlook = forecast(tracking, today)
     late = len(evaluate(tracking, today).overdue)
+
+    def say(reason: str, action: str, page: str, in_forecast: bool) -> tuple[str, str]:
+        return (action if forecast_shown and in_forecast else f"{reason} {action}"), page
+
     if outlook.problem:
-        return (
-            f"Die Prognose lässt sich nicht berechnen: {outlook.problem}. Prüfe Status und "
-            "Rest-Stunden der Aufgaben.",
+        return say(
+            f"Die Prognose lässt sich nicht berechnen: {outlook.problem}.",
+            "Prüfe Status und Rest-Stunden der Aufgaben.",
             "durchfuehrung",
+            in_forecast=True,
         )
     open_defects = [d for d in tracking.defects if d.status == "offen"]
     if outlook.end is None and open_defects:
         count = "1 Fehler ist" if len(open_defects) == 1 else f"{len(open_defects)} Fehler sind"
-        return (
-            f"Alle Aufgaben sind fertig, aber {count} offen. Öffne die Aufgabe wieder oder "
-            "schließe den Fehler.",
+        return say(
+            f"Alle Aufgaben sind fertig, aber {count} offen.",
+            "Öffne die Aufgabe wieder oder schließe den Fehler.",
             "testlauf",
+            in_forecast=False,
         )
     if outlook.end is None:
-        return (
-            "Alle Aufgaben sind fertig. Halte den Abschluss im Statusbericht fest.",
+        return say(
+            "Alle Aufgaben sind fertig.",
+            "Halte den Abschluss im Statusbericht fest.",
             "durchfuehrung",
+            in_forecast=True,
         )
     if outlook.deadline_gap > 0:
-        return (
-            "Nach heutigem Stand wird die Deadline verpasst. Sieh nach, welche Aufgaben das "
-            "Ende verschieben.",
+        return say(
+            "Nach heutigem Stand wird die Deadline verpasst.",
+            "Sieh nach, welche Aufgaben das Ende verschieben.",
             "kontrolle",
+            in_forecast=True,
         )
     if late:
         count = "1 Aufgabe ist" if late == 1 else f"{late} Aufgaben sind"
-        return (
-            f"{count} im Verzug. Sieh nach, was daran hängt und wohin das Ende rückt.",
+        return say(
+            f"{count} im Verzug.",
+            "Sieh nach, was daran hängt und wohin das Ende rückt.",
             "kontrolle",
+            in_forecast=False,
         )
     if outlook.shift > 0:
         days = "1 Arbeitstag" if outlook.shift == 1 else f"{outlook.shift} Arbeitstage"
-        return (
+        return say(
             f"Nach heutigem Stand endet das Projekt {days} später als geplant; die Deadline "
-            "hält noch. Sieh nach, welche Aufgaben das Ende verschieben.",
+            "hält noch.",
+            "Sieh nach, welche Aufgaben das Ende verschieben.",
             "kontrolle",
+            in_forecast=True,
         )
     if not has_progress(tracking):
-        return (
-            "Noch kein Fortschritt erfasst. Trage Status und Ist-Stunden ein.",
+        return say(
+            "Noch kein Fortschritt erfasst.",
+            "Trage Status und Ist-Stunden ein.",
             "durchfuehrung",
+            in_forecast=False,
         )
-    return (
-        "Das Projekt liegt im Plan. Halte den Fortschritt aktuell.",
+    return say(
+        "Das Projekt liegt im Plan.",
+        "Halte den Fortschritt aktuell.",
         "durchfuehrung",
+        in_forecast=True,
     )
 
 

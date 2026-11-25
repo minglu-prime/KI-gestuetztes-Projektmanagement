@@ -28,6 +28,7 @@ from pm_agent.ui import (
     phase_chip,
     phase_verdict,
     run_with_progress,
+    said_in_full,
     saved_lifecycle,
     store,
     strip,
@@ -188,8 +189,11 @@ with st.container(border=True, key="panel-charter"):
         if store(life, life.model_copy(update={"charter": edited})) is not None:
             notify("Projektauftrag gespeichert.")
             st.rerun()
-    errors = check_charter(life.charter).errors if life.charter is not None else []
-    messages(errors)
+    errors = []
+    if life.charter is not None:
+        check = check_charter(life.charter)
+        errors = check.errors
+        messages(errors, said=said_in_full(*check))
 
 # 4 · Freigabe ---------------------------------------------------------------------------
 with st.container(border=True, key="panel-approve"):

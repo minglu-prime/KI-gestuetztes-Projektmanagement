@@ -320,9 +320,11 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* ---- Tabs: the six steps of the Planung page ------------------------------------------- */
+/* ---- Tabs: the six steps of the Planung page, the six parts of the Kontrolle ------------ */
 
+/* On a phone the tabs wrap: scrolled inside the bar, the last ones were out of sight. */
 .stTabs [role="tablist"] {
+  flex-wrap: wrap;
   gap: 6px;
   height: auto;
   padding-bottom: 10px;

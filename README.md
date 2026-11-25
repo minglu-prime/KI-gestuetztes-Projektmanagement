@@ -93,7 +93,8 @@ Softwareprojekts und hat acht Einträge: Startseite; Vorbereiten; Planung, Durch
 Abschluss; KI-Lab; Info. Vorbereiten öffnet Projektauftrag, Anforderungen, Entwurf und Testplan
 als Reiter über der Seite, Kontrolle ebenso den Test, Info Über uns und Impressum. Betrieb und
 der nächste Durchlauf sind Reiter im Abschluss. Über jeder dieser
-Seiten steht der Projektpfad mit allen neun Schritten und darunter, was als Nächstes zu tun ist. Die Screenshots zeigen das erfundene
+Seiten steht der Projektpfad mit allen neun Schritten und darunter, was als Nächstes zu tun ist
+(außer auf der Seite, zu der es führt). Die Screenshots zeigen das erfundene
 Beispielprojekt vom 20.11.2026.
 
 ### Planung
@@ -153,7 +154,9 @@ Pfad doppelt so lange dauert.
 Beide Seiten rechnen mit dem übernommenen Plan und dem erfassten Fortschritt (Status,
 Ist-Stunden und, wo bekannt, der geschätzte Rest je Aufgabe). Die Durchführung füllt
 Statusbericht und Arbeitspaketbeschreibungen aus Vorlagen. Die Kontrolle stellt Plan und Ist
-gegenüber, nennt Aufgaben im Verzug und rechnet Kosten, sobald ein Stundensatz gesetzt ist. Auf
+gegenüber, nennt Aufgaben im Verzug und rechnet Kosten, sobald ein Stundensatz gesetzt ist. Sie
+ordnet das in sechs Reiter (Stand, Prognose, Plan und Ist, Kennzahlen, Demos, Agent und Bericht)
+und öffnet den, der die Ergebniszeile erklärt. Auf
 beiden Seiten macht ein Agent einen Vorschlag, den Python nur annimmt, wenn er jede Aufgabe im
 Verzug behandelt.
 

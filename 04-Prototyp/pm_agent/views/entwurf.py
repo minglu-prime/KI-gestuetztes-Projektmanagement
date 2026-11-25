@@ -32,6 +32,7 @@ from pm_agent.ui import (
     phase_chip,
     phase_verdict,
     run_with_progress,
+    said_in_full,
     saved_lifecycle,
     store,
     strip,
@@ -192,7 +193,7 @@ with st.container(border=True, key="panel-design"):
     errors = []
     if life.design is not None:
         errors, warnings = check_design(life.design, life.requirements)
-        messages(errors, warnings)
+        messages(errors, warnings, said=said_in_full(errors, warnings))
 
 # 4 · Diagramme --------------------------------------------------------------------------
 if life.design is not None:

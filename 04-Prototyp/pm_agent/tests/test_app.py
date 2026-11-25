@@ -1,11 +1,13 @@
 """The Streamlit site headless, with the agent replaced: no network, no files in data/ or logs/."""
 
+import dataclasses
 import datetime
 import json
 import re
 import socket
 import tomllib
 from datetime import date
+from html import unescape
 from pathlib import Path
 from unittest.mock import Mock
 
@@ -46,6 +48,22 @@ def local(monkeypatch, tmp_path):
     with socket.socket() as probe:  # a port where nothing listens
         probe.bind(("127.0.0.1", 0))
         monkeypatch.setattr(lab_server, "PORT", probe.getsockname()[1])
+
+
+def test_no_test_reaches_the_real_data_or_logs():
+    # A test saved its team into the real data/team.json: `local` replaced load_team but
+    # not the file, and "Team lokal speichern" wrote there (Codex test run, 25.11.2026).
+    # Every test runs with every file of the site in its own temporary folder (conftest).
+    real = [SITE.parent / "data", SITE.parent / "logs"]
+    used = [
+        tracking.PROJECT_FILE,
+        lifecycle.FILE,
+        workbench.DATA_DIR,
+        workbench.TEAM_FILE,
+        workbench.RUNS_CSV,
+        agent.LOG_DIR,
+    ]
+    assert [p for p in used if any(p == r or r in p.parents for r in real)] == []
 
 
 @pytest.fixture
@@ -127,9 +145,8 @@ def test_a_plan_from_the_agent_is_checked_shown_and_exported(app, monkeypatch):
     assert metrics == {"Planende": "11.11.2026", "Fehler": "0", "Warnungen": "1"}
     # The result in one line above them: one warning to decide on.
     assert 'class="verdict warn"' in verdict(at) and "1 Warnung: Task" in verdict(at)
-    assert [w.value for w in at.warning] == [
-        "Task 'A' braucht 'SQL', Anna hat diese Fähigkeit nicht angegeben"
-    ]
+    # Said in full there, so not again below the chart.
+    assert said_once(at, "Task 'A' braucht 'SQL', Anna hat diese Fähigkeit nicht angegeben")
     assert not at.error
 
     button(at, "Erneut prüfen").click()  # unchanged table: same plan, not marked as edited
@@ -643,6 +660,7 @@ def test_every_menu_entry_opens_and_explains_its_empty_state(site):
         assert any(info in i.value for i in at.info), path
 
     at = site.switch_page("views/kontrolle.py").run()
+    assert not at.tabs  # without a project nothing to sort: the agents' effort alone
     captions = [c.value for c in at.caption]
     assert "Noch keine protokollierten Läufe." in captions
     assert "Noch kein Plan exportiert." in captions
@@ -836,8 +854,9 @@ def test_flow_pages_use_fixed_evaluation_date_despite_host_today(flow_site, monk
             report = downloads["Statusbericht als Markdown herunterladen"]
             assert "**Stand:** 12.11.2026" in report
         else:
-            assert [w.value for w in at.warning] == [
-                "Im Verzug:\n\n- B · API (Anna), geplant bis 11.11.2026, Status: in Arbeit"
+            assert not at.warning  # the late task stands in a table, not a box
+            assert [(r["ID"], r["Geplant bis"], r["Status"]) for r in overdue_table(at)] == [
+                ("B", "11.11.2026", "in Arbeit")
             ]
 
 
@@ -961,8 +980,9 @@ def test_nonzero_progress_survives_reopen_and_reaches_control_and_documents(flow
     assert members.to_dict("records") == [
         {"Person": "Anna", "Plan (h)": 24, "Ist (h)": 14, "Fertig (Plan-h)": 8, "Erledigt": 0.33}
     ]
-    assert [w.value for w in at.warning] == [
-        "Im Verzug:\n\n- B · API (Anna), geplant bis 11.11.2026, Status: in Arbeit"
+    assert not at.warning  # the late task stands in a table, not a box
+    assert [(r["ID"], r["Geplant bis"], r["Status"]) for r in overdue_table(at)] == [
+        ("B", "11.11.2026", "in Arbeit")
     ]
 
     # Target subsequent AppTest reruns at the page reached by the in-app button.
@@ -1072,6 +1092,12 @@ def verdict(at) -> str:
     return next((h.value for h in at.html if 'class="verdict' in h.value), "")
 
 
+def said_once(at, finding: str) -> bool:
+    """The finding stands in the verdict line, and in no box below it (ui.said_in_full)."""
+    boxes = [m.value for m in [*at.error, *at.warning]]
+    return finding in unescape(verdict(at)) and not any(finding in box for box in boxes)
+
+
 def test_the_pages_of_a_project_open_with_its_forecast(tracked):
     # The answer to "Do we make it?" stood in the middle of the Kontrolle, below four metrics.
     for page in ("durchfuehrung", "kontrolle"):
@@ -1137,18 +1163,25 @@ def test_without_a_project_the_path_waits_at_planen_and_says_nothing_twice(site)
 def test_with_a_project_the_path_says_what_is_next_and_leads_there(tracked):
     at = tracked.switch_page("views/durchfuehrung.py").run()
     assert not at.exception
-    advice, where = tracking.next_step(tracking.load(), date.today())
+    # The Durchführung shows the forecast: the line says what to do, not the forecast again.
+    advice, where = tracking.next_step(tracking.load(), date.today(), forecast_shown=True)
+    assert where == "kontrolle"  # two tasks are late
     assert '<span class="step done' in journey(at).split("Durchführung")[0]  # Planung is done
     assert any("Jetzt dran" in m.value and advice in m.value for m in at.markdown)
     # Said once on screen: by that line. In the path only for screen readers, else the
     # words push the last step onto a second row.
     assert "<em class=sr>als Nächstes</em>" in journey(at)
-    target = {"durchfuehrung": "Zur Durchführung", "kontrolle": "Zur Kontrolle"}[where]
-    # A button to the page the advice points to, unless the advice is about this page.
-    assert any(b.label == target for b in at.button) == (where != "durchfuehrung")
-    # Otherwise the line says it is this page.
-    here = any("Unten auf dieser Seite" in m.value for m in at.markdown)
-    assert here == (where == "durchfuehrung")
+    assert "Zur Kontrolle" in labels(at)
+
+
+def test_on_the_page_it_points_to_the_path_needs_no_line(tracked):
+    # "Jetzt dran … ↓ Unten auf dieser Seite" repeated the verdict line below it (project
+    # lead, 25.11.2026). On its own page the path marks the step in words, and that is all.
+    at = tracked.switch_page("views/kontrolle.py").run()
+    assert not at.exception
+    assert tracking.next_step(tracking.load(), date.today())[1] == "kontrolle"
+    assert not any("Jetzt dran" in m.value for m in at.markdown)
+    assert "<em>als Nächstes</em>" in journey(at)
 
 
 def test_a_damaged_project_leaves_the_path_without_a_state(site):
@@ -1176,7 +1209,7 @@ def test_the_planung_does_not_forecast_the_adopted_project(tracked, monkeypatch)
 def test_the_advice_is_shown_as_text(tracked, monkeypatch):
     # Task IDs from the plan end up in the advice; Markdown in them stays text.
     monkeypatch.setattr(
-        ui, "next_step", lambda t, d: ("Task ![x](http://e/x.png) hängt", "kontrolle")
+        ui, "next_step", lambda t, d, **_: ("Task ![x](http://e/x.png) hängt", "kontrolle")
     )
     at = tracked.switch_page("views/durchfuehrung.py").run()
     line = next(m.value for m in at.markdown if "Jetzt dran" in m.value)
@@ -1390,7 +1423,8 @@ def test_kontrolle_forecasts_the_end_from_the_recorded_progress(tracked):
     tracking.save(tracking.apply_rows(tracking.load(), done))
     at = tracked.switch_page("views/kontrolle.py").run()
     assert not at.exception
-    assert "Alle Aufgaben sind fertig." in [s.value for s in at.success]
+    # Said by the verdict line on top, not again in a green box.
+    assert "Alle Aufgaben sind fertig." in verdict(at) and not at.success
     assert "Voraussichtliches Ende" not in {m.label for m in at.metric}
 
     # Nothing done yet: the forecast names an end, and a buffer or a missed deadline.
@@ -1609,7 +1643,7 @@ def test_a_charter_with_errors_cannot_be_approved(site):
     )
     lifecycle.save(lifecycle.Lifecycle(project=PROJECT, charter=twice))
     at = site.switch_page("views/auftrag.py").run()
-    assert any("'K1' ist mehrfach vergeben" in e.value for e in at.error)
+    assert said_once(at, "'K1' ist mehrfach vergeben")
     assert button(at, "Projektauftrag freigeben").disabled
 
 
@@ -1706,7 +1740,7 @@ def test_requirements_edited_in_the_table_are_checked_again(site):
     button(at, "Änderungen speichern und prüfen").click()
     at = at.run()
     assert lifecycle.load().requirements.items[0].priority == "Kann"
-    assert any("keine Muss-Anforderung" in e.value for e in at.error)
+    assert said_once(at, "keine Muss-Anforderung")
     assert button(at, "Anforderungen freigeben").disabled
 
 
@@ -1962,6 +1996,35 @@ def test_the_kontrolle_shows_progress_per_requirement(site):
     ]
 
 
+def test_a_priority_is_coloured_wherever_a_table_shows_it(site):
+    # Muss, Soll and Kann were grey text: hard to scan (project lead, 25.11.2026). Read-only
+    # tables colour the cell like the verdict line; the word stays, colour is no only cue.
+    data = plan_input()
+    data["tasks"][0]["requirement_ids"] = ["R1"]
+    tracking.adopt(PROJECT, TEAM, Plan.model_validate(data), requirements=NEEDS.items)
+    for page in ("views/kontrolle.py", "views/abschluss.py"):
+        at = site.switch_page(page).run()
+        assert not at.exception
+        (frame,) = [d for d in at.dataframe if "Priorität" in d.value.columns]
+        assert frame.value["Priorität"].tolist() == ["Muss"]
+        assert "#fdecea" in frame.proto.arrow_data.styler.styles  # the red of "Achtung"
+    # The editor cannot style a cell: a coloured mark before the word, the value stays.
+    lifecycle.save(with_charter().model_copy(update={"requirements": NEEDS}))
+    at = site.switch_page("views/anforderungen.py").run()
+    column = json.loads(requirements_table_proto(at).columns)["Priorität"]
+    assert column["type_config"]["options"] == [
+        {"value": "Muss", "label": "🔴 Muss"},
+        {"value": "Soll", "label": "🟡 Soll"},
+        {"value": "Kann", "label": "🟢 Kann"},
+    ]
+    assert requirements_table(at).iloc[0]["Priorität"] == "Muss"
+
+
+def requirements_table_proto(at):
+    (frame,) = [f for f in at.dataframe if f.key and f.key.startswith("requirements_editor_")]
+    return frame.proto
+
+
 def test_without_requirements_the_kontrolle_says_why_it_cannot_trace(tracked):
     at = tracked.switch_page("views/kontrolle.py").run()
     assert any("ohne freigegebene Anforderungen übernommen" in c.value for c in at.caption)
@@ -1996,8 +2059,8 @@ def test_the_overdue_list_on_the_kontrolle_shows_no_link(site):
     tracking.adopt(PROJECT, TEAM, PLAN.model_copy(update={"tasks": tasks}))
     at = site.switch_page("views/kontrolle.py").run()
     assert not at.exception
-    (overdue,) = [w.value for w in at.warning if w.value.startswith("Im Verzug")]
-    assert "evil.example" in overdue and not re.search(r"(?<!\\)\[", overdue)
+    # A table cell is text, never Markdown: the title stands as written.
+    assert [r["Aufgabe"] for r in overdue_table(at)] == ["[hier](https://evil.example)"] * 2
 
 
 def design_tables(at):
@@ -2055,7 +2118,7 @@ def test_a_step_against_the_contract_blocks_the_approval(site):
     at = edit_table(at, "design_steps_", {1: {"Von": "B3", "An": "B2"}})
     button(at, "Änderungen speichern und prüfen").click()
     at = at.run()
-    assert any("ein Aufruf von 'S1' geht von B2 an B3" in e.value for e in at.error)
+    assert said_once(at, "ein Aufruf von 'S1' geht von B2 an B3")
     assert button(at, "Entwurf freigeben").disabled
 
 
@@ -2097,13 +2160,15 @@ def test_check_messages_on_the_lifecycle_pages_show_no_link(site):
     charter = CHARTER.model_copy(update={"success_criteria": criteria})
     life = lifecycle.Lifecycle(project=PROJECT, charter=charter, requirements=NEEDS)
     lifecycle.save(life)
-    shown = []
+    shown, lines = [], []
     for page in ["auftrag", "anforderungen"]:
         at = site.switch_page(f"views/{page}.py").run()
         assert not at.exception
         shown += [e.value for e in at.error] + [w.value for w in at.warning]
-    assert any("evil.example" in text for text in shown)
+        lines.append(verdict(at))  # a finding said in full stands only there (said_in_full)
+    assert any("evil.example" in text for text in shown + lines)
     assert not [text for text in shown if re.search(r"(?<!\\)\[", text)]
+    assert not [line for line in lines if "<a " in line]  # escaped HTML: no link either
 
 
 def test_the_planung_shows_the_demos_of_the_plan(app, monkeypatch):
@@ -2227,14 +2292,15 @@ def test_a_failed_case_needs_a_defect_which_can_reopen_its_task(tracked):
     )
     at = tracked.switch_page("views/testlauf.py").run()
     assert not at.exception
-    assert any("nicht freigegeben" in w.value for w in at.warning)
+    # Said quietly below the verdict, not as a box above it (project lead, 25.11.2026).
+    assert any("nicht freigegeben" in c.value for c in at.caption) and not at.warning
 
     at.selectbox(key="test_case").set_value("T2").run()
     at.radio(key="test_result").set_value("fehlgeschlagen").run()
     button(at, "Ergebnis speichern").click()
     at = at.run()
     assert [(r.case_id, r.result) for r in tracking.load().results] == [("T2", "fehlgeschlagen")]
-    assert any("keinen Fehlereintrag" in e.value for e in at.error)
+    assert said_once(at, "keinen Fehlereintrag")
 
     at.selectbox(key="defect_case").set_value("T2").run()
     at.radio(key="defect_severity").set_value("schwer").run()
@@ -2252,6 +2318,7 @@ def test_a_failed_case_needs_a_defect_which_can_reopen_its_task(tracked):
     # The fields are empty again: a second click does not record the same defect twice.
     assert at.text_input(key="defect_cause").value == ""
     assert not any("keinen Fehlereintrag" in e.value for e in at.error)
+    assert "keinen Fehlereintrag" not in verdict(at)
 
     button(at, "F1: Aufgabe B wieder öffnen").click()
     at = at.run()
@@ -2315,7 +2382,7 @@ def test_the_closing_page_takes_decisions_and_lessons(site, monkeypatch):
     monkeypatch.setattr(closing, "run_lessons", lambda tracking, today, on_round=None: drafted)
     at = site.switch_page("views/abschluss.py").run()
     assert not at.exception
-    assert any("Muss-Anforderung 'R1'" in e.value for e in at.error)
+    assert said_once(at, "Muss-Anforderung 'R1'")
 
     at.radio(key="signoff_decision").set_value("zurückgestellt").run()
     button(at, "Entscheidung speichern").click()
@@ -2634,7 +2701,8 @@ def test_one_project_goes_from_the_auftrag_to_the_next_run(site, monkeypatch, tm
     # 8 Test: every case of the approved test plan passes.
     at = at.switch_page("views/testlauf.py").run()
     assert not at.exception
-    assert [w.value for w in at.warning] == ["3 Testfälle ohne Ergebnis: T1, T2, T3"]
+    # Said once: by the verdict line; the table lists the cases, the panel of defects is quiet.
+    assert "3 Testfälle ohne Ergebnis: T1, T2, T3" in verdict(at) and not at.warning
     for case in [c.id for c in cases().cases]:
         at.selectbox(key="test_case").set_value(case).run()
         at.radio(key="test_result").set_value("bestanden").run()
@@ -2705,7 +2773,16 @@ def test_without_requirements_the_closing_page_does_not_call_the_project_closabl
     at = tracked.switch_page("views/abschluss.py").run()
     assert not at.exception
     assert "lässt sich abschließen" not in verdict(at)
-    assert any("nichts abzunehmen" in w.value for w in at.warning)
+    assert "nichts abzunehmen" in verdict(at)
+
+
+def test_a_finding_the_verdict_says_in_full_is_not_repeated_below(tracked):
+    # The one open finding stood in the verdict line and again in a box below the table
+    # (project lead, 25.11.2026). Said in full on top, it is not said again.
+    at = tracked.switch_page("views/abschluss.py").run()
+    assert not at.exception
+    assert "1 Warnung: " in verdict(at) and "nichts abzunehmen" in verdict(at)
+    assert not any("nichts abzunehmen" in w.value for w in at.warning)
 
 
 def test_the_consent_for_lessons_names_what_is_sent(tracked):
@@ -2986,7 +3063,7 @@ def test_the_iteration_points_to_the_abschluss_instead_of_repeating_it(site, mon
     errors = [e.value for e in at.error]
     (pointer,) = [e for e in errors if e.startswith("Der Abschluss ist nicht fertig")]
     assert "R1" not in pointer and "Reiter" in pointer
-    assert sum("Muss-Anforderung 'R1'" in e for e in errors) == 1  # listed once, where decided
+    assert said_once(at, "Muss-Anforderung 'R1'")  # once: the verdict says it in full
     assert not any("Nichts offen" in i.value for i in at.info)
 
 
@@ -2994,11 +3071,78 @@ def test_the_iteration_points_to_the_abschluss_instead_of_repeating_it(site, mon
 def test_the_startseite_says_the_forecast_once(tracked, monkeypatch, where):
     # "Deadline verpasst" stood in the forecast box and again in the line below it. What the
     # Kontrolle is for, the forecast and the delay already say; its button is the primary one.
-    monkeypatch.setattr(tracking, "next_step", lambda *_: ("Rat.", where))
+    monkeypatch.setattr(tracking, "next_step", lambda *_, **__: ("Rat.", where))
     at = tracked.run()
     assert not at.exception
     said = any(m.value.startswith("**Als Nächstes:** ") for m in at.markdown)
     assert said == (where != "kontrolle")
+
+
+def overdue_table(at):
+    (table,) = [d.value for d in at.dataframe if "Hält auf" in d.value.columns]
+    return table.to_dict("records")
+
+
+def test_the_kontrolle_names_each_late_task_once(tracked):
+    # A yellow box listed the late tasks, and the forecast listed most of them again as
+    # "Verspätet und halten andere auf" (project lead, 25.11.2026). One table says both.
+    at = tracked.switch_page("views/kontrolle.py").run()
+    assert not at.exception
+    assert overdue_table(at) == [
+        {
+            "ID": "A",
+            "Aufgabe": "Datenmodell",
+            "Person": "Anna",
+            "Geplant bis": "09.11.2026",
+            "Status": "offen",
+            "Hält auf": "B",
+        },
+        {
+            "ID": "B",
+            "Aufgabe": "API",
+            "Person": "Anna",
+            "Geplant bis": "11.11.2026",
+            "Status": "offen",
+            "Hält auf": "",
+        },
+    ]
+    assert not at.warning and not at.info and not at.success
+    assert not any("halten andere auf" in m.value for m in at.markdown)
+    # Nothing recorded yet: said once, quietly, where the progress is.
+    assert any("Noch kein Fortschritt erfasst" in c.value for c in at.caption)
+
+
+KONTROLLE_TABS = ["Stand", "Prognose", "Plan und Ist", "Kennzahlen", "Demos", "Agent und Bericht"]
+
+
+def test_the_kontrolle_opens_the_tab_its_verdict_is_about(tracked, monkeypatch):
+    # Thirteen panels stood below each other (project lead, 25.11.2026). Now six tabs, and
+    # arriving opens the one that explains the verdict line.
+    real, late = tracking.forecast, {"deadline_gap": 3, "shift": 2}
+    monkeypatch.setattr(tracking, "forecast", lambda t, d: dataclasses.replace(real(t, d), **late))
+    at = tracked.switch_page("views/kontrolle.py").run()
+    assert not at.exception
+    assert [t.label for t in at.tabs] == KONTROLLE_TABS
+    assert at.session_state["kontrolle_tab"] == "Prognose"
+
+    late.update(deadline_gap=-5, shift=-1)  # in time: the state is what to look at
+    at = at.switch_page("views/durchfuehrung.py").run().switch_page("views/kontrolle.py").run()
+    assert at.session_state["kontrolle_tab"] == "Stand"
+
+
+def test_the_kontrolle_keeps_the_chosen_tab_after_a_save(site):
+    tracking.adopt(PROJECT, TEAM, DEMO_PLAN)
+    at = site.switch_page("views/kontrolle.py").run()
+    at.session_state["kontrolle_tab"] = "Demos"  # what a click on the tab sets
+    at.text_input(key="retro_measure_1").input("Früher testen").run()
+    button(at, "Rückblick speichern").click()
+    at = at.run()
+    assert not at.exception
+    assert tracking.load().retros[0].measure == "Früher testen"
+    assert at.session_state["kontrolle_tab"] == "Demos"
+
+    at.checkbox(key=f"measure_done_{tracking.load().retros[0].monday:%Y%m%d}").check().run()
+    assert at.session_state["kontrolle_tab"] == "Demos"
 
 
 def test_the_forecast_lists_only_late_tasks_that_hold_others(tracked):

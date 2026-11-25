@@ -274,6 +274,43 @@ def test_every_page_with_a_check_opens_with_its_verdict():
     assert missing == []
 
 
+def test_the_findings_below_a_verdict_leave_out_what_it_says_in_full():
+    # The one open finding stood in the verdict line and again in a box below it (project
+    # lead, 25.11.2026). On a page whose verdict comes from a check, the list of that check
+    # passes `said=said_in_full(...)`. Lessons and the handbook are checks of their own.
+    own = ("check_lessons(", "check_operations(")
+    found = []
+    for path in (ROOT / "views").glob("*.py"):
+        text = path.read_text(encoding="utf-8")
+        if "check_verdict(" not in text and "phase_verdict(" not in text:
+            continue
+        for call in ast.walk(ast.parse(text)):
+            if not (isinstance(call, ast.Call) and getattr(call.func, "id", "") == "messages"):
+                continue
+            words = ast.unparse(call)
+            if not any(k.arg == "said" for k in call.keywords) and not any(o in words for o in own):
+                found.append(f"{path.name}:{call.lineno}")
+    assert found == []
+
+
+def test_every_table_with_a_priority_colours_it():
+    # Muss, Soll and Kann were grey text in four tables (project lead, 25.11.2026). A table
+    # of requirements goes through ui.style_priority, an editable one through priority_column.
+    rows = ("trace_rows(", "requirement_progress(", "signoff_rows(")
+    found = []
+    for path in (ROOT / "views").glob("*.py"):
+        for call in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if not (isinstance(call, ast.Call) and isinstance(call.func, ast.Attribute)):
+                continue
+            text = ast.unparse(call)
+            if call.func.attr == "dataframe" and any(r in text for r in rows):
+                if "style_priority(" not in text:
+                    found.append(f"{path.name}:{call.lineno}")
+            if call.func.attr == "SelectboxColumn" and "'Muss'" in text:
+                found.append(f"{path.name}:{call.lineno}")
+    assert found == []
+
+
 def test_what_the_agents_read_has_its_dates_and_numbers_written_the_german_way():
     # The agents repeat numbers and dates as they get them: "Fortschritt bei 0.0" in the
     # status report, "2026-12-10" in the steps of a test case. The input of an agent before

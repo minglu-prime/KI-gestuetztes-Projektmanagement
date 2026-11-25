@@ -51,6 +51,8 @@ from pm_agent.ui import (
     next_open,
     notify,
     run_with_progress,
+    said_in_full,
+    style_priority,
     verdict,
 )
 from pm_agent.workbench import DATA_DIR, InputError
@@ -203,7 +205,8 @@ def on_unfix(incident_id: str) -> None:
 # The result on top: can the project be closed? The handbook in the Betrieb tab counts as
 # warnings: it does not block the next run, but a green line must not hide it.
 # Only for the verdict: the sign-off panel lists `warnings`, the Betrieb tab its handbook.
-errors, warnings = check_closing(tracking, plan)
+# Grouped: the sign-off table names each requirement, the lines below it say what is open.
+errors, warnings = check_closing(tracking, plan, grouped=True)
 handbook = [f"Betrieb: {e}" for e in check_operations(design, tracking.operations).errors]
 if tracking.requirements or errors or warnings or handbook:  # nothing to accept, nothing closed
     fine = "Nichts Schweres ist offen: Das Projekt lässt sich abschließen."
@@ -218,7 +221,9 @@ with closing_tab:
     with st.container(border=True, key="panel-signoff"):
         heading("verified", "Abnahme je Anforderung", python="schlägt vor", du="entscheidest")
         if tracking.requirements:
-            st.dataframe(pd.DataFrame(signoff_rows(tracking, plan)), hide_index=True)
+            st.dataframe(
+                style_priority(pd.DataFrame(signoff_rows(tracking, plan))), hide_index=True
+            )
             titles = {n.id: n.title for n in tracking.requirements}
             advice = closing.suggestions(tracking, plan)
             if state.get("signoff_req") not in titles:
@@ -248,7 +253,7 @@ with closing_tab:
                 on_click=on_signoff,
                 args=({need.id: need for need in tracking.requirements}, advice),
             )
-        messages(errors, warnings)
+        messages(errors, warnings, said=said_in_full(errors, [*warnings, *handbook]))
 
     with st.container(border=True, key="panel-lessons"):
         heading(

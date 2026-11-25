@@ -91,10 +91,12 @@ def next_open(order: Sequence[str], done: set[str], current: str) -> str:
     return next((entry for entry in later if entry not in done), current)
 
 
-def messages(errors: Sequence[str], warnings: Sequence[str] = ()) -> None:
+def messages(errors: Sequence[str], warnings: Sequence[str] = (), said: str | None = None) -> None:
     """The findings of a check: the errors in one red box, the warnings in one yellow box.
-    One box each made a stack of eleven boxes beside the table they came from."""
-    for show, items in ((st.error, errors), (st.warning, warnings)):
+    One box each made a stack of eleven boxes beside the table they came from. `said` is
+    the finding the verdict on top already states in full (said_in_full): not repeated."""
+    for show, found in ((st.error, errors), (st.warning, warnings)):
+        items = [item for item in found if item != said]
         if len(items) == 1:
             show(as_text(items[0]))
         elif items:
@@ -115,6 +117,29 @@ def verdict(state: str, text: str) -> None:
     )
 
 
+# A priority in a table, in the colours of the verdict line (assets/style.css, .verdict):
+# Muss red, Soll golden, Kann green. The word stays: the colour is not the only cue.
+PRIORITY_STYLE = {
+    "Muss": "color: #8f1d14; background-color: #fdecea; font-weight: 700",
+    "Soll": "color: #6a4510; background-color: #fdf3e1; font-weight: 600",
+    "Kann": "color: #1d5a3f; background-color: #e3f1e6; font-weight: 600",
+}
+# An editable cell takes no style (st.data_editor styles read-only columns only): a mark.
+PRIORITY_MARK = {"Muss": "🔴", "Soll": "🟡", "Kann": "🟢"}
+
+
+def style_priority(frame: pd.DataFrame) -> Any:
+    """`frame` with its column "Priorität" coloured, for st.dataframe."""
+    return frame.style.map(lambda value: PRIORITY_STYLE.get(value, ""), subset=["Priorität"])
+
+
+def priority_column() -> Any:
+    """The editable column "Priorität": the word with its mark; the value stays the word."""
+    return st.column_config.SelectboxColumn(
+        options=list(PRIORITY_MARK), format_func=lambda p: f"{PRIORITY_MARK[p]} {p}"
+    )
+
+
 def check_verdict(errors: Sequence[str], warnings: Sequence[str], ok: str) -> tuple[str, str]:
     """The verdict of a check: its first error or warning and how many there are; `ok`
     without either. The full list stays below (`messages`)."""
@@ -124,6 +149,14 @@ def check_verdict(errors: Sequence[str], warnings: Sequence[str], ok: str) -> tu
             more = " …" if len(items) > 1 else ""
             return state, f"{len(items)} {noun}{plural}: {items[0]}{more}"
     return "ok", ok
+
+
+def said_in_full(errors: Sequence[str], warnings: Sequence[str]) -> str | None:
+    """The finding check_verdict states completely: the only error, or without errors the
+    only warning. More than one, and the verdict names the first with "…": the list below
+    says them all."""
+    items = errors or warnings
+    return items[0] if len(items) == 1 else None
 
 
 # A phase before the plan whose check finds nothing: what is still to do about it.
@@ -328,8 +361,9 @@ def journey(page: str) -> None:
     which comes next, and which phase before the plan is not approved (a draft, changed since
     its approval, or skipped once a project is adopted: the gates are soft).
 
-    With an adopted project, one line below says what is next (`next_step`) and, if that is
-    another page, a button leads there. Before it, the first phase not approved is next.
+    With an adopted project, one line below says what is next (`next_step`) and a button
+    leads there; on the page it points to, no line. Before it, the first phase not approved
+    is next.
     What cannot be read shows no state: its page says why."""
     try:
         tracking, unreadable = load(), False
@@ -360,7 +394,11 @@ def journey(page: str) -> None:
         where = None  # these lead through their own steps and need no forecast
     else:
         # Looked up when called, like the pages do: the day is the one they evaluate on.
-        advice, where = next_step(tracking, datetime.date.today())
+        # These two pages open with the forecast: the line does not say it again.
+        shown = page in ("durchfuehrung", "kontrolle")
+        advice, where = next_step(tracking, datetime.date.today(), forecast_shown=shown)
+        if where == page:  # its verdict says why; the path marks the step in words
+            advice = None
     done = {
         **{slug: phase == "freigegeben" for slug, phase in phases.items()},
         "planung": tracking is not None,
@@ -407,12 +445,10 @@ def journey(page: str) -> None:
     if advice is None:
         return
     with st.container(horizontal=True, vertical_alignment="center", key="next-step"):
-        below = " ↓ Unten auf dieser Seite." if where == page else ""
-        st.markdown(f"**Jetzt dran:** {as_text(advice)}{below}")
-        if where != page:
-            target, label = PAGES[where]
-            if st.button(label, key="journey-go", type="primary", icon=":material/arrow_forward:"):
-                st.switch_page(target)
+        st.markdown(f"**Jetzt dran:** {as_text(advice)}")
+        target, label = PAGES[where]
+        if st.button(label, key="journey-go", type="primary", icon=":material/arrow_forward:"):
+            st.switch_page(target)
 
 
 def kept_editor(
