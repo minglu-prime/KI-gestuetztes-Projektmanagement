@@ -32,6 +32,18 @@
   --pushed: 0.98; /* a pressed button */
   --nudge: 4px; /* the arrow of a card, towards the page it opens */
   --tour: 1.6s; /* each node of the diagram on the Startseite, once */
+  /* The opening of the Startseite: shown to people who see the site for the first time, so it
+     takes its time. Only there; the working pages keep the brief motion above. */
+  --show: 1100ms; /* the headline and the diagram arrive */
+  --beat: 240ms; /* between two parts of the opening */
+  --show-rise: 28px;
+  --float: -5px; /* the nodes of the diagram drift up and back */
+  --drift: 6s;
+  --glow: 18s; /* the light behind the headline wanders */
+  --tilt: 7deg; /* a tile leans towards the pointer, at most */
+  /* The curve of what drifts to and fro for ever: as slow at both ends, so it turns without
+     a jolt. Every change keeps --ease. */
+  --sway: cubic-bezier(0.37, 0, 0.63, 1);
 }
 
 /* ---- Motion ---------------------------------------------------------------------------- */
@@ -219,6 +231,115 @@
   padding-top: 16px;
   color: var(--green);
   font-size: 12px;
+}
+
+/* ---- Startseite: the opening --------------------------------------------------------- */
+
+/* A light wanders behind the headline; the headline, then its answer, then the diagram arrive
+   out of a soft blur; the nodes float. Further down, numbers, steps and the lab card arrive as
+   they scroll into view: tied to the scroll position, a rerun does not play them again. */
+@keyframes arrive {
+  from { opacity: 0; transform: translateY(var(--show-rise)) scale(0.985); filter: blur(8px); }
+  to { opacity: 1; transform: none; filter: none; }
+}
+@keyframes drift {
+  from { transform: translateY(0); }
+  to { transform: translateY(var(--float)); }
+}
+@keyframes glow {
+  from { transform: translate3d(-3%, 2%, 0) scale(1); }
+  to { transform: translate3d(3%, -3%, 0) scale(1.08); }
+}
+@keyframes sheen {
+  from { background-position: 100% 0; }
+  to { background-position: 0 0; }
+}
+.st-key-page-startseite .st-key-hero {
+  position: relative;
+  isolation: isolate;
+}
+.st-key-page-startseite .st-key-hero::before {
+  content: "";
+  position: absolute;
+  inset: -30px 6% 0; /* room for the drift: the light never reaches past the page */
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(30% 60% at 74% 50%, rgba(35, 101, 76, 0.22), transparent 72%),
+    radial-gradient(26% 55% at 20% 35%, rgba(186, 141, 66, 0.14), transparent 72%),
+    radial-gradient(30% 50% at 46% 96%, rgba(120, 175, 140, 0.2), transparent 72%);
+  filter: blur(24px);
+  animation: glow var(--glow) var(--sway) infinite alternate;
+}
+.st-key-page-startseite .st-key-hero h1 > span:first-child {
+  display: inline-block;
+  animation: arrive var(--show) var(--ease) both;
+}
+.st-key-page-startseite .st-key-hero h1 em {
+  display: inline-block;
+  padding-right: 0.08em; /* the italic s would be cut by the clip of the text */
+  /* Both greens keep 4.5 : 1 on the light behind the headline; a lighter one did not. */
+  background: linear-gradient(
+    100deg, var(--green-dark) 0%, var(--green) 50%, var(--green-dark) 100%
+  );
+  background-size: 250% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation:
+    arrive var(--show) var(--ease) calc(var(--beat) * 2) both,
+    sheen calc(var(--show) * 2) var(--ease) calc(var(--show) + var(--beat) * 2) both;
+}
+.st-key-page-startseite .st-key-hero .lead,
+.st-key-page-startseite .st-key-hero .stButton {
+  animation: arrive var(--show) var(--ease) calc(var(--beat) * 3) both;
+}
+.st-key-page-startseite .flow {
+  background: rgba(231, 237, 223, 0.72);
+  backdrop-filter: blur(14px) saturate(1.2);
+  box-shadow: 0 1px 1px rgba(24, 53, 45, 0.04), 0 30px 60px -30px rgba(24, 53, 45, 0.45);
+  animation: arrive var(--show) var(--ease) calc(var(--beat) * 4) both;
+}
+.st-key-page-startseite .flow-node {
+  animation:
+    step calc(var(--tour) * 3) var(--ease) calc(var(--show) + var(--beat) * 4) 1,
+    drift var(--drift) var(--sway) infinite alternate;
+}
+.st-key-page-startseite .flow-node:nth-child(2) {
+  animation-delay: calc(var(--show) + var(--beat) * 4 + var(--tour)), calc(var(--drift) / -3);
+}
+.st-key-page-startseite .flow-node:nth-child(3) {
+  animation-delay: calc(var(--show) + var(--beat) * 4 + var(--tour) * 2),
+    calc(var(--drift) / -1.5);
+}
+@supports (animation-timeline: view()) {
+  .st-key-page-startseite .st-key-project [data-testid="stMetric"],
+  .st-key-page-startseite .st-key-steps > *,
+  .st-key-page-startseite .st-key-lab {
+    animation: arrive var(--ease) both;
+    animation-timeline: view();
+    animation-range: entry 0% cover 30%;
+  }
+  /* Left to right: each tile starts later than the one before and lands with the row. */
+  .st-key-page-startseite .st-key-steps > :nth-child(2) { animation-range: entry 15% cover 30%; }
+  .st-key-page-startseite .st-key-steps > :nth-child(3) { animation-range: entry 30% cover 30%; }
+  .st-key-page-startseite .st-key-steps > :nth-child(4) { animation-range: entry 45% cover 30%; }
+  .st-key-page-startseite .st-key-steps > :nth-child(5) { animation-range: entry 60% cover 30%; }
+  .st-key-page-startseite .st-key-steps > :nth-child(n + 6) {
+    animation-range: entry 75% cover 30%;
+  }
+}
+/* A tile leans towards the pointer (--px, --py come from the script of the Startseite). No
+   light that follows it: under a leaning tile it blurred the words (measured). */
+.st-key-page-startseite [class*="st-key-tile-"]:hover,
+.st-key-page-startseite .st-key-card-lab:hover {
+  box-shadow: 0 22px 44px -24px rgba(24, 53, 45, 0.5);
+  transform: perspective(800px) rotateX(calc(var(--py, 0) * var(--tilt) * -2))
+    rotateY(calc(var(--px, 0) * var(--tilt) * 2)) translateY(var(--lift-y-card));
+}
+.st-key-page-startseite [class*="st-key-tile-"]:active {
+  transform: perspective(800px) rotateX(calc(var(--py, 0) * var(--tilt) * -2))
+    rotateY(calc(var(--px, 0) * var(--tilt) * 2)) scale(var(--pushed));
 }
 
 /* ---- Cards ----------------------------------------------------------------------------- */
@@ -560,8 +681,22 @@
     --lift-y-card: 0px;
     --pushed: 1;
     --nudge: 0px;
+    --show-rise: 0px;
+    --float: 0px;
+    --tilt: 0deg;
   }
   .flow-node { animation: none; }
+  /* The opening only fades; the light stands still. */
+  .st-key-page-startseite .st-key-hero::before,
+  .st-key-page-startseite .st-key-hero h1 em,
+  .st-key-page-startseite .flow-node { animation: none; }
+  .st-key-page-startseite .st-key-hero h1 > span:first-child,
+  .st-key-page-startseite .st-key-hero .lead,
+  .st-key-page-startseite .st-key-hero .stButton,
+  .st-key-page-startseite .flow,
+  .st-key-page-startseite .st-key-project [data-testid="stMetric"],
+  .st-key-page-startseite .st-key-steps > *,
+  .st-key-page-startseite .st-key-lab { animation-name: fade; }
 }
 
 /* Sequence diagrams of the Entwurf: wider than a phone, so they scroll on their own. */

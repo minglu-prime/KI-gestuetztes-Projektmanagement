@@ -577,7 +577,12 @@ STILL = {
     "--lift-y-card": "0px",
     "--nudge": "0px",
     "--pushed": "1",
+    "--show-rise": "0px",
+    "--float": "0px",
+    "--tilt": "0deg",
 }
+# The tokens of the opening of the Startseite: slower and larger than the working pages.
+OPENING = ("--show", "--beat", "--show-rise", "--float", "--drift", "--glow", "--tilt", "--sway")
 
 
 def _rules(css: str) -> list[tuple[str, str]]:
@@ -589,7 +594,9 @@ def _rules(css: str) -> list[tuple[str, str]]:
 def test_motion_uses_one_set_of_durations():
     # Motion of the UX review (task 2): one curve and a few durations in :root, so the same
     # kind of change moves the same everywhere. A literal duration or another curve slips
-    # past that (review of the motion PR: the diagram of the Startseite was left out).
+    # past that (review of the motion PR: the diagram of the Startseite was left out). Each
+    # animation of a list on its own: one with --ease beside one without passed before. Only
+    # what drifts to and fro for ever takes --sway, which turns without a jolt.
     found = []
     for selector, body in _rules(CSS):
         if ":root" in selector:
@@ -601,9 +608,50 @@ def test_motion_uses_one_set_of_durations():
                 continue
             literal = re.search(r"\b\d*\.?\d+m?s\b", value)
             curve = name in ("transition", "animation", "transition-timing-function")
-            if literal or (curve and "var(--ease)" not in value):
+            parts = re.split(r",(?![^()]*\))", value)  # not the commas inside a cubic-bezier()
+            other = [
+                part
+                for part in parts
+                if "var(--ease)" not in part and not ("var(--sway)" in part and "infinite" in part)
+            ]
+            if literal or (curve and other):
                 found.append(f"{selector.strip()}: {declaration.strip()}")
-    assert found == [], "Use var(--press|--hover|--state|--enter|--page) and var(--ease)"
+    assert found == [], (
+        "Use var(--press|--hover|--state|--enter|--page) and var(--ease); "
+        "var(--sway) only for a loop (infinite)"
+    )
+
+
+def test_the_long_opening_stays_on_the_startseite():
+    # The opening is for people who see the site for the first time; on the pages people
+    # work with, motion that takes a second is in the way.
+    found = [
+        selector.strip()
+        for selector, body in _rules(CSS)
+        if ":root" not in selector
+        and not re.fullmatch(r"\s*(from|to|[\d.]+%)\s*", selector)  # a step of a @keyframes
+        and any(f"var({token})" in body for token in OPENING)
+        and not all(".st-key-page-startseite" in s for s in selector.split(","))
+    ]
+    assert found == [], "Use the tokens of the opening only under .st-key-page-startseite"
+
+
+def test_reduced_motion_stops_every_loop():
+    # Something that moves for ever is the first thing to stop when less motion is asked for.
+    block = CSS.index("@media (prefers-reduced-motion: reduce)")
+    loops = {
+        selector.strip()
+        for selector, body in _rules(CSS[:block])
+        if re.search(r"animation\s*:[^;]*infinite", body)
+    }
+    stopped = {
+        part.strip()
+        for selector, body in _rules(CSS[block:])
+        if re.search(r"animation\s*:\s*none", body)
+        for part in selector.split(",")
+    }
+    assert loops, "no loop found: the rule looks at the wrong thing"
+    assert loops - stopped == set(), "Add `animation: none` for it in the reduced-motion block"
 
 
 def test_motion_moves_nothing_that_reflows_the_page():
