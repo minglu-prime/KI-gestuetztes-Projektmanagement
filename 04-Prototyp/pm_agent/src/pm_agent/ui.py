@@ -115,6 +115,29 @@ def verdict(state: str, text: str) -> None:
     )
 
 
+# A priority in a table, in the colours of the verdict line (assets/style.css, .verdict):
+# Muss red, Soll golden, Kann green. The word stays: the colour is not the only cue.
+PRIORITY_STYLE = {
+    "Muss": "color: #8f1d14; background-color: #fdecea; font-weight: 700",
+    "Soll": "color: #6a4510; background-color: #fdf3e1; font-weight: 600",
+    "Kann": "color: #1d5a3f; background-color: #e3f1e6; font-weight: 600",
+}
+# An editable cell takes no style (st.data_editor styles read-only columns only): a mark.
+PRIORITY_MARK = {"Muss": "🔴", "Soll": "🟡", "Kann": "🟢"}
+
+
+def style_priority(frame: pd.DataFrame) -> Any:
+    """`frame` with its column "Priorität" coloured, for st.dataframe."""
+    return frame.style.map(lambda value: PRIORITY_STYLE.get(value, ""), subset=["Priorität"])
+
+
+def priority_column() -> Any:
+    """The editable column "Priorität": the word with its mark; the value stays the word."""
+    return st.column_config.SelectboxColumn(
+        options=list(PRIORITY_MARK), format_func=lambda p: f"{PRIORITY_MARK[p]} {p}"
+    )
+
+
 def check_verdict(errors: Sequence[str], warnings: Sequence[str], ok: str) -> tuple[str, str]:
     """The verdict of a check: its first error or warning and how many there are; `ok`
     without either. The full list stays below (`messages`)."""

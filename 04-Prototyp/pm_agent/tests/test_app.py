@@ -1962,6 +1962,35 @@ def test_the_kontrolle_shows_progress_per_requirement(site):
     ]
 
 
+def test_a_priority_is_coloured_wherever_a_table_shows_it(site):
+    # Muss, Soll and Kann were grey text: hard to scan (project lead, 25.11.2026). Read-only
+    # tables colour the cell like the verdict line; the word stays, colour is no only cue.
+    data = plan_input()
+    data["tasks"][0]["requirement_ids"] = ["R1"]
+    tracking.adopt(PROJECT, TEAM, Plan.model_validate(data), requirements=NEEDS.items)
+    for page in ("views/kontrolle.py", "views/abschluss.py"):
+        at = site.switch_page(page).run()
+        assert not at.exception
+        (frame,) = [d for d in at.dataframe if "Priorität" in d.value.columns]
+        assert frame.value["Priorität"].tolist() == ["Muss"]
+        assert "#fdecea" in frame.proto.arrow_data.styler.styles  # the red of "Achtung"
+    # The editor cannot style a cell: a coloured mark before the word, the value stays.
+    lifecycle.save(with_charter().model_copy(update={"requirements": NEEDS}))
+    at = site.switch_page("views/anforderungen.py").run()
+    column = json.loads(requirements_table_proto(at).columns)["Priorität"]
+    assert column["type_config"]["options"] == [
+        {"value": "Muss", "label": "🔴 Muss"},
+        {"value": "Soll", "label": "🟡 Soll"},
+        {"value": "Kann", "label": "🟢 Kann"},
+    ]
+    assert requirements_table(at).iloc[0]["Priorität"] == "Muss"
+
+
+def requirements_table_proto(at):
+    (frame,) = [f for f in at.dataframe if f.key and f.key.startswith("requirements_editor_")]
+    return frame.proto
+
+
 def test_without_requirements_the_kontrolle_says_why_it_cannot_trace(tracked):
     at = tracked.switch_page("views/kontrolle.py").run()
     assert any("ohne freigegebene Anforderungen übernommen" in c.value for c in at.caption)

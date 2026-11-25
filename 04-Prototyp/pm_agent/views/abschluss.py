@@ -51,6 +51,7 @@ from pm_agent.ui import (
     next_open,
     notify,
     run_with_progress,
+    style_priority,
     verdict,
 )
 from pm_agent.workbench import DATA_DIR, InputError
@@ -218,7 +219,9 @@ with closing_tab:
     with st.container(border=True, key="panel-signoff"):
         heading("verified", "Abnahme je Anforderung", python="schlägt vor", du="entscheidest")
         if tracking.requirements:
-            st.dataframe(pd.DataFrame(signoff_rows(tracking, plan)), hide_index=True)
+            st.dataframe(
+                style_priority(pd.DataFrame(signoff_rows(tracking, plan))), hide_index=True
+            )
             titles = {n.id: n.title for n in tracking.requirements}
             advice = closing.suggestions(tracking, plan)
             if state.get("signoff_req") not in titles:

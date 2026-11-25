@@ -48,6 +48,7 @@ from pm_agent.ui import (
     on_panel,
     roles,
     run_with_progress,
+    style_priority,
     verdict,
 )
 from pm_agent.workbench import InputError
@@ -363,7 +364,9 @@ if tracking is not None:
     with st.container(border=True, key="panel-requirements"):
         heading("checklist", "Plan und Ist je Anforderung", python="rechnet")
         if tracking.requirements:
-            st.dataframe(pd.DataFrame(requirement_progress(tracking)), hide_index=True)
+            st.dataframe(
+                style_priority(pd.DataFrame(requirement_progress(tracking))), hide_index=True
+            )
             st.caption(
                 "Die Anforderungen, mit denen der Plan übernommen wurde. Mitgezählt sind "
                 "fertige Aufgaben früherer Pläne."

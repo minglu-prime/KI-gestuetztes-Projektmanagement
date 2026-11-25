@@ -27,6 +27,7 @@ from pm_agent.ui import (
     notify,
     phase_chip,
     phase_verdict,
+    priority_column,
     run_with_progress,
     saved_lifecycle,
     store,
@@ -140,7 +141,7 @@ with st.container(border=True, key="panel-requirements"):
             "User Story": st.column_config.TextColumn(
                 help="Als <Rolle> will ich <etwas>, damit <Nutzen>."
             ),
-            "Priorität": st.column_config.SelectboxColumn(options=["Muss", "Soll", "Kann"]),
+            "Priorität": priority_column(),
         },
     )
     # A table emptied of saved requirements is an edit too.

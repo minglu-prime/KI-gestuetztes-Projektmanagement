@@ -49,6 +49,7 @@ from pm_agent.ui import (
     roles,
     round_printer,
     strip,
+    style_priority,
     verdict,
 )
 from pm_agent.ui import (
@@ -673,7 +674,9 @@ with tabs[3]:
                     "zugeordnet. Lege sie auf der Seite Anforderungen an und gib sie frei."
                 )
             else:
-                st.dataframe(pd.DataFrame(trace_rows(needs, state.plan)), hide_index=True)
+                st.dataframe(
+                    style_priority(pd.DataFrame(trace_rows(needs, state.plan))), hide_index=True
+                )
 
         with st.container(border=True, key="panel-demos"):
             heading(
