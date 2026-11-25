@@ -836,8 +836,9 @@ def test_flow_pages_use_fixed_evaluation_date_despite_host_today(flow_site, monk
             report = downloads["Statusbericht als Markdown herunterladen"]
             assert "**Stand:** 12.11.2026" in report
         else:
-            assert [w.value for w in at.warning] == [
-                "Im Verzug:\n\n- B · API (Anna), geplant bis 11.11.2026, Status: in Arbeit"
+            assert not at.warning  # the late task stands in a table, not a box
+            assert [(r["ID"], r["Geplant bis"], r["Status"]) for r in overdue_table(at)] == [
+                ("B", "11.11.2026", "in Arbeit")
             ]
 
 
@@ -961,8 +962,9 @@ def test_nonzero_progress_survives_reopen_and_reaches_control_and_documents(flow
     assert members.to_dict("records") == [
         {"Person": "Anna", "Plan (h)": 24, "Ist (h)": 14, "Fertig (Plan-h)": 8, "Erledigt": 0.33}
     ]
-    assert [w.value for w in at.warning] == [
-        "Im Verzug:\n\n- B · API (Anna), geplant bis 11.11.2026, Status: in Arbeit"
+    assert not at.warning  # the late task stands in a table, not a box
+    assert [(r["ID"], r["Geplant bis"], r["Status"]) for r in overdue_table(at)] == [
+        ("B", "11.11.2026", "in Arbeit")
     ]
 
     # Target subsequent AppTest reruns at the page reached by the in-app button.
@@ -1397,7 +1399,8 @@ def test_kontrolle_forecasts_the_end_from_the_recorded_progress(tracked):
     tracking.save(tracking.apply_rows(tracking.load(), done))
     at = tracked.switch_page("views/kontrolle.py").run()
     assert not at.exception
-    assert "Alle Aufgaben sind fertig." in [s.value for s in at.success]
+    # Said by the verdict line on top, not again in a green box.
+    assert "Alle Aufgaben sind fertig." in verdict(at) and not at.success
     assert "Voraussichtliches Ende" not in {m.label for m in at.metric}
 
     # Nothing done yet: the forecast names an end, and a buffer or a missed deadline.
@@ -2032,8 +2035,8 @@ def test_the_overdue_list_on_the_kontrolle_shows_no_link(site):
     tracking.adopt(PROJECT, TEAM, PLAN.model_copy(update={"tasks": tasks}))
     at = site.switch_page("views/kontrolle.py").run()
     assert not at.exception
-    (overdue,) = [w.value for w in at.warning if w.value.startswith("Im Verzug")]
-    assert "evil.example" in overdue and not re.search(r"(?<!\\)\[", overdue)
+    # A table cell is text, never Markdown: the title stands as written.
+    assert [r["Aufgabe"] for r in overdue_table(at)] == ["[hier](https://evil.example)"] * 2
 
 
 def design_tables(at):
@@ -3035,6 +3038,40 @@ def test_the_startseite_says_the_forecast_once(tracked, monkeypatch, where):
     assert not at.exception
     said = any(m.value.startswith("**Als Nächstes:** ") for m in at.markdown)
     assert said == (where != "kontrolle")
+
+
+def overdue_table(at):
+    (table,) = [d.value for d in at.dataframe if "Hält auf" in d.value.columns]
+    return table.to_dict("records")
+
+
+def test_the_kontrolle_names_each_late_task_once(tracked):
+    # A yellow box listed the late tasks, and the forecast listed most of them again as
+    # "Verspätet und halten andere auf" (project lead, 25.11.2026). One table says both.
+    at = tracked.switch_page("views/kontrolle.py").run()
+    assert not at.exception
+    assert overdue_table(at) == [
+        {
+            "ID": "A",
+            "Aufgabe": "Datenmodell",
+            "Person": "Anna",
+            "Geplant bis": "09.11.2026",
+            "Status": "offen",
+            "Hält auf": "B",
+        },
+        {
+            "ID": "B",
+            "Aufgabe": "API",
+            "Person": "Anna",
+            "Geplant bis": "11.11.2026",
+            "Status": "offen",
+            "Hält auf": "",
+        },
+    ]
+    assert not at.warning and not at.info and not at.success
+    assert not any("halten andere auf" in m.value for m in at.markdown)
+    # Nothing recorded yet: said once, quietly, where the progress is.
+    assert any("Noch kein Fortschritt erfasst" in c.value for c in at.caption)
 
 
 def test_the_forecast_lists_only_late_tasks_that_hold_others(tracked):

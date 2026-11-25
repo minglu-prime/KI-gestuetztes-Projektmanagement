@@ -91,26 +91,35 @@ if tracking is not None:
     verdict(*forecast_verdict(outlook, tracking.project.deadline, result))
     st.subheader("Projektstand")
     st.html(roles(python="rechnet aus Plan und Fortschritt"))
-    if not has_progress(tracking):
-        st.info("Noch kein Fortschritt erfasst. Trage ihn auf der Seite Durchführung ein.")
     a, b, c, d = st.columns(4)
     a.metric("Fortschritt", percent(result.progress))
     b.metric("Planstunden", f"{hours_text(result.planned_hours)} h")
     c.metric("Ist-Stunden bisher", f"{hours_text(result.actual_hours)} h")
     d.metric("Abweichung fertiger Aufgaben", f"{signed_hours(result.finished_deviation)} h")
+    if not has_progress(tracking):
+        st.caption("Noch kein Fortschritt erfasst. Trage ihn auf der Seite Durchführung ein.")
 
+    # The late tasks once, with what waits for them: the verdict above is the alarm.
     if result.overdue:
-        st.warning(
-            "Im Verzug:\n\n"
-            + "\n".join(
-                f"- {as_text(t.id)} · {as_text(t.title)} ({as_text(t.member)}), geplant bis "
-                f"{t.planned_end:%d.%m.%Y}, "
-                f"Status: {t.status}"
-                for t in result.overdue
-            )
+        st.markdown(f"**Im Verzug: {len(result.overdue)}**")
+        st.dataframe(
+            pd.DataFrame(
+                [
+                    {
+                        "ID": t.id,
+                        "Aufgabe": t.title,
+                        "Person": t.member,
+                        "Geplant bis": f"{t.planned_end:%d.%m.%Y}",
+                        "Status": t.status,
+                        "Hält auf": ", ".join(outlook.blocked.get(t.id, [])),
+                    }
+                    for t in result.overdue
+                ]
+            ),
+            hide_index=True,
         )
     else:
-        st.success("Keine Aufgabe im Verzug.")
+        st.caption("Keine Aufgabe im Verzug.")
     if st.button("Fortschritt erfassen", icon=":material/edit_note:"):
         st.switch_page("views/durchfuehrung.py")
 
@@ -121,8 +130,8 @@ if tracking is not None:
                 f"Die Prognose lässt sich nicht berechnen: {outlook.problem}. Prüfe Status und "
                 "Rest-Stunden auf der Seite Durchführung."
             )
-        elif outlook.end is None:
-            st.success("Alle Aufgaben sind fertig.")
+        elif outlook.end is None:  # the verdict line says it
+            st.caption("Alle Aufgaben sind fertig: Es bleibt nichts vorherzusagen.")
         else:
             end, deadline = st.columns(2)
             end.metric(
@@ -144,18 +153,7 @@ if tracking is not None:
                     "Puffer bis zur Deadline",
                     f"{-outlook.deadline_gap} {days(outlook.deadline_gap)}",
                 )
-            titles = {task.id: task.title for task in tracking.plan.tasks}
-            # The late tasks themselves stand in the box "Im Verzug" above.
-            holding = {late: waiting for late, waiting in outlook.blocked.items() if waiting}
-            if holding:
-                st.markdown(
-                    "**Verspätet und halten andere auf:**\n"
-                    + "\n".join(
-                        f"- **{as_text(late)} · {as_text(titles[late])}**: "
-                        f"{as_text(', '.join(waiting))}"
-                        for late, waiting in holding.items()
-                    )
-                )
+            # What the late tasks hold up stands in the table "Im Verzug".
 
             # From here the project lead can act: plan the rest again, with the agent.
             if st.button(
