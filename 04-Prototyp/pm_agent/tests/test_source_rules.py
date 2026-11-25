@@ -530,3 +530,72 @@ def test_an_approved_phase_hides_its_approval_instead_of_greying_it_out():
                     shown.append(f"{path.name}:{call.lineno}")
     assert len(list((ROOT / "views").glob("*.py"))) > 10
     assert shown == [], "Leave the button out once approved: `if phase != 'freigegeben' and …`"
+
+
+CSS = (ROOT / "assets" / "style.css").read_text(encoding="utf-8")
+# Movement in a reduced-motion block: the value each token gets there.
+STILL = {
+    "--rise": "0px",
+    "--lift-y": "0px",
+    "--lift-y-card": "0px",
+    "--nudge": "0px",
+    "--pushed": "1",
+}
+
+
+def _rules(css: str) -> list[tuple[str, str]]:
+    """Selector and body of every rule, comments removed; nested blocks flattened."""
+    css = re.sub(r"/\*.*?\*/", "", css, flags=re.S)
+    return re.findall(r"([^{}]+)\{([^{}]*)\}", css)
+
+
+def test_motion_uses_one_set_of_durations():
+    # Motion of the UX review (task 2): one curve and a few durations in :root, so the same
+    # kind of change moves the same everywhere. A literal duration or another curve slips
+    # past that (review of the motion PR: the diagram of the Startseite was left out).
+    found = []
+    for selector, body in _rules(CSS):
+        if ":root" in selector:
+            continue
+        for declaration in body.split(";"):
+            name, _, value = declaration.partition(":")
+            name = name.strip()
+            if not name.startswith(("transition", "animation")) or value.strip() == "none":
+                continue
+            literal = re.search(r"\b\d*\.?\d+m?s\b", value)
+            curve = name in ("transition", "animation", "transition-timing-function")
+            if literal or (curve and "var(--ease)" not in value):
+                found.append(f"{selector.strip()}: {declaration.strip()}")
+    assert found == [], "Use var(--press|--hover|--state|--enter|--page) and var(--ease)"
+
+
+def test_motion_moves_nothing_that_reflows_the_page():
+    # Only what the compositor can move cheaply, or colours: a transition on size, position
+    # or the flow of the text makes the page reflow on every frame.
+    layout = (
+        r"\b(all|width|height|inset|top|left|right|bottom|margin[\w-]*|padding[\w-]*|[\w-]*gap"
+        r"|grid[\w-]*|flex[\w-]*|font-size|line-height|letter-spacing|border-width)\b"
+    )
+    found = [
+        selector.strip()
+        for selector, body in _rules(CSS)
+        for declaration in body.split(";")
+        if re.match(r"\s*transition(-property)?\s*:", declaration)
+        and re.search(layout, declaration.split(":", 1)[1])
+    ]
+    keyframes = re.findall(r"@keyframes\s+(\w+)\s*\{((?:[^{}]*\{[^{}]*\})*)\s*\}", CSS)
+    moving = {name for name, body in keyframes if re.search(layout + r"\s*:", body)}
+    assert found == [] and moving == set()
+
+
+def test_reduced_motion_stops_everything_that_travels():
+    # Asked for less motion, nothing travels, lifts or gives way: every movement token is
+    # set to stand still there, and each one is used by a rule.
+    block = CSS[CSS.index("@media (prefers-reduced-motion: reduce)") :]
+    for token, still in STILL.items():
+        assert re.search(rf"{token}:\s*{still};", block), token
+        assert f"var({token})" in CSS, token
+    # Streamlit animates the height of an expander itself; app.py holds it still (review of
+    # the motion PR).
+    app = (ROOT / "app.py").read_text(encoding="utf-8")
+    assert "matchMedia('(prefers-reduced-motion: reduce)')" in app

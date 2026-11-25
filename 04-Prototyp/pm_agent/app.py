@@ -12,6 +12,18 @@ import streamlit as st
 from pm_agent.ui import PAGES, group_tabs, journey, show_notice
 
 ROOT = Path(__file__).parent
+# Streamlit opens and closes an expander (and st.status) by animating its height for 0.5 s
+# with the Web Animations API, also when the system asks for less motion; CSS cannot reach
+# that. With less motion asked for, it gets no duration and opens and closes at once.
+# ponytail: patches Element.animate for <details> only; drop it once Streamlit checks
+# prefers-reduced-motion there itself.
+STILL_DETAILS = (
+    "if (!Element.prototype.animate.still) { const animate = Element.prototype.animate; "
+    "Element.prototype.animate = function (frames, options) { const still = "
+    "this.tagName === 'DETAILS' && matchMedia('(prefers-reduced-motion: reduce)').matches; "
+    "return animate.call(this, frames, still ? { ...options, duration: 0 } : options); }; "
+    "Element.prototype.animate.still = true; }"
+)
 
 st.set_page_config(page_title="PM-Agent", page_icon=":material/view_timeline:", layout="wide")
 state = st.session_state
@@ -40,6 +52,9 @@ MENU = {
     ],
 }
 page = st.navigation(MENU)
+# The Planung page restores its table editors after a visit to another page.
+state.page_changed = state.get("page") != page.url_path
+state.page = page.url_path
 
 st.html(ROOT / "assets" / "style.css")
 with st.container(
@@ -50,7 +65,7 @@ with st.container(
     # The script rides with the brand: an element of its own would add a gap above the bar.
     st.html(
         '<div class="brand">PM-AGENT<small>KI IM PROJEKTMANAGEMENT</small></div>'
-        '<script>document.documentElement.lang = "de"</script>',
+        f'<script>{STILL_DETAILS} document.documentElement.lang = "de"</script>',
         width="content",
         unsafe_allow_javascript=True,
     )
@@ -65,11 +80,8 @@ with st.container(
     else:
         st.html('<span class="badge">PROTOTYP · HSBI PROJEKTGRUPPE 4</span>', width="content")
 
-# The Planung page restores its table editors after a visit to another page.
-state.page_changed = state.get("page") != page.url_path
-state.page = page.url_path
-# A container of its own per page: a page change mounts new content, which is what the
-# page transition in assets/style.css hangs on.
+# A container of its own per page: a page change mounts a new one, which is what the page
+# transition in assets/style.css hangs on.
 show_notice()
 with st.container(key=f"page-{page.url_path or 'startseite'}"):
     group_tabs(page.url_path)
