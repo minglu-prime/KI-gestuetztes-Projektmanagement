@@ -21,7 +21,9 @@ sie durchspielen will („Was, wenn das Backend doppelt so lange dauert?“).
   Verschiebt die Abwesenheit das Planende hinter die Deadline, nimmt den Puffer oder
   überlastet die Person, gib die betroffenen Aufgaben an andere Personen im Team mit passenden
   Skills und freien Stunden weiter. Einen Plan, den die Abwesenheit hinter die Deadline
-  schiebt, lehnt `submit_plan` ab; fehlender Puffer und fehlende Skills bleiben Warnungen. Trag nur ein, was der Wunsch mit Person und Tagen nennt;
+  schiebt, lehnt `submit_plan` ab, solange das Team bis zur Deadline die Stunden dafür hat;
+  fehlen sie, nimmt es den Plan mit einer Warnung an: Dann halte das Ende so früh wie möglich.
+  Fehlender Puffer und fehlende Skills bleiben Warnungen. Trag nur ein, was der Wunsch mit Person und Tagen nennt;
   bei „Clara ist öfter krank“ fehlen die Tage, dann nenne das als Risiko. Die Projektleitung
   sieht die Abwesenheit neben dem Plan und übernimmt beides oder keins.
 - Wochenstunden gehören zum Team, die Deadline und freie Tage für alle (`free_days`) zum

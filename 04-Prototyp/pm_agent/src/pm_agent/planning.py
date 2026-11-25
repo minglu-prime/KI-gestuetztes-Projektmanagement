@@ -132,11 +132,23 @@ def check_plan(
 
     if end_date > project.deadline:
         late = working_days(project, project.deadline + timedelta(days=1), end_date)
-        warn(
-            ("late",),
+        text = (
             f"Der Plan endet am {_fmt(end_date)}, {late} Arbeitstag{'' if late == 1 else 'e'} "
-            f"nach der Deadline ({_fmt(project.deadline)})",
+            f"nach der Deadline ({_fmt(project.deadline)})"
         )
+        # With one person the overload warning says the same; with more, nobody should
+        # look for a redistribution that cannot exist (decision D1, 25.11.2026).
+        if len(team) > 1 and missing_hours(plan, load):
+            need = sum(task.estimate_hours for task in plan.tasks)
+            have = sum(item.capacity_hours for item in load)
+            text += (
+                ". Auch mit Umverteilung reicht die Zeit nicht: Das Team hat bis zur Deadline "
+                f"{_hours(have)} h, die Aufgaben brauchen {_hours(need)} h"
+            )
+            earliest = _earliest_end(need - have, team, away, window, project)
+            if earliest is not None:
+                text += f"; frühestens fertig am {_fmt(earliest)}"
+        warn(("late",), text)
     # end_date is a working day, so one working day in [end_date, deadline] is end_date
     # itself: any delay misses the deadline. Counted from end_date, not the day after, which
     # does not exist for 31.12.9999. Free days of the project in between are no buffer.
@@ -231,6 +243,34 @@ def check_plan(
         slack=slack,
         load=load,
     )
+
+
+def missing_hours(plan: Plan, load: list[MemberLoad]) -> float:
+    """The hours of work the whole team cannot do by the deadline, whoever takes which task;
+    0 when it has the hours. `load` is CheckResult.load of the plan."""
+    need = sum(task.estimate_hours for task in plan.tasks)
+    have = sum(item.capacity_hours for item in load)
+    return max(0.0, round(need - have, _DIGITS))
+
+
+def _earliest_end(
+    left: float,
+    team: list[Member],
+    away: dict[str, list[tuple[int, int]]],
+    window: int,
+    project: Project,
+) -> date | None:
+    """The first day after the deadline by which the whole team could have done `left`
+    more hours, everybody on it. None if that is more than ten years away.
+    ponytail: a lower bound from hours alone; tasks waiting for each other and one task at a
+    time per person can only make the end later."""
+    for day in range(window, window + 10 * 52 * WORKDAYS_PER_WEEK):
+        for member in team:
+            if not any(first <= day <= last for first, last in away[member.name]):
+                left -= member.hours_per_week / WORKDAYS_PER_WEEK
+        if round(left, _DIGITS) <= 0:
+            return add_workdays(project.start_date, day)
+    return None
 
 
 def planned_work(plan: Plan, team: list[Member], project: Project) -> list[tuple[date, float]]:

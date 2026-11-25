@@ -19,7 +19,7 @@ from pm_agent.models import (
     Project,
     Requirement,
 )
-from pm_agent.planning import check_plan
+from pm_agent.planning import check_plan, missing_hours
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -123,7 +123,8 @@ class PlanningTools:
             description=(
                 "Reicht den fertigen Plan bei der Projektleitung ein. Lehnt einen Plan mit "
                 "Fehlern ab und nennt die Gründe, ebenso einen Plan, den eine mit set_absence "
-                "eingetragene Abwesenheit hinter die Deadline schiebt. Warnungen hindern die "
+                "eingetragene Abwesenheit hinter die Deadline schiebt, solange das Team bis dahin "
+                "die Stunden dafür hat. Warnungen hindern die "
                 "Einreichung nicht."
             ),
             input_schema=Plan,
@@ -168,9 +169,13 @@ class PlanningTools:
     def _late_by_absence(self, plan: Plan, result: CheckResult) -> list[str]:
         """An absence this run set must not push the plan past the deadline: then the agent
         has to move work to others (decision of the project lead, 23.11.2026). A plan that is
-        late without the absences too stays a warning, as every late plan."""
+        late without the absences too stays a warning, as every late plan. So does one the
+        team lacks the hours for: no redistribution can help, the project lead decides (D1,
+        25.11.2026)."""
         deadline = self.project.deadline
         if not self.absences or result.end_date is None or result.end_date <= deadline:
+            return []
+        if missing_hours(plan, result.load):
             return []
         without = check_plan(
             plan, self.team, self.project, requirements=self.requirements, covered=self.covered
