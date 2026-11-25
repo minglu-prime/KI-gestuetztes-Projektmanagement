@@ -39,7 +39,9 @@ zehn Phasen und wie sie zusammenhängen in `04-Prototyp/pm_agent/docs/lebenszykl
   Fixture `local` in `tests/test_app.py`) und `data/` vorher und nachher vergleichen.
   Der Protokollordner hat nur diesen einen Namen: Agenten schreiben, Seiten lesen dort
   (Quellregel gegen `from … import LOG_DIR`). Seit PR 83 lesen alle Funktionen Pfade und
-  Port beim Aufruf (Quellregel), nicht beim Import.
+  Port beim Aufruf (Quellregel), nicht beim Import. In den Tests leitet die autouse-Fixture
+  `no_real_data` in `tests/conftest.py` alle diese Pfade um, auch `workbench.DATA_DIR` und
+  `RUNS_CSV`; `test_no_test_reaches_the_real_data_or_logs` wacht darüber (PR 105).
 - **Vorführen ohne Kontingent.** Für Demo oder Video die Agentenfunktionen
   (`agent.run_planning`, `lifecycle.run_*`, `followup.run_*`, `closing.run_lessons`) durch
   feste Antworten ersetzen und die Pfade wie oben umleiten, in einer eigenen Startdatei
@@ -84,6 +86,7 @@ zehn Phasen und wie sie zusammenhängen in `04-Prototyp/pm_agent/docs/lebenszykl
     - Kontrolle: Test
     - Info: Impressum
   - Betrieb und nächster Durchlauf sind Reiter im Abschluss.
+  - Die Kontrolle hat sechs Reiter: Stand, Prognose, Plan und Ist, Kennzahlen, Demos, Agent und Bericht (`kontrolle_tab`). Beim Ankommen wählt sie Prognose, wenn das Ende das Problem ist, sonst Stand; danach gilt die Wahl der Projektleitung. Reiterleisten brechen bei 375 px in eine zweite Zeile um (PR 105).
 - **Ergebnis zuerst.**
   - Jede Seite mit einer Prüfung beginnt mit einer Ergebniszeile (`ui.verdict`): rot „Achtung“, golden „Zu entscheiden“, grün „In Ordnung“.
   - Helfer: `check_verdict`, `phase_verdict`, `forecast_verdict`.
@@ -95,6 +98,12 @@ zehn Phasen und wie sie zusammenhängen in `04-Prototyp/pm_agent/docs/lebenszykl
   - Eine Quellregel verlangt sie überall, wo `messages(` steht.
   - Die Runden eines Laufs stehen nur noch im Statuskasten (nach Erfolg zugeklappt).
   - Markdown-Vorschauen unter Downloads sind entfernt (Quellregel).
+  - Jede Tatsache einmal (PR 105):
+    - Sagt die Ergebniszeile den einzigen Befund ganz, wiederholt die Liste darunter ihn nicht (`ui.said_in_full`, `messages(said=…)`; Quellregel `test_the_findings_below_a_verdict_leave_out_what_it_says_in_full`).
+    - „Jetzt dran“ fehlt auf der Seite, zu der es führt; neben der Prognose (Startseite, Durchführung) nennt es nur die Handlung (`next_step(forecast_shown=True)`).
+    - Abschluss: neben der Abnahmetabelle je Art eine Zeile mit höchstens fünf IDs (`check_closing(grouped=True)`). Kontrolle: Aufgaben im Verzug einmal, als Tabelle mit „Hält auf“.
+    - Hinweise ohne Handlungsbedarf sind Bildunterschriften, keine farbigen Kästen.
+  - Prioritäten sind in jeder Tabelle farbig: Muss rot, Soll gelb, Kann grün (`ui.style_priority`, im Editor ein Punkt über `ui.priority_column`; Quellregel, PR 105).
 - **Bedienung** (PR 99, 101):
   - Jedes Speichern antwortet mit einer Meldung, die von selbst verschwindet (`ui.notify`, gezeigt von `ui.show_notice`). Quellregeln: `test_every_save_that_reruns_the_page_says_so`, `test_every_callback_that_saves_says_so`, `test_notices_go_through_one_helper`.
   - Eine freigegebene Phase blendet ihre Freigabe aus, statt sie auszugrauen (Quellregel `test_an_approved_phase_hides_its_approval_instead_of_greying_it_out`).
@@ -138,7 +147,7 @@ zehn Phasen und wie sie zusammenhängen in `04-Prototyp/pm_agent/docs/lebenszykl
   - In KI-Runden zeigt das Lab „X / 12 genutzt“, die freien Anfragen und die Wartezeit in Sekunden (PR 86); die Grenze 12 steht im Server (`lab.py`).
   - Einwilligungen nennen den Dienst, an den die Daten gehen: `ui.ai_service` (Host aus `OPENAI_BASE_URL`) auf den Seiten, der eingefrorene Endpunkt im Lab; eine Quellregel verbietet „an (die) OpenAI (API)“.
 - **Prüfen.**
-  - `04-Prototyp/pm_agent/docs/pruefplan.md`: Prüfplan für einen Testlauf durch einen Coding-Agenten (statisch, Unit, Integration, Smoke im Browser, Datenvergleich). Codex lief ihn am 22.11.2026 auf `701337c`: alles grün, eine Lücke (keine Kette über alle Phasen).
+  - `04-Prototyp/pm_agent/docs/pruefplan.md`: Prüfplan für einen Testlauf durch einen Coding-Agenten (statisch, Unit, Integration, Smoke im Browser, Datenvergleich). Codex lief ihn am 22.11.2026 auf `701337c`: alles grün, eine Lücke (keine Kette über alle Phasen). Am 25.11.2026 auf `902ba58`: Schritte 1–7 grün, Schritt 8 (Datenvergleich) rot, weil die Testsuite `data/team.json` schrieb; behoben in PR 105.
   - Die Lücke schließt `test_one_project_goes_from_the_auftrag_to_the_next_run` in `tests/test_app.py` (PR 80): ein Projekt nur über die Seiten vom Auftrag bis zum neuen Durchlauf.
 - **Betrieb im Netz (Plan).** `04-Prototyp/pm_agent/docs/betrieb-cloud.md` (PR 81): Streamlit bleibt als dauerhafter Container, Daten in Supabase Postgres (EU), Speicher hinter `store.py`, fünf PRs. Nichts davon umgesetzt; zuerst Vorbedingung 1 (siehe Offen, Punkt 8).
 - **Videos** (auf Wunsch der Projektleitung, 22.11.2026, nicht im Repository): ein Demo-Durchlauf (3 min) und zwei Werbefassungen mit Titelkarten, Übergängen, selbst erzeugter Musik, Lupe an Klicks und Zoom auf Diagramme. Erzeugt mit Playwright, OpenCV und PyAV aus einer Demo mit festen Agentenantworten.
@@ -164,14 +173,14 @@ Echter Test: `uv run --env-file .env pytest tests/test_agent_live.py` (verbrauch
 nur auf Wort der Projektleitung). Chat Completions nimmt bei diesem Modell Werkzeuge nur mit
 `reasoning_effort` „none“ an; deshalb Responses.
 
-## Projekt in Zahlen (25.11.2026, `main` nach PR 102)
+## Projekt in Zahlen (25.11.2026, `main` nach PR 105)
 
-- **Repository:** 374 Commits auf `main` (275 ohne Merges) seit dem 28.10.2026, 90 gemergte PRs, **0 Releases, 0 Tags**.
-- **Fachcode:** rund 10 500 Zeilen Python (ohne Leerzeilen, Kommentare und Tests).
-  - `pm_agent` 9 834 (Paket und Seiten)
+- **Repository:** 389 Commits auf `main` (287 ohne Merges) seit dem 28.10.2026, 93 gemergte PRs, **0 Releases, 0 Tags**.
+- **Fachcode:** rund 10 600 Zeilen Python (ohne Leerzeilen, Kommentare und Tests).
+  - `pm_agent` rund 9 980 (Paket und Seiten)
   - `ki_lab` 658
   - dazu 9 Prompts, 8 Vorlagen, CSS
-- **Tests:** 741, alle ohne Netz (696 `pm_agent`, 45 `ki_lab`); dazu ein Live-Test, der sich ohne Schlüssel überspringt, und drei Browser-Tests (`tests/test_browsers.py`), die ohne `PM_BROWSERS` überspringen.
+- **Tests:** 752, alle ohne Netz (707 `pm_agent`, 45 `ki_lab`); dazu ein Live-Test, der sich ohne Schlüssel überspringt, und drei Browser-Tests (`tests/test_browsers.py`), die ohne `PM_BROWSERS` überspringen.
 - **CI:**
   - `pm-agent.yml`: Lint, Tests; Job `browsers`: jede Seite in Chromium, Firefox und WebKit bei 1440 px und 375 px, auf einem leeren Temp-Ordner über `smoke_app.py`.
   - `static.yml`: README als Pages, in zwei Jobs `build` und `deploy` (PR 100). In einem Job fand `deploy-pages` das Artefakt zu früh („Found 0 artifact(s)“), vier Veröffentlichungen in Folge scheiterten beim ersten Versuch; seitdem gelingt der erste.
@@ -207,6 +216,7 @@ nur auf Wort der Projektleitung). Chat Completions nimmt bei diesem Modell Werkz
    - Was verschwindet, verschwindet ohne Bewegung: Streamlit gibt CSS dafür keinen Anlass.
    - Aufklappbereiche bewegen sich mit Streamlits eigener Kurve (500 ms), nicht mit `--ease`.
    - Die Dauern der Bewegung sind nicht mit der Gruppe abgestimmt.
+   - Die Screenshots in der README zeigen noch die Kontrolle vor PR 105, ohne Reiter.
 8. **Betrieb im Netz.** Plan in `04-Prototyp/pm_agent/docs/betrieb-cloud.md`, Weg A (Streamlit-Container, Supabase). Vorher klären, Antwort steht aus:
    - Darf der KI:connect-Schlüssel auf einem Server für die Gruppe genutzt werden, und ist die API von außerhalb des Hochschulnetzes erreichbar? Ansprechpartner: KI:connect-Verantwortliche der HSBI, sonst `kiconnect@cls.rwth-aachen.de`.
    - Laut Hilfeseite von KI:connect gelten API-Schlüssel einen Monat, und die Hochschule legt Monatsbudget und parallele Anfragen je Gruppe fest. Ein Server braucht also einen Schlüsselwechsel je Monat.
@@ -215,13 +225,15 @@ nur auf Wort der Projektleitung). Chat Completions nimmt bei diesem Modell Werkz
 ## Lokaler Stand dieses Rechners
 
 - `data/` enthält ein erfundenes Beispielprojekt (Team Anna, Ben, Clara) mit freigegebenem Projektauftrag, Anforderungen, Entwurf und Testplan aus den Läufen vom 18.11.2026.
+  - Bis PR 105 schrieben Tests das Testteam nach `data/team.json` der Worktrees (`quizzical-keller` am 24.11., `project-structure-review` am 25.11.). Beide sind am 25.11. aus dem Hauptordner wiederhergestellt.
 - `logs/` enthält die Protokolle der echten Läufe. Nichts davon ist im Repository.
   - mit Claude: 11. bis 18.11.2026
   - mit `gpt-6-sol`: `gpt-6-sol-20261120/`, `lauf-20261121/` (alle Agenten und KI-Lab) `check-20261121/` (Durchführung und Testplan nach der Datumskorrektur) und `lauf-20261123/` (Umplanung bei Abwesenheit und Durchführung je dreimal)
 - `origin` zeigt auf `minglu-prime/KI-gestuetztes-Projektmanagement` (das Repository ist umgezogen; die alte Adresse leitet um).
 - Im Worktree `project-structure-review-16429a` liegen unversioniert der Testbericht von Codex (`04-Prototyp/pm_agent/docs/test-report.md`, Chinesisch) und zwei Bildschirmfotos. Nicht committen ohne Übersetzung und Wort der Projektleitung.
+- Der Hauptordner steht auf dem lokalen Branch `docs/move-status-out-of-claude-md` (Stand PR 85) mit unversionierten Änderungen vom 23.11.: den Stand aus `CLAUDE.md` nach `docs/stand.md` verschieben. Nicht von dieser Arbeit, nicht anfassen; gegenüber `main` veraltet.
 - `.claude/` (nicht im Repository): `launch.json` für den Entwicklungsserver und der Skill `sibling-fix` für Fehlerbehebungen. `.claude/` steht zusätzlich in `.git/info/exclude`, weil das Wurzelverzeichnis keine `.gitignore` hat (eine eigene würde mit PR 12 kollidieren).
 - Entfernte Branches außer `main`:
   - `feat/polish`: zusammengeführt, bleibt auf Wunsch
   - `feat/pm-experiment-lab`: PR 12, nicht anfassen
-  - Alle anderen Branches dieser Arbeit sind gelöscht, zuletzt am 24./25.11. `fix/absence-deadline`, `fix/rounds-out-reason`, `ci/pages-two-jobs`, `fix/ux-answer-every-save`, `fix/ux-system-decides` und `feat/ui-motion`. Der Worktree `quizzical-keller-85d615` (UX-Prüfung und Bewegung) steht ohne Branch auf `5066640`. Die Branches des Teammitglieds (`test/planning-execution-control-flow`, PR 86, PR 88) sind am 23.11. nicht mehr auf `origin`; gelöscht hat sie nicht diese Arbeit.
+  - Alle anderen Branches dieser Arbeit sind gelöscht, zuletzt am 24./25.11. `fix/absence-deadline`, `fix/rounds-out-reason`, `ci/pages-two-jobs`, `fix/ux-answer-every-save`, `fix/ux-system-decides`, `feat/ui-motion`, `feat/absence-capacity` und `feat/ui-calmer-pages`. Der Worktree `quizzical-keller-85d615` (UX-Prüfung und Bewegung) steht ohne Branch auf `5066640`. Die Branches des Teammitglieds (`test/planning-execution-control-flow`, PR 86, PR 88) sind am 23.11. nicht mehr auf `origin`; gelöscht hat sie nicht diese Arbeit.
