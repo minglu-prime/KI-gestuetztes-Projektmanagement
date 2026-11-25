@@ -138,7 +138,7 @@ with st.container(key="project"):
             # The button for the page the advice points to is the primary one.
             with st.container(horizontal=True):
                 if st.button(
-                    "Fortschritt erfassen",
+                    "Fortschritt ansehen",
                     icon=":material/task_alt:",
                     type="primary" if where == "durchfuehrung" else "secondary",
                 ):

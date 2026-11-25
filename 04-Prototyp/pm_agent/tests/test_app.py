@@ -616,16 +616,25 @@ def test_free_days_of_the_project_move_the_plan(app, monkeypatch):
     assert any("lesbare freie Tage (Schritt 2)" in i.value for i in at.info)
 
 
-def test_a_team_or_project_that_cannot_be_saved_is_said_not_thrown(with_plan, monkeypatch):
+def test_details_that_cannot_be_saved_are_said_not_thrown(site, monkeypatch):
     def locked(*args, **kwargs):
         raise PermissionError(13, "Zugriff verweigert")
 
     monkeypatch.setattr(workbench, "save_team", locked)
-    monkeypatch.setattr(tracking, "adopt", locked)
-    button(with_plan, "Team lokal speichern").click()
-    at = with_plan.run()
+    at = as_member(site)
+    button(at, "Speichern").click()
+    at = at.run()
     assert not at.exception
     assert any("team.json konnte nicht gespeichert werden" in e.value for e in at.error)
+    assert not notices(at)  # and nothing claims it was saved
+
+
+def test_a_project_that_cannot_be_saved_is_said_not_thrown(with_plan, monkeypatch):
+    def locked(*args, **kwargs):
+        raise PermissionError(13, "Zugriff verweigert")
+
+    monkeypatch.setattr(tracking, "adopt", locked)
+    at = with_plan
     button(at, "Plan als Projekt übernehmen").click()
     at = at.run()
     assert not at.exception
@@ -823,15 +832,30 @@ def progress_editor(at):
     return frame.value
 
 
+MEIN_BEREICH = f"{PAGES}/mein_bereich.py"
+
+
+def as_member(at, name="Anna"):
+    """The view Team as `name`, on Mein Bereich: where a member records their progress."""
+    at.radio(key="role").set_value("Team").run()
+    at.selectbox(key="me").set_value(name).run()
+    return at.switch_page(MEIN_BEREICH).run()
+
+
+def as_lead(at):
+    """Back to the view of the project lead."""
+    return at.radio(key="role").set_value("Leitung").run()
+
+
 def test_unsaved_progress_survives_a_visit_to_another_page(flow_site):
     at, _ = flow_site
     at = adopt_from_planning(at)
-    at = at.switch_page("views/durchfuehrung.py").run()
+    at = as_member(at)
     at = edit_progress(at, {0: {"Status": "in Arbeit", "Ist (h)": 3, "Notiz": "läuft"}})
     before = tracking.PROJECT_FILE.read_bytes()
 
-    at = at.switch_page("views/kontrolle.py").run()
-    at = at.switch_page("views/durchfuehrung.py").run()
+    at = at.switch_page(f"{PAGES}/projektstand.py").run()
+    at = at.switch_page(MEIN_BEREICH).run()
 
     assert not at.exception
     row = progress_editor(at).iloc[0]
@@ -853,15 +877,104 @@ def test_unsaved_progress_survives_a_visit_to_another_page(flow_site):
 def test_unsaved_progress_is_dropped_when_the_project_changed_meanwhile(flow_site):
     at, _ = flow_site
     at = adopt_from_planning(at)
-    at = at.switch_page("views/durchfuehrung.py").run()
+    at = as_member(at)
     at = edit_progress(at, {0: {"Notiz": "alt"}})
-    at = at.switch_page("views/kontrolle.py").run()
+    at = at.switch_page(f"{PAGES}/projektstand.py").run()
     tracking.save(tracking.apply_rows(tracking.load(), [{"ID": "A", "Notiz": "neu"}]))
 
-    at = at.switch_page("views/durchfuehrung.py").run()
+    at = at.switch_page(MEIN_BEREICH).run()
 
     assert not at.exception
     assert progress_editor(at).iloc[0]["Notiz"] == "neu"
+
+
+def test_the_lead_sees_team_and_progress_without_changing_them(tracked):
+    # Each member keeps their own skills, hours and progress; the project lead plans with
+    # them but does not change them.
+    at = tracked.switch_page(PLANUNG).run()
+    assert not at.exception
+    (team,) = [f for f in at.dataframe if f.key and f.key.startswith("team_editor_")]
+    assert team.proto.disabled
+    assert not [b for b in at.button if b.label == "Team lokal speichern"]
+    at = at.switch_page("views/durchfuehrung.py").run()
+    assert not at.exception
+    assert not [b for b in at.button if b.label == "Fortschritt speichern"]
+    assert not [f for f in at.dataframe if f.key and f.key.startswith("progress_editor_")]
+
+
+def test_a_member_keeps_their_details_and_the_planung_plans_with_them(site, monkeypatch):
+    monkeypatch.setattr(workbench, "load_team", REAL_LOAD_TEAM)
+    workbench.save_team(TEAM)
+    at = site.switch_page(PLANUNG).run()  # the project lead had the Planung open
+    at = as_member(at)
+    assert at.header[0].value == "Mein Bereich · Anna"
+    next(n for n in at.number_input if n.label == "Stunden pro Woche").set_value(30)
+    button(at, "Speichern").click()
+    at = at.run()
+    assert not at.exception and not at.error
+    assert notices(at) == ["Deine Angaben sind gespeichert (lokal in data/team.json)."]
+    assert [m.hours_per_week for m in REAL_LOAD_TEAM()] == [30]
+
+    at = as_lead(at).switch_page(PLANUNG).run()
+    assert not at.exception
+    assert list(at.session_state["team_df"]["Stunden/Woche"]) == [30]
+
+
+def test_someone_new_joins_the_team_on_mein_bereich(site, monkeypatch):
+    monkeypatch.setattr(workbench, "load_team", REAL_LOAD_TEAM)
+    workbench.save_team(TEAM)
+    at = as_member(site, ui.NEW_MEMBER)
+    assert at.header[0].value == "Mein Bereich"
+    button(at, "Speichern").click()
+    at = at.run()
+    assert [e.value for e in at.error] == ["Bitte deinen Namen eintragen."]
+
+    next(t for t in at.text_input if t.label == "Name").input("Anna")
+    button(at, "Speichern").click()
+    at = at.run()
+    assert any("Anna gibt es im Team schon" in e.value for e in at.error)
+
+    next(t for t in at.text_input if t.label == "Name").input("Ben")
+    button(at, "Speichern").click()
+    at = at.run()
+    assert not at.exception and not at.error
+    assert [m.name for m in REAL_LOAD_TEAM()] == ["Anna", "Ben"]
+    assert at.selectbox(key="me").value == "Ben"  # and the sidebar says who is here now
+    assert at.header[0].value == "Mein Bereich · Ben"
+
+
+def test_mein_bereich_says_when_there_is_nothing_to_record(site, monkeypatch):
+    monkeypatch.setattr(workbench, "load_team", REAL_LOAD_TEAM)
+    workbench.save_team([*TEAM, workbench.Member(name="Ben", hours_per_week=10)])
+    at = as_member(site)
+    assert not at.exception
+    assert "Noch kein Plan übernommen. Dann stehen deine Aufgaben hier." in [
+        c.value for c in at.caption
+    ]
+    assert not [b for b in at.button if b.label == "Fortschritt speichern"]
+
+    tracking.adopt(PROJECT, TEAM, PLAN)  # every task is Anna's
+    at = as_member(at, "Ben")
+    assert not at.exception
+    assert "Im übernommenen Plan hat Ben keine Aufgabe." in [c.value for c in at.caption]
+    assert not [b for b in at.button if b.label == "Fortschritt speichern"]
+
+
+def test_the_projektstand_shows_every_member_where_the_project_stands(site):
+    at = as_member(site).switch_page(f"{PAGES}/projektstand.py").run()
+    assert not at.exception
+    assert any("Noch kein Projekt übernommen" in i.value for i in at.info)
+
+    tracking.adopt(PROJECT, TEAM, PLAN)
+    at = at.run()
+    assert not at.exception and not at.error
+    assert {m.label: m.value for m in at.metric}["Aufgaben"] == "2"
+    assert any("Wer wie weit ist" in m.value for m in at.markdown)
+
+    tracking.PROJECT_FILE.write_text("{kaputt", encoding="utf-8")
+    at = at.run()
+    assert not at.exception
+    assert any("konnte nicht gelesen werden" in e.value for e in at.error)
 
 
 @pytest.mark.parametrize("host_day", [date(2000, 1, 1), date(2099, 12, 31)])
@@ -909,7 +1022,10 @@ def test_nonzero_progress_survives_reopen_and_reaches_control_and_documents(flow
     baseline = tracking.load()
     before_save = tracking.PROJECT_FILE.read_bytes()
 
+    # The status report counts only saved progress.
     at = at.switch_page("views/durchfuehrung.py").run()
+    assert "- Ist-Stunden bisher: 0 h" in downloads["Statusbericht als Markdown herunterladen"]
+    at = as_member(at)
     at = edit_progress(
         at,
         {
@@ -919,7 +1035,6 @@ def test_nonzero_progress_survives_reopen_and_reaches_control_and_documents(flow
     )
     assert not at.exception and not at.error
     assert tracking.PROJECT_FILE.read_bytes() == before_save  # edits are not autosaved
-    assert "- Ist-Stunden bisher: 0 h" in downloads["Statusbericht als Markdown herunterladen"]
 
     button(at, "Fortschritt speichern").click()
     at.run()
@@ -956,18 +1071,19 @@ def test_nonzero_progress_survives_reopen_and_reaches_control_and_documents(flow
     assert [task.id for task in evaluation.overdue] == ["B"]
 
     # A new AppTest has no cached page state: the page must restore the saved file.
-    at = AppTest.from_file(str(SITE), default_timeout=30).run()
-    at = at.switch_page("views/durchfuehrung.py").run()
+    at = as_member(AppTest.from_file(str(SITE), default_timeout=30).run())
     assert not at.exception
-    (editor,) = [
-        frame.value
-        for frame in at.dataframe
-        if frame.key and frame.key.startswith("progress_editor_")
-    ]
-    assert editor[["ID", "Status", "Ist (h)", "Notiz"]].to_dict("records") == [
+    saved_rows = [
         {"ID": "A", "Status": "fertig", "Ist (h)": 10, "Notiz": "Schema erneut geprüft"},
         {"ID": "B", "Status": "in Arbeit", "Ist (h)": 4, "Notiz": "Integration läuft"},
     ]
+    editor = progress_editor(at)
+    assert editor[["ID", "Status", "Ist (h)", "Notiz"]].to_dict("records") == saved_rows
+    # The project lead sees the same, read-only.
+    at = as_lead(at).switch_page("views/durchfuehrung.py").run()
+    assert not at.exception
+    shown = next(f.value for f in at.dataframe if "Prognose Ende" in f.value.columns)
+    assert shown[["ID", "Status", "Ist (h)", "Notiz"]].to_dict("records") == saved_rows
     report = downloads["Statusbericht als Markdown herunterladen"]
     for text in [
         "**Stand:** 12.11.2026",
@@ -1068,14 +1184,14 @@ def test_control_costs_for_zero_and_nonzero_hours_and_rates(flow_site, actual_ho
 def test_an_adopted_project_with_progress_requires_explicit_overwrite(flow_site, monkeypatch):
     at, _ = flow_site
     at = adopt_from_planning(at)
-    at = at.switch_page("views/durchfuehrung.py").run()
+    at = as_member(at)
     at = edit_progress(at, {0: {"Status": "fertig", "Ist (h)": 10, "Notiz": "Behalten"}})
     button(at, "Fortschritt speichern").click()
     at.run()
     assert not at.exception
     saved = tracking.PROJECT_FILE.read_bytes()
 
-    at = at.switch_page(PLANUNG).run()
+    at = as_lead(at).switch_page(PLANUNG).run()
     replacement = Plan.model_validate(plan_input(hours=12))
     monkeypatch.setattr(agent, "run_planning", lambda *args, **kwargs: replacement)
     button(at, "Plan mit dem Agenten erstellen").click()
@@ -1301,7 +1417,7 @@ def test_progress_that_cannot_be_saved_is_said_not_thrown(tracked, monkeypatch):
         raise PermissionError(13, "Zugriff verweigert")
 
     monkeypatch.setattr(tracking, "save", locked)
-    at = tracked.switch_page("views/durchfuehrung.py").run()
+    at = as_member(tracked)
     button(at, "Fortschritt speichern").click()
     at = at.run()
     assert not at.exception
@@ -1309,7 +1425,7 @@ def test_progress_that_cannot_be_saved_is_said_not_thrown(tracked, monkeypatch):
     assert not at.success  # and nothing claims it was saved
 
 
-WAYS_ON = ["Fortschritt erfassen", "Stand prüfen"]
+WAYS_ON = ["Fortschritt ansehen", "Stand prüfen"]
 
 
 def test_the_rest_of_the_project_goes_from_kontrolle_into_the_planung(site):
@@ -2734,8 +2850,8 @@ def test_one_project_goes_from_the_auftrag_to_the_next_run(site, monkeypatch, tm
     adopted = tracking.load()
     assert (adopted.plan, adopted.requirements) == (linked_plan, NEEDS.items)
 
-    # 6 Durchführung: both tasks are done.
-    at = at.switch_page("views/durchfuehrung.py").run()
+    # 6 Durchführung: Anna records both tasks as done, in her own view.
+    at = as_member(at)
     at = edit_progress(
         at, {0: {"Status": "fertig", "Ist (h)": 8}, 1: {"Status": "fertig", "Ist (h)": 16}}
     )
@@ -2748,7 +2864,7 @@ def test_one_project_goes_from_the_auftrag_to_the_next_run(site, monkeypatch, tm
     }
 
     # 7 Kontrolle: the requirement is traced to the finished tasks.
-    at = at.switch_page("views/kontrolle.py").run()
+    at = as_lead(at).switch_page("views/kontrolle.py").run()
     assert not at.exception
     (trace,) = [d.value for d in at.dataframe if "Anforderung" in d.value.columns]
     assert trace[["ID", "Aufgaben", "Fertig"]].to_dict("records") == [
@@ -2997,7 +3113,7 @@ def test_progress_save_after_archiving_cannot_recreate_the_project(site, tmp_pat
         return apply(old, rows)
 
     monkeypatch.setattr(tracking, "apply_rows", save_after_archiving)
-    at = site.switch_page("views/durchfuehrung.py").run()
+    at = as_member(site)
     button(at, "Fortschritt speichern").click().run()
     assert not at.exception
     assert tracking.load() is None
@@ -3027,7 +3143,7 @@ def test_slow_lessons_draft_preserves_newer_manual_notes(site, monkeypatch):
 
 def test_progress_edit_does_not_move_to_another_task_after_reordering(site):
     tracking.adopt(PROJECT, TEAM, PLAN)
-    at = site.switch_page("views/durchfuehrung.py").run()
+    at = as_member(site)
     at = edit_progress(at, {0: {"Status": "in Arbeit", "Ist (h)": 1, "Notiz": "Aufgabe A"}})
     reordered = PLAN.model_copy(update={"tasks": list(reversed(PLAN.tasks))})
     current = tracking.adopt(PROJECT, TEAM, reordered)
@@ -3408,13 +3524,13 @@ def test_every_entry_of_the_test_page_answers(tracked):
 
 def test_progress_team_retro_and_signoff_answer_the_same_way(site):
     tracking.adopt(PROJECT, TEAM, DEMO_PLAN, requirements=NEEDS.items)
-    at = site.switch_page("views/durchfuehrung.py").run()
+    at = as_member(site)
     button(at, "Fortschritt speichern").click()
     at = at.run()
     assert notices(at) == ["Fortschritt gespeichert (lokal in data/projekt.json)."]
     assert not at.success  # the box above the table pushed it down
 
-    at = at.switch_page("views/kontrolle.py").run()
+    at = as_lead(at).switch_page("views/kontrolle.py").run()
     at.selectbox(key="retro_week").set_value(2).run()
     at.radio(key="retro_shown_2").set_value("nein").run()
     at.text_input(key="retro_measure_2").input("Schema zuerst klären").run()
@@ -3427,9 +3543,9 @@ def test_progress_team_retro_and_signoff_answer_the_same_way(site):
     button(at, "Entscheidung speichern").click()
     assert notices(at.run()) == ["Entscheidung für R1 gespeichert: zurückgestellt."]
 
-    at = at.switch_page(PLANUNG).run()
-    button(at, "Team lokal speichern").click()
-    assert notices(at.run()) == ["Team gespeichert (lokal in data/team.json)."]
+    at = as_member(at)
+    button(at, "Speichern").click()
+    assert notices(at.run()) == ["Deine Angaben sind gespeichert (lokal in data/team.json)."]
 
 
 def test_a_measure_ticked_as_done_can_be_opened_again(site):

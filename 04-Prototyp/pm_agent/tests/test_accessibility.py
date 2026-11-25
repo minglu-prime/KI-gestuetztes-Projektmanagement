@@ -37,9 +37,11 @@ def test_the_checks_below_find_the_pages():
 
 def test_every_chart_on_a_page_says_what_it_shows():
     # A chart is a picture; ui.on_panel gives it the sentence a screen reader reads out.
+    # ui.forecast_chart passes its chart through on_panel.
     for page in VIEWS:
         source = page.read_text(encoding="utf-8")
-        assert source.count("st.altair_chart(") == source.count("on_panel("), page.name
+        described = source.count("on_panel(") + source.count("forecast_chart(")
+        assert source.count("st.altair_chart(") == described, page.name
 
 
 def test_no_text_reads_out_the_name_of_an_icon():

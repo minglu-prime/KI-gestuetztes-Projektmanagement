@@ -177,9 +177,11 @@ def test_numbers_to_fill_in_follow_the_language_of_the_browser():
 def test_the_menu_groups_pages_by_phase():
     # "Agenten" held seven pages, three of them without an agent, while four pages with one
     # stood under "Vorbereiten": the group said who acts, and said it wrongly.
-    source = (ROOT / "app.py").read_text(encoding="utf-8")
-    groups = re.findall(r'^    "([^"]*)": \[', source, flags=re.M)
+    lead, team = (ROOT / "app.py").read_text(encoding="utf-8").split("TEAM = {")
+    groups = re.findall(r'^    "([^"]*)": \[', lead, flags=re.M)
     assert groups == ["", "Umsetzen", "Mehr"]
+    # The view of a team member: their own pages first, then what both views share.
+    assert re.findall(r'^    "([^"]*)": \[', team, flags=re.M) == ["", "Mehr"]
     assert not (ROOT / "views" / "betrieb.py").exists()
     assert not (ROOT / "views" / "iteration.py").exists()
 
@@ -233,11 +235,12 @@ def test_the_menu_shows_one_entry_per_group_and_hides_the_rest():
     # menu shows its first page only, and every other page of the group is hidden there.
     from pm_agent.ui import GROUPS
 
-    entries = re.findall(
-        r'st\.Page\("views/(\w+)\.py", title="([^"]+)"[^)]*?(visibility="hidden")?\)',
-        (ROOT / "app.py").read_text("utf-8"),
-    )
+    page = r'st\.Page\("views/(\w+)\.py", title="([^"]+)"[^)]*?(visibility="hidden")?\)'
+    lead, team = (ROOT / "app.py").read_text("utf-8").split("TEAM = {")
+    entries = re.findall(page, lead)
     shown = [title for _, title, hidden in entries if not hidden]
+    team_shown = [title for _, title, hidden in re.findall(page, team) if not hidden]
+    assert team_shown == ["Mein Bereich", "Projektstand", "KI-Lab", "Info"]
     assert shown == [
         "Startseite", "Vorbereiten", "Planung", "Durchführung", "Kontrolle", "Abschluss",
         "KI-Lab", "Info",

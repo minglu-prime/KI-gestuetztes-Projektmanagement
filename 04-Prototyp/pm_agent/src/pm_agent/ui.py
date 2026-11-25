@@ -19,10 +19,12 @@ from pm_agent.lifecycle import Lifecycle
 from pm_agent.models import Plan
 from pm_agent.tracking import (
     PART,
+    STATUSES,
     Evaluation,
     Forecast,
     Tracking,
     current_results,
+    forecast_bars,
     forecast_text,
     has_progress,
     history_rows,
@@ -31,7 +33,7 @@ from pm_agent.tracking import (
     next_step,
     percent,
 )
-from pm_agent.workbench import InputError, describe_round, round_summary
+from pm_agent.workbench import InputError, bar_end, describe_round, round_summary
 
 T = TypeVar("T")
 
@@ -47,14 +49,17 @@ TASK_AXIS = alt.Axis(
 )
 
 
-def adopted_project() -> Tracking | None:
-    """The adopted project. Without one, the page shows why and gets None."""
+def adopted_project(waiting: str = "") -> Tracking | None:
+    """The adopted project. Without one, the page shows why and gets None. `waiting`: what
+    a team member sees instead of the way to the Planung, which only the project lead has."""
     try:
         tracking = load()
     except InputError as err:
         st.error(f"Das übernommene Projekt konnte nicht gelesen werden: {as_text(str(err))}")
         return None
-    if tracking is None:
+    if tracking is None and waiting:
+        st.caption(waiting)
+    elif tracking is None:
         st.info(
             "Noch kein Projekt übernommen. Erstelle oder öffne einen Plan auf der Seite Planung "
             "und wähle dort im Schritt Übernehmen „Plan als Projekt übernehmen“."
@@ -304,7 +309,7 @@ JOURNEY = [
     ("entwurf", "Entwurf", "Python zeichnet die Abläufe"),
     ("testplan", "Testplan", "Python prüft die Abdeckung"),
     ("planung", "Planung", "Der Agent entwirft, du übernimmst"),
-    ("durchfuehrung", "Durchführung", "du trägst den Fortschritt ein"),
+    ("durchfuehrung", "Durchführung", "das Team trägt den Fortschritt ein"),
     ("testlauf", "Test", "du trägst Ergebnisse und Fehler ein"),
     ("kontrolle", "Kontrolle", "Python rechnet, der Agent bewertet"),
     ("abschluss", "Abschluss", "du nimmst ab, der Agent zieht Lehren"),
@@ -600,6 +605,75 @@ def round_printer(start: Plan | None = None) -> Callable[[dict[str, Any]], None]
         previous = view["draft"] or previous
 
     return show
+
+
+# Under „Ich bin“ in the view Team (app.py), for someone not in the team yet: Mein Bereich
+# then asks for their name.
+NEW_MEMBER = "Neu im Team …"
+
+
+# The columns of the progress table: kept up to date on Mein Bereich, shown on Durchführung.
+PROGRESS_CONFIG = {
+    # Narrower than its longest title (shown in full on hover): otherwise the columns to fill
+    # in lay beyond the right edge of the panel.
+    "Aufgabe": st.column_config.TextColumn(width="medium"),
+    "Status": st.column_config.SelectboxColumn(options=STATUSES, required=True),
+    "Fertig am": st.column_config.DateColumn(
+        format="DD.MM.YYYY",
+        width=95,  # a date; left empty it took twice that and pushed out "Notiz"
+        help="Wird beim Speichern auf heute gesetzt, wenn die Aufgabe fertig wird. "
+        "Nachtragen, wenn sie früher fertig war.",
+    ),
+    "Ist (h)": st.column_config.NumberColumn(format="localized", min_value=0.0, step=0.5),
+    "Rest (h)": st.column_config.NumberColumn(
+        format="localized",
+        min_value=0.0,
+        step=0.5,
+        help="Was noch zu tun ist, wenn es von Plan minus Ist abweicht. Leer lassen, wenn "
+        "unbekannt. Die Prognose auf der Seite Kontrolle rechnet damit.",
+    ),
+}
+
+
+def forecast_chart(tracking: Tracking, result: Evaluation, outlook: Forecast) -> Any:
+    """Each unfinished task as planned and as forecast, with lines for today and the deadline."""
+    kinds = ["Plan", "Prognose"]
+    bars = (
+        alt.Chart(pd.DataFrame(forecast_bars(result, outlook)))
+        .mark_bar(cornerRadius=3)
+        .encode(
+            x=alt.X("Start:T", title=None, axis=alt.Axis(format="%d.%m.")),
+            x2="Ende:T",
+            y=alt.Y("Aufgabe:N", sort=None, title=None, axis=TASK_AXIS),
+            yOffset=alt.YOffset("Art:N", sort=kinds),
+            color=alt.Color(
+                "Art:N",
+                sort=kinds,
+                legend=LEGEND,
+                scale=alt.Scale(domain=kinds, range=["#b9cdbd", "#23654c"]),
+            ),
+            tooltip=["Aufgabe", "Art", "Zeitraum"],
+        )
+    )
+    # The forecast starts today; the deadline line sits at the end of its day.
+    marks = alt.Chart(
+        pd.DataFrame(
+            {
+                "Tag": [datetime.date.today(), bar_end(tracking.project.deadline)],
+                "Linie": ["Heute", "Deadline"],
+            }
+        )
+    )
+    lines = marks.mark_rule(strokeDash=[4, 4]).encode(x="Tag:T")
+    names = marks.mark_text(align="left", baseline="top", dx=4, fontSize=11).encode(
+        x="Tag:T", y=alt.value(0), text="Linie:N"
+    )
+    return on_panel(
+        bars + lines + names,
+        "Balkendiagramm: je unfertiger Aufgabe der Zeitraum laut Plan und der Zeitraum laut "
+        "Prognose, mit senkrechten Linien für heute und die Deadline. Die Prognose je Aufgabe "
+        "steht auch in der Spalte „Prognose Ende“ auf der Seite Durchführung.",
+    )
 
 
 # A small runner for the lane of rounds of an agent run (Track): arms and legs swing.

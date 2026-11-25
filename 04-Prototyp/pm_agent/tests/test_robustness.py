@@ -5,11 +5,12 @@ from datetime import date
 
 import pytest
 from streamlit.testing.v1 import AppTest
-from test_app import PLAN, PLANUNG, SITE, button, local, site  # noqa: F401 (fixtures)
+from test_app import PLAN, PLANUNG, SITE, as_member, button, local, site  # noqa: F401
 from test_tools import PROJECT, TEAM
 
 from pm_agent import lab_server, tracking, workbench
 from pm_agent.lab_server import LabError
+from pm_agent.ui import NEW_MEMBER
 from pm_agent.workbench import InputError
 
 
@@ -33,27 +34,24 @@ def test_logged_runs_that_cannot_be_read_are_said_not_thrown(local, monkeypatch)
     assert any("Protokolle in logs/ konnten nicht gelesen werden" in e.value for e in at.error)
 
 
-def test_a_damaged_team_file_is_replaced_only_when_confirmed(local, monkeypatch):  # noqa: F811
+def test_a_damaged_team_file_is_replaced_only_when_confirmed(site, monkeypatch):  # noqa: F811
     def damaged():
         raise InputError("team.json ist beschädigt: Zeile 3")
 
     saved = []
     monkeypatch.setattr(workbench, "load_team", damaged)
     monkeypatch.setattr(workbench, "save_team", lambda team: saved.append(team))
-    at = AppTest.from_file(str(SITE.parent / PLANUNG), default_timeout=30).run()
-    at.session_state["team_editor_0"] = {
-        "edited_rows": {},
-        "added_rows": [{"Name": "Anna", "Skills": "Python 4", "Stunden/Woche": 40}],
-        "deleted_rows": [],
-    }
-    at.run()
+    at = as_member(site, NEW_MEMBER)  # nobody to choose: the file cannot be read
     assert not at.exception
-    assert button(at, "Team lokal speichern").disabled
+    assert any("beschädigt" in e.value for e in at.error)
+    assert button(at, "Speichern").disabled
 
     at.checkbox(key="team_replace_damaged").check().run()
-    button(at, "Team lokal speichern").click()
+    name = next(t for t in at.text_input if t.label == "Name")
+    name.input("Anna")  # typed, then sent with the form
+    button(at, "Speichern").click()
     at.run()
-    assert not at.exception and len(saved) == 1
+    assert not at.exception and [[m.name for m in team] for team in saved] == [["Anna"]]
 
 
 def test_kontrolle_does_not_promise_that_finished_work_is_lost(site):  # noqa: F811

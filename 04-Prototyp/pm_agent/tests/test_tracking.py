@@ -476,11 +476,12 @@ def test_the_next_step_follows_from_the_state_of_the_project(tracking):
 
     # Before anything is recorded, and nothing is late yet.
     assert advice(date(2026, 11, 9)) == (
-        "Noch kein Fortschritt erfasst. Trage Status und Ist-Stunden ein.",
+        "Noch kein Fortschritt erfasst. Bitte das Team, Status und Ist-Stunden in "
+        "„Mein Bereich“ einzutragen.",
         "durchfuehrung",
     )
     assert advice(date(2026, 11, 10), A="fertig") == (
-        "Das Projekt liegt im Plan. Halte den Fortschritt aktuell.",
+        "Das Projekt liegt im Plan. Achte darauf, dass das Team seinen Fortschritt aktuell hält.",
         "durchfuehrung",
     )
     assert advice(date(2026, 11, 10)) == (
@@ -519,7 +520,7 @@ def test_beside_the_forecast_the_next_step_says_only_what_to_do(tracking):
         "durchfuehrung",
     )
     assert advice(date(2026, 11, 10), A="fertig") == (
-        "Halte den Fortschritt aktuell.",
+        "Achte darauf, dass das Team seinen Fortschritt aktuell hält.",
         "durchfuehrung",
     )
     # Not in the forecast: the late tasks and a project without progress.

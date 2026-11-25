@@ -61,7 +61,6 @@ from pm_agent.workbench import (
     PLAN_COLUMNS,
     RUNS_CSV,
     TEAM_COLUMNS,
-    TEAM_FILE,
     InputError,
     append_run,
     check_changes,
@@ -77,7 +76,6 @@ from pm_agent.workbench import (
     plan_rows,
     rows_to_plan,
     rows_to_team,
-    save_team,
     saved_runs,
     suggested_wishes,
     table_plan,
@@ -346,11 +344,11 @@ tabs = st.tabs(STEPS, key="step", on_change="rerun")
 # 1 · Team ---------------------------------------------------------------------------------
 with tabs[0]:
     st.subheader("Team")
-    st.html(roles(du="trägst das Team ein"))
+    st.html(roles(python="zeigt, was das Team eingetragen hat"))
     st.caption(
-        "Wer arbeitet mit? Skills mit Stufe 1–5 und die Stunden pro Woche bestimmen, wem "
-        "welche Aufgabe zugewiesen wird. An Tagen unter „Abwesend“ wird für die Person keine "
-        "Arbeit eingeplant."
+        "Skills mit Stufe 1–5, Stunden pro Woche und Abwesenheit trägt jedes Teammitglied "
+        "selbst ein (Ansicht Team, Mein Bereich). Damit weist der Agent die Aufgaben zu; an "
+        "Tagen unter „Abwesend“ plant er für die Person keine Arbeit ein."
     )
     if state.team_file_error:
         st.error(
@@ -360,7 +358,7 @@ with tabs[0]:
         state.team_df,
         key=f"team_editor_{state.team_version}",
         placeholder="",
-        num_rows="dynamic",
+        disabled=True,  # each member keeps their own row, on Mein Bereich
         width="stretch",
         column_config={
             "Name": st.column_config.TextColumn(required=True),
@@ -385,24 +383,9 @@ with tabs[0]:
         st.error(f"Bitte korrigieren:\n\n{as_text(str(err))}")
     if team == []:
         st.info(
-            "Noch kein Teammitglied. Trage pro Zeile eine Person mit Skills und Wochenstunden ein."
+            "Noch niemand im Team. Jedes Teammitglied trägt sich in der Ansicht Team unter "
+            "„Mein Bereich“ ein (links unter „Ich bin“: „Neu im Team …“)."
         )
-    # The saved file could not be read; it may still be rescued by hand. Replaced on purpose.
-    replace = not state.team_file_error or st.checkbox(
-        "Die beschädigte Team-Datei durch dieses Team ersetzen. Ihr Inhalt geht verloren.",
-        key="team_replace_damaged",
-    )
-    if team and st.button("Team lokal speichern", icon=":material/save:", disabled=not replace):
-        place = f"{TEAM_FILE.parent.name}/{TEAM_FILE.name}"
-        try:
-            save_team(team)
-        except OSError as err:
-            st.error(
-                f"{place} konnte nicht gespeichert werden: {as_text(str(err))}. "
-                "Die gespeicherte Datei bleibt, wie sie ist."
-            )
-        else:
-            notify(f"Team gespeichert (lokal in {place}).")
     consent = ask_consent(
         "consent",
         "ihre Angaben (Name, Skills, Stunden, Notiz) zur Planung",

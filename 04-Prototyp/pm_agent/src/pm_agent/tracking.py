@@ -1276,13 +1276,13 @@ def next_step(tracking: Tracking, today: date, forecast_shown: bool = False) -> 
     if not has_progress(tracking):
         return say(
             "Noch kein Fortschritt erfasst.",
-            "Trage Status und Ist-Stunden ein.",
+            "Bitte das Team, Status und Ist-Stunden in „Mein Bereich“ einzutragen.",
             "durchfuehrung",
             in_forecast=False,
         )
     return say(
         "Das Projekt liegt im Plan.",
-        "Halte den Fortschritt aktuell.",
+        "Achte darauf, dass das Team seinen Fortschritt aktuell hält.",
         "durchfuehrung",
         in_forecast=True,
     )

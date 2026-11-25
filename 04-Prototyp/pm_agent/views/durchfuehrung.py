@@ -1,4 +1,5 @@
-"""Page "Durchführung": record progress per task and fill project documents from templates."""
+"""Page "Durchführung": progress per task as the team recorded it, the status report, and
+project documents from templates."""
 
 from datetime import date
 
@@ -11,20 +12,17 @@ from pm_agent.tracking import (
     NOTHING_AHEAD,
     NOTHING_LEFT,
     PROGRESS_COLUMNS,
-    PROGRESS_READ_ONLY,
-    STATUSES,
-    apply_rows,
     demo_this_week,
     evaluate,
     forecast,
     percent,
     progress_rows,
-    save_if_current,
     status_report,
     week_ahead,
     work_packages,
 )
 from pm_agent.ui import (
+    PROGRESS_CONFIG,
     adopted_project,
     as_text,
     chip,
@@ -32,20 +30,18 @@ from pm_agent.ui import (
     forecast_verdict,
     heading,
     history_table,
-    kept_editor,
-    notify,
     run_with_progress,
     strip,
     verdict,
 )
-from pm_agent.workbench import InputError
 
 state = st.session_state
 
 st.header("Durchführung")
 st.caption(
-    "Fortschritt erfassen, den Stand vom Agenten zusammenfassen lassen und Projektdokumente aus "
-    "Vorlagen füllen. Alle Zahlen rechnet Python aus dem übernommenen Plan und deinen Angaben."
+    "Den Fortschritt des Teams sehen, den Stand vom Agenten zusammenfassen lassen und "
+    "Projektdokumente aus Vorlagen füllen. Alle Zahlen rechnet Python aus dem übernommenen Plan "
+    "und dem Stand, den das Team einträgt."
 )
 tracking = adopted_project()
 if tracking is None:
@@ -100,59 +96,19 @@ with st.container(border=True, key="panel-ahead"):
         )
 
 with st.container(border=True, key="panel-progress"):
-    heading("edit_note", "Fortschritt", du="trägst Status und Stunden ein")
-    # Unsaved edits survive a visit to another page; the forecast columns are computed anew.
-    # Saving raises the version: the editor starts again from the saved state.
-    edited, conflict = kept_editor(
-        "progress_editor_",
-        "progress_version",
-        tracking,
+    heading("edit_note", "Fortschritt", python="zeigt, was das Team eingetragen hat")
+    st.dataframe(
         pd.DataFrame(progress_rows(tracking), columns=PROGRESS_COLUMNS),
-        columns=[c for c in PROGRESS_COLUMNS if c not in PROGRESS_READ_ONLY],
         hide_index=True,
         width="stretch",
-        disabled=PROGRESS_READ_ONLY,
-        column_config={
-            # Narrower than its longest title (shown in full on hover): otherwise the columns
-            # to fill in lay beyond the right edge of the panel.
-            "Aufgabe": st.column_config.TextColumn(width="medium"),
-            "Status": st.column_config.SelectboxColumn(options=STATUSES, required=True),
-            "Fertig am": st.column_config.DateColumn(
-                format="DD.MM.YYYY",
-                width=95,  # a date; left empty it took twice that and pushed out "Notiz"
-                help="Wird beim Speichern auf heute gesetzt, wenn die Aufgabe fertig wird. "
-                "Nachtragen, wenn sie früher fertig war.",
-            ),
-            "Ist (h)": st.column_config.NumberColumn(format="localized", min_value=0.0, step=0.5),
-            "Rest (h)": st.column_config.NumberColumn(
-                format="localized",
-                min_value=0.0,
-                step=0.5,
-                help="Was noch zu tun ist, wenn es von Plan minus Ist abweicht. Leer lassen, "
-                "wenn unbekannt. Die Prognose auf der Seite Kontrolle rechnet damit.",
-            ),
-        },
+        column_config=PROGRESS_CONFIG,
     )
     st.caption(
-        "Status, Fertig am, Ist-Stunden, Rest und Notiz lassen sich ändern. Änderungen gelten "
-        "erst nach dem Speichern. „Prognose Ende“ zeigt, wann die Aufgabe nach heutigem Stand "
-        "fertig wird."
+        "Status, Ist-Stunden und Rest trägt jedes Teammitglied für seine Aufgaben selbst ein "
+        "(Ansicht Team, Mein Bereich). „Prognose Ende“ zeigt, wann die Aufgabe nach heutigem "
+        "Stand fertig wird."
     )
     history_table(tracking)
-    if st.button("Fortschritt speichern", type="primary", icon=":material/save:") and not conflict:
-        try:
-            updated = apply_rows(tracking, edited.to_dict("records"))
-        except InputError as err:
-            st.error(f"Bitte korrigieren:\n\n{as_text(str(err))}")
-        else:
-            try:
-                save_if_current(tracking, updated)
-            except (InputError, OSError) as err:
-                st.error(f"Der Fortschritt konnte nicht gespeichert werden: {as_text(str(err))}")
-            else:
-                notify("Fortschritt gespeichert (lokal in data/projekt.json).")
-                state.progress_version = state.get("progress_version", 0) + 1
-                st.rerun()
 
 with st.container(border=True, key="panel-agent"):
     heading(
