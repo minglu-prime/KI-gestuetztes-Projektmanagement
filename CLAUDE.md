@@ -61,6 +61,16 @@ zehn Phasen und wie sie zusammenhängen in `04-Prototyp/pm_agent/docs/lebenszykl
 - **Zweite Meinung.** Die Gemini-CLI bricht auf diesem Konto mit `IneligibleTierError` ab.
   Ein Review durch GPT läuft über Codex mit dem Modell `gpt-5.6-sol`; das Standardmodell
   steht diesem ChatGPT-Konto nicht offen.
+  - Gemini geht über die lokale Antigravity-CLI:
+    `agy -p "<Prompt>" --model gemini-4-carbon-high --sandbox` (`agy models` nennt Gemini 4
+    Carbon, Neon, Argon, Hydrogen).
+  - Im Modus `-p` lässt sich keine Werkzeuganfrage freigeben, ein Shell-Befehl beendet den
+    Lauf. Der Prompt sagt deshalb „nur read_file, keine Shell“, nennt die zu lesenden Dateien
+    und schließt `.env`, `data/` und `logs/` aus.
+  - Nicht `--mode plan` für eine Antwort: Das schreibt nur `implementation_plan.md` unter
+    `~/.gemini/antigravity-cli/brain/` und wartet auf „Proceed“.
+  - `agy agentapi` braucht Adresse und CSRF-Token des laufenden Sprachservers und liefert
+    keine Antwort: hier nicht brauchbar.
 - **Windows.** Python öffnet keine Pfade der Form `/d/...`, `D:/...` verwenden. Für Umlaute in
   der Konsole `PYTHONIOENCODING=utf-8` setzen.
 
