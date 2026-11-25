@@ -91,10 +91,12 @@ def next_open(order: Sequence[str], done: set[str], current: str) -> str:
     return next((entry for entry in later if entry not in done), current)
 
 
-def messages(errors: Sequence[str], warnings: Sequence[str] = ()) -> None:
+def messages(errors: Sequence[str], warnings: Sequence[str] = (), said: str | None = None) -> None:
     """The findings of a check: the errors in one red box, the warnings in one yellow box.
-    One box each made a stack of eleven boxes beside the table they came from."""
-    for show, items in ((st.error, errors), (st.warning, warnings)):
+    One box each made a stack of eleven boxes beside the table they came from. `said` is
+    the finding the verdict on top already states in full (said_in_full): not repeated."""
+    for show, found in ((st.error, errors), (st.warning, warnings)):
+        items = [item for item in found if item != said]
         if len(items) == 1:
             show(as_text(items[0]))
         elif items:
@@ -147,6 +149,14 @@ def check_verdict(errors: Sequence[str], warnings: Sequence[str], ok: str) -> tu
             more = " …" if len(items) > 1 else ""
             return state, f"{len(items)} {noun}{plural}: {items[0]}{more}"
     return "ok", ok
+
+
+def said_in_full(errors: Sequence[str], warnings: Sequence[str]) -> str | None:
+    """The finding check_verdict states completely: the only error, or without errors the
+    only warning. More than one, and the verdict names the first with "…": the list below
+    says them all."""
+    items = errors or warnings
+    return items[0] if len(items) == 1 else None
 
 
 # A phase before the plan whose check finds nothing: what is still to do about it.

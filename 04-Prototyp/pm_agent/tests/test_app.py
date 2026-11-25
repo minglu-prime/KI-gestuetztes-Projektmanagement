@@ -7,6 +7,7 @@ import re
 import socket
 import tomllib
 from datetime import date
+from html import unescape
 from pathlib import Path
 from unittest.mock import Mock
 
@@ -144,9 +145,8 @@ def test_a_plan_from_the_agent_is_checked_shown_and_exported(app, monkeypatch):
     assert metrics == {"Planende": "11.11.2026", "Fehler": "0", "Warnungen": "1"}
     # The result in one line above them: one warning to decide on.
     assert 'class="verdict warn"' in verdict(at) and "1 Warnung: Task" in verdict(at)
-    assert [w.value for w in at.warning] == [
-        "Task 'A' braucht 'SQL', Anna hat diese Fähigkeit nicht angegeben"
-    ]
+    # Said in full there, so not again below the chart.
+    assert said_once(at, "Task 'A' braucht 'SQL', Anna hat diese Fähigkeit nicht angegeben")
     assert not at.error
 
     button(at, "Erneut prüfen").click()  # unchanged table: same plan, not marked as edited
@@ -1092,6 +1092,12 @@ def verdict(at) -> str:
     return next((h.value for h in at.html if 'class="verdict' in h.value), "")
 
 
+def said_once(at, finding: str) -> bool:
+    """The finding stands in the verdict line, and in no box below it (ui.said_in_full)."""
+    boxes = [m.value for m in [*at.error, *at.warning]]
+    return finding in unescape(verdict(at)) and not any(finding in box for box in boxes)
+
+
 def test_the_pages_of_a_project_open_with_its_forecast(tracked):
     # The answer to "Do we make it?" stood in the middle of the Kontrolle, below four metrics.
     for page in ("durchfuehrung", "kontrolle"):
@@ -1637,7 +1643,7 @@ def test_a_charter_with_errors_cannot_be_approved(site):
     )
     lifecycle.save(lifecycle.Lifecycle(project=PROJECT, charter=twice))
     at = site.switch_page("views/auftrag.py").run()
-    assert any("'K1' ist mehrfach vergeben" in e.value for e in at.error)
+    assert said_once(at, "'K1' ist mehrfach vergeben")
     assert button(at, "Projektauftrag freigeben").disabled
 
 
@@ -1734,7 +1740,7 @@ def test_requirements_edited_in_the_table_are_checked_again(site):
     button(at, "Änderungen speichern und prüfen").click()
     at = at.run()
     assert lifecycle.load().requirements.items[0].priority == "Kann"
-    assert any("keine Muss-Anforderung" in e.value for e in at.error)
+    assert said_once(at, "keine Muss-Anforderung")
     assert button(at, "Anforderungen freigeben").disabled
 
 
@@ -2112,7 +2118,7 @@ def test_a_step_against_the_contract_blocks_the_approval(site):
     at = edit_table(at, "design_steps_", {1: {"Von": "B3", "An": "B2"}})
     button(at, "Änderungen speichern und prüfen").click()
     at = at.run()
-    assert any("ein Aufruf von 'S1' geht von B2 an B3" in e.value for e in at.error)
+    assert said_once(at, "ein Aufruf von 'S1' geht von B2 an B3")
     assert button(at, "Entwurf freigeben").disabled
 
 
@@ -2154,13 +2160,15 @@ def test_check_messages_on_the_lifecycle_pages_show_no_link(site):
     charter = CHARTER.model_copy(update={"success_criteria": criteria})
     life = lifecycle.Lifecycle(project=PROJECT, charter=charter, requirements=NEEDS)
     lifecycle.save(life)
-    shown = []
+    shown, lines = [], []
     for page in ["auftrag", "anforderungen"]:
         at = site.switch_page(f"views/{page}.py").run()
         assert not at.exception
         shown += [e.value for e in at.error] + [w.value for w in at.warning]
-    assert any("evil.example" in text for text in shown)
+        lines.append(verdict(at))  # a finding said in full stands only there (said_in_full)
+    assert any("evil.example" in text for text in shown + lines)
     assert not [text for text in shown if re.search(r"(?<!\\)\[", text)]
+    assert not [line for line in lines if "<a " in line]  # escaped HTML: no link either
 
 
 def test_the_planung_shows_the_demos_of_the_plan(app, monkeypatch):
@@ -2292,7 +2300,7 @@ def test_a_failed_case_needs_a_defect_which_can_reopen_its_task(tracked):
     button(at, "Ergebnis speichern").click()
     at = at.run()
     assert [(r.case_id, r.result) for r in tracking.load().results] == [("T2", "fehlgeschlagen")]
-    assert any("keinen Fehlereintrag" in e.value for e in at.error)
+    assert said_once(at, "keinen Fehlereintrag")
 
     at.selectbox(key="defect_case").set_value("T2").run()
     at.radio(key="defect_severity").set_value("schwer").run()
@@ -2310,6 +2318,7 @@ def test_a_failed_case_needs_a_defect_which_can_reopen_its_task(tracked):
     # The fields are empty again: a second click does not record the same defect twice.
     assert at.text_input(key="defect_cause").value == ""
     assert not any("keinen Fehlereintrag" in e.value for e in at.error)
+    assert "keinen Fehlereintrag" not in verdict(at)
 
     button(at, "F1: Aufgabe B wieder öffnen").click()
     at = at.run()
@@ -2373,7 +2382,7 @@ def test_the_closing_page_takes_decisions_and_lessons(site, monkeypatch):
     monkeypatch.setattr(closing, "run_lessons", lambda tracking, today, on_round=None: drafted)
     at = site.switch_page("views/abschluss.py").run()
     assert not at.exception
-    assert any("Muss-Anforderung 'R1'" in e.value for e in at.error)
+    assert said_once(at, "Muss-Anforderung 'R1'")
 
     at.radio(key="signoff_decision").set_value("zurückgestellt").run()
     button(at, "Entscheidung speichern").click()
@@ -2764,7 +2773,16 @@ def test_without_requirements_the_closing_page_does_not_call_the_project_closabl
     at = tracked.switch_page("views/abschluss.py").run()
     assert not at.exception
     assert "lässt sich abschließen" not in verdict(at)
-    assert any("nichts abzunehmen" in w.value for w in at.warning)
+    assert "nichts abzunehmen" in verdict(at)
+
+
+def test_a_finding_the_verdict_says_in_full_is_not_repeated_below(tracked):
+    # The one open finding stood in the verdict line and again in a box below the table
+    # (project lead, 25.11.2026). Said in full on top, it is not said again.
+    at = tracked.switch_page("views/abschluss.py").run()
+    assert not at.exception
+    assert "1 Warnung: " in verdict(at) and "nichts abzunehmen" in verdict(at)
+    assert not any("nichts abzunehmen" in w.value for w in at.warning)
 
 
 def test_the_consent_for_lessons_names_what_is_sent(tracked):
@@ -3045,7 +3063,7 @@ def test_the_iteration_points_to_the_abschluss_instead_of_repeating_it(site, mon
     errors = [e.value for e in at.error]
     (pointer,) = [e for e in errors if e.startswith("Der Abschluss ist nicht fertig")]
     assert "R1" not in pointer and "Reiter" in pointer
-    assert sum("Muss-Anforderung 'R1'" in e for e in errors) == 1  # listed once, where decided
+    assert said_once(at, "Muss-Anforderung 'R1'")  # once: the verdict says it in full
     assert not any("Nichts offen" in i.value for i in at.info)
 
 

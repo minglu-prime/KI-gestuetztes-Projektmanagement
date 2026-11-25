@@ -29,6 +29,7 @@ from pm_agent.ui import (
     phase_verdict,
     priority_column,
     run_with_progress,
+    said_in_full,
     saved_lifecycle,
     store,
     strip,
@@ -191,7 +192,7 @@ with st.container(border=True, key="panel-requirements"):
     errors = []
     if life.requirements is not None:
         errors, warnings = check_requirements(life.requirements, life.charter)
-        messages(errors, warnings)
+        messages(errors, warnings, said=said_in_full(errors, warnings))
 
 # 4 · Freigabe ---------------------------------------------------------------------------
 with st.container(border=True, key="panel-approve"):

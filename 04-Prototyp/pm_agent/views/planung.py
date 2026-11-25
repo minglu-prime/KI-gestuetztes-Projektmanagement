@@ -48,6 +48,7 @@ from pm_agent.ui import (
     phase_chip,
     roles,
     round_printer,
+    said_in_full,
     strip,
     style_priority,
     verdict,
@@ -576,7 +577,9 @@ with tabs[3]:
         end = result.end_date.strftime("%d.%m.%Y") if result.end_date else "–"
         if late and not result.errors:
             verdict("bad", late[0])
+            said = late[0]
         else:
+            said = said_in_full(result.errors, result.warnings)
             fine = f"Planende {end}: keine Fehler, keine Warnungen."
             verdict(*check_verdict(result.errors, result.warnings, fine))
         a, b, c = st.columns(3)
@@ -635,7 +638,7 @@ with tabs[3]:
             else:
                 st.info("Ohne fehlerfreien Plan gibt es keinen Terminplan.")
         # Every finding, below the chart it is about.
-        messages(result.errors, result.warnings)
+        messages(result.errors, result.warnings, said=said)  # not again what the verdict says
 
         with st.container(border=True, key="panel-load"):
             heading("groups", "Auslastung bis zur Deadline")

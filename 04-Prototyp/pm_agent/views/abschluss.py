@@ -51,6 +51,7 @@ from pm_agent.ui import (
     next_open,
     notify,
     run_with_progress,
+    said_in_full,
     style_priority,
     verdict,
 )
@@ -252,7 +253,7 @@ with closing_tab:
                 on_click=on_signoff,
                 args=({need.id: need for need in tracking.requirements}, advice),
             )
-        messages(errors, warnings)
+        messages(errors, warnings, said=said_in_full(errors, [*warnings, *handbook]))
 
     with st.container(border=True, key="panel-lessons"):
         heading(

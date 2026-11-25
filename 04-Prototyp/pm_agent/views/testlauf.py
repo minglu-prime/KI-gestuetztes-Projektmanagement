@@ -35,6 +35,7 @@ from pm_agent.ui import (
     messages,
     next_open,
     notify,
+    said_in_full,
     verdict,
 )
 from pm_agent.workbench import InputError
@@ -207,7 +208,11 @@ with st.container(border=True, key="panel-results"):
 with st.container(border=True, key="panel-defects"):
     heading("bug_report", "Fehler", du="erfasst und entscheidest", python="prüft")
     # Cases without a result stand in the table above and in the verdict: not here again.
-    messages(errors, [w for w in warnings if w not in untested(tracking, plan)])
+    messages(
+        errors,
+        [w for w in warnings if w not in untested(tracking, plan)],
+        said=said_in_full(errors, warnings),
+    )
     tasks = {t.id: t.title for t in tracking.plan.tasks}
     defects_by_id = {d.id: d for d in tracking.defects}
     if defects_by_id:
