@@ -97,6 +97,12 @@ Seiten steht der Projektpfad mit allen neun Schritten und darunter, was als Näc
 (außer auf der Seite, zu der es führt). Die Screenshots zeigen das erfundene
 Beispielprojekt vom 20.11.2026.
 
+Das ist die Ansicht der Projektleitung. Über dem Menü wechselt „Ansicht“ zur Ansicht Team: Wer
+unter „Ich bin“ seinen Namen wählt, trägt in „Mein Bereich“ seine Fähigkeiten, Stunden und
+Abwesenheiten ein und den Stand seiner Aufgaben; „Projektstand“ zeigt allen, wo das Projekt
+steht. Die Leitung sieht Team und Fortschritt, ändert sie aber nicht. Eine Anmeldung gibt es
+nicht: Die Ansicht ordnet die Seiten, sie schützt keine Daten.
+
 ### Planung
 
 Sechs Schritte: Team, Projekt, Planung, Ergebnis, Anpassen, Übernehmen. Eine Leiste zeigt, was noch
@@ -151,8 +157,8 @@ Pfad doppelt so lange dauert.
 
 ### Durchführung und Kontrolle
 
-Beide Seiten rechnen mit dem übernommenen Plan und dem erfassten Fortschritt (Status,
-Ist-Stunden und, wo bekannt, der geschätzte Rest je Aufgabe). Die Durchführung füllt
+Beide Seiten rechnen mit dem übernommenen Plan und dem Fortschritt, den jedes Teammitglied in
+seinem Bereich einträgt (Status, Ist-Stunden und, wo bekannt, der geschätzte Rest je Aufgabe). Die Durchführung füllt
 Statusbericht und Arbeitspaketbeschreibungen aus Vorlagen. Die Kontrolle stellt Plan und Ist
 gegenüber, nennt Aufgaben im Verzug und rechnet Kosten, sobald ein Stundensatz gesetzt ist. Sie
 ordnet das in sechs Reiter (Stand, Prognose, Plan und Ist, Kennzahlen, Demos, Agent und Bericht)

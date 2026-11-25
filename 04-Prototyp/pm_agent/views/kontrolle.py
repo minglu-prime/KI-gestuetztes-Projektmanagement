@@ -21,7 +21,6 @@ from pm_agent.tracking import (
     euro,
     evaluate,
     forecast,
-    forecast_bars,
     has_progress,
     hours_text,
     index_text,
@@ -37,10 +36,10 @@ from pm_agent.tracking import (
 )
 from pm_agent.ui import (
     LEGEND,
-    TASK_AXIS,
     adopted_project,
     as_text,
     consent,
+    forecast_chart,
     forecast_verdict,
     heading,
     history_table,
@@ -114,7 +113,10 @@ if tracking is not None:
         c.metric("Ist-Stunden bisher", f"{hours_text(result.actual_hours)} h")
         d.metric("Abweichung fertiger Aufgaben", f"{signed_hours(result.finished_deviation)} h")
         if not has_progress(tracking):
-            st.caption("Noch kein Fortschritt erfasst. Trage ihn auf der Seite Durchführung ein.")
+            st.caption(
+                "Noch kein Fortschritt erfasst. Das Team trägt ihn in „Mein Bereich“ ein "
+                "(Ansicht Team)."
+            )
 
         # The late tasks once, with what waits for them: the verdict above is the alarm.
         if result.overdue:
@@ -137,7 +139,7 @@ if tracking is not None:
             )
         else:
             st.caption("Keine Aufgabe im Verzug.")
-        if st.button("Fortschritt erfassen", icon=":material/edit_note:"):
+        if st.button("Fortschritt ansehen", icon=":material/edit_note:"):
             st.switch_page("views/durchfuehrung.py")
 
     with prognose.container(border=True, key="panel-forecast"):
@@ -187,47 +189,7 @@ if tracking is not None:
                 "du, ob fertige Aufgaben und erfasste Stunden als frühere Arbeit bleiben."
             )
 
-            kinds = ["Plan", "Prognose"]
-            bars = (
-                alt.Chart(pd.DataFrame(forecast_bars(result, outlook)))
-                .mark_bar(cornerRadius=3)
-                .encode(
-                    x=alt.X("Start:T", title=None, axis=alt.Axis(format="%d.%m.")),
-                    x2="Ende:T",
-                    y=alt.Y("Aufgabe:N", sort=None, title=None, axis=TASK_AXIS),
-                    yOffset=alt.YOffset("Art:N", sort=kinds),
-                    color=alt.Color(
-                        "Art:N",
-                        sort=kinds,
-                        legend=LEGEND,
-                        scale=alt.Scale(domain=kinds, range=["#b9cdbd", "#23654c"]),
-                    ),
-                    tooltip=["Aufgabe", "Art", "Zeitraum"],
-                )
-            )
-            # The forecast starts today; the deadline line sits at the end of its day.
-            marks = alt.Chart(
-                pd.DataFrame(
-                    {
-                        "Tag": [date.today(), workbench.bar_end(tracking.project.deadline)],
-                        "Linie": ["Heute", "Deadline"],
-                    }
-                )
-            )
-            lines = marks.mark_rule(strokeDash=[4, 4]).encode(x="Tag:T")
-            names = marks.mark_text(align="left", baseline="top", dx=4, fontSize=11).encode(
-                x="Tag:T", y=alt.value(0), text="Linie:N"
-            )
-            st.altair_chart(
-                on_panel(
-                    bars + lines + names,
-                    "Balkendiagramm: je unfertiger Aufgabe der Zeitraum laut Plan und der "
-                    "Zeitraum laut Prognose, mit senkrechten Linien für heute und die "
-                    "Deadline. Die Prognose je Aufgabe steht auch in der Spalte „Prognose "
-                    "Ende“ auf der Seite Durchführung.",
-                ),
-                width="stretch",
-            )
+            st.altair_chart(forecast_chart(tracking, result, outlook), width="stretch")
             st.caption(
                 "Annahme: Die restliche Arbeit beginnt heute. Als Nächstes kommt, was am "
                 "frühesten beginnen kann; bei Gleichstand Begonnenes vor Offenem. Eine offene "
