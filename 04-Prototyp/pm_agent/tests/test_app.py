@@ -2266,7 +2266,8 @@ def test_a_failed_case_needs_a_defect_which_can_reopen_its_task(tracked):
     )
     at = tracked.switch_page("views/testlauf.py").run()
     assert not at.exception
-    assert any("nicht freigegeben" in w.value for w in at.warning)
+    # Said quietly below the verdict, not as a box above it (project lead, 25.11.2026).
+    assert any("nicht freigegeben" in c.value for c in at.caption) and not at.warning
 
     at.selectbox(key="test_case").set_value("T2").run()
     at.radio(key="test_result").set_value("fehlgeschlagen").run()
@@ -2673,7 +2674,8 @@ def test_one_project_goes_from_the_auftrag_to_the_next_run(site, monkeypatch, tm
     # 8 Test: every case of the approved test plan passes.
     at = at.switch_page("views/testlauf.py").run()
     assert not at.exception
-    assert [w.value for w in at.warning] == ["3 Testfälle ohne Ergebnis: T1, T2, T3"]
+    # Said once: by the verdict line; the table lists the cases, the panel of defects is quiet.
+    assert "3 Testfälle ohne Ergebnis: T1, T2, T3" in verdict(at) and not at.warning
     for case in [c.id for c in cases().cases]:
         at.selectbox(key="test_case").set_value(case).run()
         at.radio(key="test_result").set_value("bestanden").run()

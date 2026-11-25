@@ -597,6 +597,22 @@ def reopen(tracking: Tracking, defect_id: str) -> Tracking:
     return tracking.model_copy(update={"progress": progress})
 
 
+def first_five(ids: list[str]) -> str:
+    """IDs for one line beside the table that lists them all: "A, B, C, D, E und 2 weitere"."""
+    return ", ".join(ids[:5]) + (f" und {len(ids) - 5} weitere" * (len(ids) > 5))
+
+
+def untested(tracking: Tracking, plan: CasePlan) -> list[str]:
+    """The warning of check_results about cases without a result, or none. The table of
+    results lists them all; the line names where to begin."""
+    latest = current_results(tracking, plan)
+    missing = [c.id for c in plan.cases if c.id not in latest]
+    if not missing:
+        return []
+    subject = "1 Testfall" if len(missing) == 1 else f"{len(missing)} Testfälle"
+    return [f"{subject} ohne Ergebnis: {first_five(missing)}"]
+
+
 def check_results(tracking: Tracking, plan: CasePlan) -> RetroCheck:
     """Errors: a failed case without an open defect. Warnings: cases without a result, open
     defects whose task is finished."""
@@ -640,13 +656,7 @@ def check_results(tracking: Tracking, plan: CasePlan) -> RetroCheck:
             errors.append(
                 f"Testfall '{c.id}' ist fehlgeschlagen, aber es gibt keinen Fehlereintrag"
             )
-    warnings = []
-    missing = [c.id for c in plan.cases if c.id not in latest]
-    if missing:
-        subject = "1 Testfall" if len(missing) == 1 else f"{len(missing)} Testfälle"
-        # The table above lists them all; the line names where to begin.
-        shown = ", ".join(missing[:5]) + (f" und {len(missing) - 5} weitere" * (len(missing) > 5))
-        warnings.append(f"{subject} ohne Ergebnis: {shown}")
+    warnings = untested(tracking, plan)
     warnings += [
         f"Fehler {d.id} ist offen, seine Aufgabe '{d.task_id}' ist aber fertig"
         for d in tracking.defects

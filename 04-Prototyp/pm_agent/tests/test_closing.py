@@ -91,6 +91,38 @@ def test_closing_needs_every_muss_decided_and_no_open_severe_defect(project):
     assert result.warnings == ["Anforderung 'R1' ist abgenommen, obwohl: Testfall T1 ohne Ergebnis"]
 
 
+def test_beside_the_table_the_findings_come_one_line_per_kind(tmp_path):
+    # Eleven lines below the sign-off table repeated its rows (project lead, 25.11.2026).
+    # Grouped: one line per kind, with at most five IDs; a single one keeps its own words.
+    needs = requirements(
+        *[need(f"R{i}") for i in range(1, 8)],
+        need("R8", "Soll", ["K2"]),
+        need("R9", "Kann", ["K2"]),
+    ).items
+    project = adopt(
+        PROJECT,
+        TEAM,
+        Plan.model_validate(plan_input()),
+        path=tmp_path / "g.json",
+        requirements=needs,
+    )
+    signed = closing.record_signoff(project, Signoff(requirement_id="R1", decision="abgenommen"))
+    severe = record_defect(signed, Defect(case_id="T1", severity="schwer", cause="x", task_id="A"))
+    the_cases = evidence(ACCEPT)
+    result = closing.check_closing(severe, the_cases, grouped=True)
+    assert result.errors == [
+        "Fehler F1 (schwer) ist noch offen",
+        "6 Muss-Anforderungen sind weder abgenommen noch begründet zurückgestellt: R2, R3, "
+        "R4, R5, R6 und 1 weitere",
+    ]
+    assert result.warnings == [
+        "2 Soll- und Kann-Anforderungen sind noch nicht entschieden: R8, R9",
+        "Anforderung 'R1' ist abgenommen, obwohl: Testfall T1 ohne Ergebnis; Fehler F1 offen",
+    ]
+    # Each one on its own, as before, for the report and the count on the last tab.
+    assert len(closing.check_closing(severe, the_cases).errors) == 7
+
+
 def test_without_requirements_there_is_nothing_to_accept(tmp_path):
     plain = adopt(PROJECT, TEAM, Plan.model_validate(plan_input()), path=tmp_path / "q.json")
     assert closing.check_closing(plain, None).warnings == [

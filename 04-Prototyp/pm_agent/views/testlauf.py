@@ -25,6 +25,7 @@ from pm_agent.tracking import (
     record_result,
     reopen,
     save_if_current,
+    untested,
 )
 from pm_agent.ui import (
     adopted_project,
@@ -178,17 +179,18 @@ if plan is None:
     st.info("Noch kein Testplan. Lege die Testfälle auf der Seite Testplan an.")
     st.page_link("views/testplan.py", label="Zum Testplan", icon=":material/arrow_forward:")
     st.stop()
-if lifecycle.cases_state(life) != "freigegeben":
-    st.warning(
-        "Der Testplan ist nicht freigegeben. Ergebnisse lassen sich trotzdem eintragen; "
-        "geprüft wird gegen die Testfälle, wie sie gerade stehen."
-    )
 titles = {c.id: c.title for c in plan.cases}
 if state.get("test_case") not in titles:  # a first visit, or the case is gone
     state.test_case = first_open(plan, tracking)
 errors, warnings = check_results(tracking, plan)
 fine = "Jeder Testfall hat ein Ergebnis, jeder fehlgeschlagene einen Fehlereintrag."
 verdict(*check_verdict(errors, warnings, fine))
+# Below the verdict and quiet: the gate is soft, and the path marks the Testplan as well.
+if lifecycle.cases_state(life) != "freigegeben":
+    st.caption(
+        "Der Testplan ist nicht freigegeben. Ergebnisse lassen sich trotzdem eintragen; "
+        "geprüft wird gegen die Testfälle, wie sie gerade stehen."
+    )
 
 with st.container(border=True, key="panel-results"):
     heading("rule", "Ergebnisse", du="trägst ein", python="prüft")
@@ -204,7 +206,8 @@ with st.container(border=True, key="panel-results"):
 
 with st.container(border=True, key="panel-defects"):
     heading("bug_report", "Fehler", du="erfasst und entscheidest", python="prüft")
-    messages(errors, warnings)
+    # Cases without a result stand in the table above and in the verdict: not here again.
+    messages(errors, [w for w in warnings if w not in untested(tracking, plan)])
     tasks = {t.id: t.title for t in tracking.plan.tasks}
     defects_by_id = {d.id: d for d in tracking.defects}
     if defects_by_id:

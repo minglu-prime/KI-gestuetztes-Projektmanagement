@@ -14,7 +14,7 @@ from pydantic import ValidationError
 
 from pm_agent.agent import run_submission
 from pm_agent.lifecycle import Check
-from pm_agent.models import BacklogItem, Charter, Design, Lesson, Lessons
+from pm_agent.models import BacklogItem, Charter, Design, Lesson, Lessons, Requirement
 from pm_agent.planning import working_shift
 from pm_agent.tools import Submission
 from pm_agent.tracking import (
@@ -27,6 +27,7 @@ from pm_agent.tracking import (
     _demos_text,
     _fill,
     current_results,
+    first_five,
     hours_text,
     percent,
 )
@@ -77,10 +78,11 @@ def record_signoff(tracking: Tracking, signoff: Signoff) -> Tracking:
     return tracking.model_copy(update={"signoffs": [*others, signoff]})
 
 
-def check_closing(tracking: Tracking, plan: CasePlan | None) -> Check:
+def check_closing(tracking: Tracking, plan: CasePlan | None, grouped: bool = False) -> Check:
     """Errors: an open severe defect, a Muss requirement neither accepted nor deferred with a
     reason. Warnings: a requirement accepted against the suggestion, a Soll or Kann one not
-    decided."""
+    decided. `grouped`: beside the sign-off table, which names each requirement, one line
+    per kind of finding about requirements; a kind with one finding keeps its own words."""
     errors = [
         f"Fehler {d.id} (schwer) ist noch offen"
         for d in tracking.defects
@@ -93,22 +95,48 @@ def check_closing(tracking: Tracking, plan: CasePlan | None) -> Check:
     decided = {s.requirement_id: s for s in current_signoffs(tracking)}
     advice = suggestions(tracking, plan)
     warnings = []
+    # Kind -> (finding, requirement): for the grouped lines.
+    kinds: dict[str, list[tuple[str, Requirement]]] = {"muss": [], "open": [], "against": []}
     for need in tracking.requirements:
         signoff = decided.get(need.id)
         if signoff is None:
             if need.priority == "Muss":
-                errors.append(
+                text = (
                     f"Muss-Anforderung '{need.id}' ({need.title}) ist weder abgenommen noch "
                     "begründet zurückgestellt"
                 )
+                errors.append(text)
+                kinds["muss"].append((text, need))
             else:
-                warnings.append(
+                text = (
                     f"{need.priority}-Anforderung '{need.id}' ({need.title}) ist noch nicht "
                     "entschieden"
                 )
+                warnings.append(text)
+                kinds["open"].append((text, need))
         elif signoff.decision == "abgenommen" and advice[need.id] != "abnehmbar":
-            warnings.append(f"Anforderung '{need.id}' ist abgenommen, obwohl: {advice[need.id]}")
-    return Check(errors, warnings)
+            text = f"Anforderung '{need.id}' ist abgenommen, obwohl: {advice[need.id]}"
+            warnings.append(text)
+            kinds["against"].append((text, need))
+    if not grouped:
+        return Check(errors, warnings)
+
+    def line(kind: str, says: str) -> list[str]:
+        found = kinds[kind]
+        if len(found) < 2:
+            return [text for text, _ in found]
+        noun = "Anforderungen"
+        if kind != "against":  # "Muss-Anforderungen", "Soll- und Kann-Anforderungen"
+            present = {n.priority for _, n in found}
+            noun = "- und ".join(p for p in ("Muss", "Soll", "Kann") if p in present) + "-" + noun
+        return [f"{len(found)} {noun} {says}: {first_five([n.id for _, n in found])}"]
+
+    severe = errors[: len(errors) - len(kinds["muss"])]
+    return Check(
+        severe + line("muss", "sind weder abgenommen noch begründet zurückgestellt"),
+        line("open", "sind noch nicht entschieden")
+        + line("against", "sind abgenommen, obwohl der Vorschlag nicht „abnehmbar“ ist"),
+    )
 
 
 def _week_ref(ref: str) -> str:
