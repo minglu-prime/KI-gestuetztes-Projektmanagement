@@ -27,6 +27,63 @@ FLOW = """
 </div>
 """
 
+# The opening of the Startseite (assets/style.css): tiles lean towards the pointer, and
+# the numbers of the project count up once they scroll into view. Not with reduced motion.
+OPENING = """
+<script>
+(() => {
+  const still = matchMedia("(prefers-reduced-motion: reduce)");
+  if (!window.pmTilt) {
+    window.pmTilt = true;
+    const lean = ".st-key-page-startseite :is([class*='st-key-tile-'], .st-key-card-lab)";
+    document.addEventListener("pointermove", (e) => {
+      const card = e.target.closest && e.target.closest(lean);
+      if (!card || still.matches) return;
+      const r = card.getBoundingClientRect();
+      const x = (e.clientX - r.left) / r.width, y = (e.clientY - r.top) / r.height;
+      card.style.setProperty("--px", (x - 0.5).toFixed(3));
+      card.style.setProperty("--py", (y - 0.5).toFixed(3));
+    });
+  }
+  if (still.matches) return;
+  const count = (text) => {
+    const match = /^(\\d+)( %)?$/.exec(text.nodeValue.trim());
+    if (!match || match[1] === "0") return;
+    const end = Number(match[1]), unit = match[2] || "", start = performance.now();
+    const tick = (now) => {
+      // A frame's time can lie just before the start: below 0 the count went to -1.
+      const k = Math.min(1, Math.max(0, (now - start) / 1400));
+      text.nodeValue = Math.round(end * (1 - Math.pow(1 - k, 4))) + unit;
+      if (k < 1) requestAnimationFrame(tick);
+    };
+    text.nodeValue = "0" + unit;
+    requestAnimationFrame(tick);
+  };
+  const seen = new IntersectionObserver((entries) => {
+    for (const entry of entries) {
+      if (!entry.isIntersecting) continue;
+      seen.unobserve(entry.target);
+      count(entry.target.firstChild);
+    }
+  }, { threshold: 0.8 });
+  // The numbers come after this script: watch for them a few seconds.
+  const find = () => {
+    for (const p of document.querySelectorAll(
+      ".st-key-page-startseite .st-key-project [data-testid='stMetricValue'] p:not([data-counted])"
+    )) {
+      if (!p.firstChild) continue;
+      p.dataset.counted = "1";
+      seen.observe(p);
+    }
+  };
+  const watch = new MutationObserver(find);
+  watch.observe(document.body, { childList: true, subtree: true });
+  setTimeout(() => watch.disconnect(), 5000);
+  find();
+})();
+</script>
+"""
+
 try:
     tracking, unreadable = load(), None
 except InputError as err:
@@ -48,7 +105,7 @@ with st.container(key="hero"):
                 st.switch_page("views/planung.py")
             if st.button("KI-Lab öffnen", icon=":material/science:"):
                 st.switch_page("views/ki_lab.py")
-    diagram.html(FLOW)
+    diagram.html(FLOW + OPENING, unsafe_allow_javascript=True)
 
 with st.container(key="project"):
     st.subheader("Aktuelles Projekt")

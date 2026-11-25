@@ -66,9 +66,15 @@ Farben und Schrift stehen in `.streamlit/config.toml`. Hervorhebung, Karten, Sch
 Übergänge (Seitenwechsel, Reiter, Gespräch mit dem Agenten, Hover, Drücken) stehen in
 `assets/style.css`; `app.py` lädt die Datei bei jedem Lauf. Alle Übergänge nutzen eine Kurve
 und wenige Dauern (`--press` bis `--page` in `:root`): je häufiger etwas passiert, desto
-kürzer. Wer im System weniger Bewegung eingestellt hat, sieht nichts mehr wandern, sich heben
-oder nachgeben, auch nicht beim Auf- und Zuklappen; Neues blendet nur kurz ein, und das
-Diagramm der Startseite steht still.
+kürzer. Nur die Startseite nimmt sich beim Öffnen Zeit (eigene Größen von `--show` bis
+`--sway`, eine Quellregel hält sie dort): Überschrift, Antwort und Diagramm erscheinen
+nacheinander aus einer leichten Unschärfe, hinter der Überschrift wandert ein Licht, die drei
+Schritte schweben, die Zahlen des Projekts zählen hoch, und weiter unten erscheinen die
+Kacheln beim Scrollen und neigen sich zum Zeiger. Browser ohne scrollgebundene Animationen
+(Firefox) zeigen die Kacheln sofort. Wer im System weniger Bewegung eingestellt hat, sieht
+nichts mehr wandern, sich heben, neigen oder nachgeben, auch nicht beim Auf- und Zuklappen;
+Neues blendet nur kurz ein, Licht und Diagramm der Startseite stehen still, und die Zahlen
+stehen sofort da.
 
 Für KI-Runden im KI-Lab zusätzlich `OPENAI_API_KEY` und `PM_MODEL` in `.env` eintragen. Ohne
 sie funktionieren die Runden ohne KI, KI-Runden melden einen Fehler.
