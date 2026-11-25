@@ -48,6 +48,22 @@ def local(monkeypatch, tmp_path):
         monkeypatch.setattr(lab_server, "PORT", probe.getsockname()[1])
 
 
+def test_no_test_reaches_the_real_data_or_logs():
+    # A test saved its team into the real data/team.json: `local` replaced load_team but
+    # not the file, and "Team lokal speichern" wrote there (Codex test run, 25.11.2026).
+    # Every test runs with every file of the site in its own temporary folder (conftest).
+    real = [SITE.parent / "data", SITE.parent / "logs"]
+    used = [
+        tracking.PROJECT_FILE,
+        lifecycle.FILE,
+        workbench.DATA_DIR,
+        workbench.TEAM_FILE,
+        workbench.RUNS_CSV,
+        agent.LOG_DIR,
+    ]
+    assert [p for p in used if any(p == r or r in p.parents for r in real)] == []
+
+
 @pytest.fixture
 def app(local):
     """The Planung page on its own."""

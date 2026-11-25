@@ -6,7 +6,21 @@ import httpx2 as httpx  # the HTTP client the openai SDK is built on
 import pytest
 from openai import OpenAI
 
-from pm_agent import agent
+from pm_agent import agent, lifecycle, tracking, workbench
+
+
+@pytest.fixture(autouse=True)
+def no_real_data(monkeypatch, tmp_path):
+    """Every file the site reads or writes, in the test's own folder: no test touches the
+    real data/ and logs/. A test that replaced only a loader (load_team) still saved into
+    data/team.json. Fixtures and tests may point a file elsewhere on top of this."""
+    data = tmp_path / "data"
+    monkeypatch.setattr(workbench, "DATA_DIR", data)
+    monkeypatch.setattr(workbench, "TEAM_FILE", data / "team.json")
+    monkeypatch.setattr(workbench, "RUNS_CSV", tmp_path / "logs" / "runs.csv")
+    monkeypatch.setattr(tracking, "PROJECT_FILE", data / "projekt.json")
+    monkeypatch.setattr(lifecycle, "FILE", data / "vorhaben.json")
+    monkeypatch.setattr(agent, "LOG_DIR", tmp_path / "logs")
 
 
 def response(blocks, status="completed", reason=None):
