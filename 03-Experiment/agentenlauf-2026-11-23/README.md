@@ -65,7 +65,7 @@ Dauer 9 bis 10 s, je 5 968 Eingabe-Token.
 ## Folgerung
 
 - Durchführung: erledigt.
-- Umplanung: Der Prompt allein reicht nicht. Seit diesem Lauf umgesetzt (Entscheidung der Projektleitung, 23.11.2026): Nach `set_absence` weist `submit_plan` einen Plan zurück, den die Abwesenheit hinter die Deadline schiebt. Der Agent bekommt den Grund und korrigiert, wie bei anderen Ablehnungen. Ein Ende genau an der Deadline und fehlende Fähigkeiten bleiben Warnungen, ebenso ein Plan, der auch ohne die Abwesenheit zu spät ist. Ein echter Lauf mit dieser Regel steht aus.
+- Umplanung: Der Prompt allein reicht nicht. Seit diesem Lauf umgesetzt (Entscheidung der Projektleitung, 23.11.2026): Nach `set_absence` weist `submit_plan` einen Plan zurück, den die Abwesenheit hinter die Deadline schiebt. Der Agent bekommt den Grund und korrigiert, wie bei anderen Ablehnungen. Ein Ende genau an der Deadline und fehlende Fähigkeiten bleiben Warnungen, ebenso ein Plan, der auch ohne die Abwesenheit zu spät ist. Fehlen dem ganzen Team die Stunden, bleibt auch das eine Warnung (Entscheidung D1, 25.11.2026). Ein echter Lauf mit diesen Regeln steht aus.
 
 ## Grenzen
 

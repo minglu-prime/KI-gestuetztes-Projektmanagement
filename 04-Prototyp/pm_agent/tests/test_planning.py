@@ -165,6 +165,28 @@ def test_overload_and_missed_deadline_are_warnings_not_errors():
     ]
 
 
+def test_a_late_team_that_lacks_the_hours_is_told_so_with_the_earliest_end():
+    # Decision D1 of the project lead (25.11.2026): when the team cannot do the work by the
+    # deadline at all, the late warning says so and names the earliest end, so nobody hunts
+    # for a redistribution that cannot exist. 50 h until Friday, 60 h of work.
+    ben = Member(name="Ben", hours_per_week=10)
+    p = plan(task("A", 40), task("B", 20), owners={"A": "Anna", "B": "Ben"})
+    result = check_plan(p, [ANNA, ben], project(deadline=date(2026, 11, 13)))
+    # Ben does 2 h a day: B ends Fri 20.11. With all hands the 10 h left fit on Mon 16.11.
+    assert result.warnings[0] == (
+        "Der Plan endet am 20.11.2026, 5 Arbeitstage nach der Deadline (13.11.2026). Auch "
+        "mit Umverteilung reicht die Zeit nicht: Das Team hat bis zur Deadline 50 h, die "
+        "Aufgaben brauchen 60 h; frühestens fertig am 16.11.2026"
+    )
+    assert result.warning_kinds[0] == ("late",)
+    # Late for another reason (B waits for A), with hours to spare: the warning as before.
+    chain = plan(task("A", 40), task("B", 8, deps=["A"]), owners={"A": "Anna", "B": "Anna"})
+    assert check_plan(chain, [ANNA, BEN], project(deadline=date(2026, 11, 13))).warnings == [
+        "Der Plan endet am 16.11.2026, 1 Arbeitstag nach der Deadline (13.11.2026)",
+        "Anna ist überlastet: 48 h zugewiesen, bis zur Deadline sind 40 h verfügbar (120%)",
+    ]
+
+
 def test_slight_overload_reads_101_percent_and_one_day_late_is_singular():
     p = plan(task("A", 40.1), owners={"A": "Anna"})  # 5.0125 workdays: ends Mon 16.11.
     result = check_plan(p, [ANNA], project(deadline=date(2026, 11, 13)))

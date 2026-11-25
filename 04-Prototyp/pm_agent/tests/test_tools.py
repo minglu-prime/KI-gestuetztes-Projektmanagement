@@ -160,8 +160,10 @@ def test_a_change_can_set_an_absence_and_the_check_counts_it():
 
 def test_an_absence_must_not_push_the_plan_past_the_deadline():
     # On 23.11.2026 the agent set an absence and left the plan four workdays after the
-    # deadline in one of three runs: a warning was not enough. Now submit_plan sends it back.
-    tools = PlanningTools(PROJECT, TEAM, absences=True)
+    # deadline in one of three runs: a warning was not enough. Now submit_plan sends it back,
+    # as long as the team has the hours to take the work (Ben has 60 h free).
+    team = [*TEAM, Member(name="Ben", hours_per_week=10)]
+    tools = PlanningTools(PROJECT, team, absences=True)
     tight = plan_input(hours=216)  # 232 h for Anna: ends 17.12., one day before the deadline
     assert json.loads(tools.check_plan.call(tight))["end_date"] == "2026-12-17"
     tools.set_absence.call({"member": "Anna", "first": "2026-12-07", "last": "2026-12-08"})
@@ -175,8 +177,21 @@ def test_an_absence_must_not_push_the_plan_past_the_deadline():
     late = plan_input(hours=300)
     assert tools.submit_plan.call(late) == "Plan angenommen."
     # Without an absence nothing changes: the tight plan is accepted.
-    plain = PlanningTools(PROJECT, TEAM, absences=True)
+    plain = PlanningTools(PROJECT, team, absences=True)
     assert plain.submit_plan.call(tight) == "Plan angenommen."
+
+
+def test_an_absence_the_team_cannot_absorb_leaves_the_late_plan_to_the_project_lead():
+    # Decision D1 (25.11.2026): when the team lacks the hours until the deadline, no
+    # redistribution can help, and rejecting would only run the agent out of rounds.
+    # Anna alone has 224 h after two days away, the plan needs 232 h.
+    tools = PlanningTools(PROJECT, TEAM, absences=True)
+    tight = plan_input(hours=216)
+    tools.set_absence.call({"member": "Anna", "first": "2026-12-07", "last": "2026-12-08"})
+    assert tools.submit_plan.call(tight) == "Plan angenommen."
+    # The project lead reads why in the first warning.
+    first = json.loads(tools.check_plan.call(tight))["warnings"][0]
+    assert first.startswith("Der Plan endet am 21.12.2026, 1 Arbeitstag nach der Deadline")
 
 
 def test_a_new_plan_cannot_set_an_absence():
