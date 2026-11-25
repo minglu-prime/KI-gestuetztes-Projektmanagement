@@ -1,5 +1,6 @@
 """The Streamlit site headless, with the agent replaced: no network, no files in data/ or logs/."""
 
+import dataclasses
 import datetime
 import json
 import re
@@ -659,6 +660,7 @@ def test_every_menu_entry_opens_and_explains_its_empty_state(site):
         assert any(info in i.value for i in at.info), path
 
     at = site.switch_page("views/kontrolle.py").run()
+    assert not at.tabs  # without a project nothing to sort: the agents' effort alone
     captions = [c.value for c in at.caption]
     assert "Noch keine protokollierten Läufe." in captions
     assert "Noch kein Plan exportiert." in captions
@@ -3090,6 +3092,39 @@ def test_the_kontrolle_names_each_late_task_once(tracked):
     assert not any("halten andere auf" in m.value for m in at.markdown)
     # Nothing recorded yet: said once, quietly, where the progress is.
     assert any("Noch kein Fortschritt erfasst" in c.value for c in at.caption)
+
+
+KONTROLLE_TABS = ["Stand", "Prognose", "Plan und Ist", "Kennzahlen", "Demos", "Agent und Bericht"]
+
+
+def test_the_kontrolle_opens_the_tab_its_verdict_is_about(tracked, monkeypatch):
+    # Thirteen panels stood below each other (project lead, 25.11.2026). Now six tabs, and
+    # arriving opens the one that explains the verdict line.
+    real, late = tracking.forecast, {"deadline_gap": 3, "shift": 2}
+    monkeypatch.setattr(tracking, "forecast", lambda t, d: dataclasses.replace(real(t, d), **late))
+    at = tracked.switch_page("views/kontrolle.py").run()
+    assert not at.exception
+    assert [t.label for t in at.tabs] == KONTROLLE_TABS
+    assert at.session_state["kontrolle_tab"] == "Prognose"
+
+    late.update(deadline_gap=-5, shift=-1)  # in time: the state is what to look at
+    at = at.switch_page("views/durchfuehrung.py").run().switch_page("views/kontrolle.py").run()
+    assert at.session_state["kontrolle_tab"] == "Stand"
+
+
+def test_the_kontrolle_keeps_the_chosen_tab_after_a_save(site):
+    tracking.adopt(PROJECT, TEAM, DEMO_PLAN)
+    at = site.switch_page("views/kontrolle.py").run()
+    at.session_state["kontrolle_tab"] = "Demos"  # what a click on the tab sets
+    at.text_input(key="retro_measure_1").input("Früher testen").run()
+    button(at, "Rückblick speichern").click()
+    at = at.run()
+    assert not at.exception
+    assert tracking.load().retros[0].measure == "Früher testen"
+    assert at.session_state["kontrolle_tab"] == "Demos"
+
+    at.checkbox(key=f"measure_done_{tracking.load().retros[0].monday:%Y%m%d}").check().run()
+    assert at.session_state["kontrolle_tab"] == "Demos"
 
 
 def test_the_forecast_lists_only_late_tasks_that_hold_others(tracked):

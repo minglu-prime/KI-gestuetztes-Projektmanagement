@@ -37,7 +37,7 @@ im Menü hervorgehoben bleibt. Die Seiten:
 | Umsetzen · Planung | Plan mit dem Agenten erstellen, prüfen, anpassen, exportieren, als Projekt übernehmen; je Projektwoche eine Demo, die Python gegen den Zeitplan prüft |
 | Umsetzen · Durchführung | Wer in den nächsten fünf Arbeitstagen womit beginnt (aus der Prognose); Status, Fertigdatum, Ist-Stunden und geschätzten Rest je Aufgabe erfassen, mit dem voraussichtlichen Ende je Aufgabe; der Agent schlägt Zusammenfassung und nächste Schritte vor; Statusbericht und Arbeitspaketbeschreibungen aus Vorlagen (`src/pm_agent/templates`) |
 | Umsetzen · Kontrolle · Test | Ergebnisse je Testfall eintragen; jeder fehlgeschlagene Fall braucht einen offenen Fehler (Schwere, Ursache, Aufgabe); ein Fehler öffnet seine Aufgabe auf Knopfdruck wieder, hält beim Beheben den Tag (`fixed_on`) fest und lässt sich wieder öffnen oder über „Eintrag“ ändern |
-| Umsetzen · Kontrolle | Wochen-Demos mit Rückblick (gezeigt?, was ging schief, Ursache, Maßnahme; Maßnahmen zum Abhaken, ein Haken lässt sich wieder entfernen); Plan/Ist-Vergleich, Verzug, Prognose des Endes (restliche Arbeit ab heute, mit den Aufgaben, die auf verspätete warten) und von dort der Weg zurück in die Planung: „Rest mit dem Agenten umplanen“ lädt die unfertigen Aufgaben als Plan ab heute; Earned Value nach der 0/100-Methode (Planwert, Fertigstellungswert, Ist-Stunden, SPI, CPI); Kosten bei gesetztem Stundensatz; der Agent bewertet den Stand und schlägt Gegenmaßnahmen vor, und wo eine Maßnahme Aufgaben umverteilt, rechnet Python ihre Wirkung auf die Prognose nach; Zeit und Token aller Agentenläufe; alles zusammen als Kontrollbericht aus einer Vorlage |
+| Umsetzen · Kontrolle | Sechs Reiter: Stand, Prognose, Plan und Ist, Kennzahlen, Demos, Agent und Bericht; beim Ankommen ist der Reiter gewählt, der die Ergebniszeile erklärt (Prognose, wenn das Ende das Problem ist, sonst Stand). Aufgaben im Verzug stehen einmal in einer Tabelle mit den Aufgaben, die auf sie warten. Wochen-Demos mit Rückblick (gezeigt?, was ging schief, Ursache, Maßnahme; Maßnahmen zum Abhaken, ein Haken lässt sich wieder entfernen); Plan/Ist-Vergleich, Verzug, Prognose des Endes (restliche Arbeit ab heute, mit den Aufgaben, die auf verspätete warten) und von dort der Weg zurück in die Planung: „Rest mit dem Agenten umplanen“ lädt die unfertigen Aufgaben als Plan ab heute; Earned Value nach der 0/100-Methode (Planwert, Fertigstellungswert, Ist-Stunden, SPI, CPI); Kosten bei gesetztem Stundensatz; der Agent bewertet den Stand und schlägt Gegenmaßnahmen vor, und wo eine Maßnahme Aufgaben umverteilt, rechnet Python ihre Wirkung auf die Prognose nach; Zeit und Token aller Agentenläufe; alles zusammen als Kontrollbericht aus einer Vorlage |
 | Umsetzen · Abschluss | Abnahme je Anforderung (Python schlägt aus Tests und Fehlern vor, die Projektleitung entscheidet; zurückgestellt nur mit Grund); Lessons Learned vom Agenten mit Bezug auf Fehler und Wochen; Abschlussbericht mit tatsächlichem Ende und den Aufgaben, die später fertig wurden als geplant. Reiter „Betrieb“ (optional): Betriebshandbuch je Baustein (Verantwortliche als Rolle, Bereitstellung, Überwachung, Rücknahme) und Störungen (lassen sich als behoben markieren, wieder öffnen und über „Eintrag“ ändern). Reiter „Nächster Durchlauf“: nächster Backlog mit Herkunft; ein neuer Durchlauf legt die Dateien unter `data/archiv/<Datum>` ab und beginnt ein Vorhaben mit dem Backlog |
 | KI-Lab | startet den Studienserver aus `../ki_lab` und zeigt ihn eingebettet |
 | Info · Über uns, Impressum | Projektkontext; Impressumsangaben trägt das Team noch ein |
@@ -48,12 +48,15 @@ Was erledigt ist, trägt ein Häkchen, die aktuelle Seite ist umrandet. Eine
 Phase vor dem Plan, die nicht freigegeben ist (ein Entwurf, seit der Freigabe geändert, oder
 übersprungen, obwohl schon ein Projekt läuft), ist gestrichelt und sagt „nicht freigegeben“.
 Übersprungen werden darf sie: Die Planung arbeitet dann wie ohne Anforderungen bzw. ohne Entwurf. Mit einem übernommenen Projekt folgt eine
-Zeile „Jetzt dran“ mit einem Knopf zur passenden Seite. Jeder Abschnitt nennt, wer dort
+Zeile „Jetzt dran“ mit einem Knopf zur passenden Seite; auf dieser Seite selbst entfällt sie,
+und neben der Prognose (Startseite, Durchführung) nennt sie nur, was zu tun ist. Jeder Abschnitt nennt, wer dort
 handelt: AGENT schlägt vor, PYTHON rechnet und prüft, DU trägst ein und entscheidest.
 
 Darunter steht das Ergebnis der Seite in einer Zeile: rot mit „Achtung“, wenn etwas schiefgeht
 (Deadline verpasst, Fehler in der Prüfung), golden mit „Zu entscheiden“, grün mit „In Ordnung“
-(`ui.verdict`). Die Einzelheiten folgen darunter.
+(`ui.verdict`). Die Einzelheiten folgen darunter, jede Tatsache einmal: Unter einer Tabelle
+steht nur, was keine Zeile zeigt, je Art in einer Zeile. Prioritäten sind in jeder Tabelle
+farbig: Muss rot, Soll gelb, Kann grün (`ui.style_priority`, im Editor ein farbiger Punkt).
 
 Durchführung und Kontrolle rechnen mit dem übernommenen Plan (`data/projekt.json`) und dem
 erfassten Fortschritt. Ein Logo erscheint oben rechts, sobald `assets/logo.svg` oder

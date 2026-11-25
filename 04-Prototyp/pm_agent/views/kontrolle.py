@@ -10,6 +10,7 @@ from pm_agent import followup, lifecycle, workbench
 from pm_agent.tracking import (
     NO_COST_INDEX,
     NO_SCHEDULE_INDEX,
+    Forecast,
     Retro,
     agent_runs,
     check_retros,
@@ -74,6 +75,16 @@ def tick_measure(monday: date, key: str) -> None:
     notify(f"Maßnahme {said}: {retro.measure}.")
 
 
+TABS = ["Stand", "Prognose", "Plan und Ist", "Kennzahlen", "Demos", "Agent und Bericht"]
+
+
+def arrival_tab(outlook: Forecast) -> str:
+    """The tab that explains the verdict: the forecast when the end is the trouble (no
+    forecast, past or on the deadline, later than planned), the state otherwise."""
+    late = outlook.end is not None and (outlook.deadline_gap >= 0 or outlook.shift > 0)
+    return "Prognose" if outlook.problem or late else "Stand"
+
+
 def days(count: int) -> str:
     return "Arbeitstag" if abs(count) == 1 else "Arbeitstage"
 
@@ -89,41 +100,47 @@ if tracking is not None:
     result = evaluate(tracking, date.today())
     outlook = forecast(tracking, date.today())
     verdict(*forecast_verdict(outlook, tracking.project.deadline, result))
-    st.subheader("Projektstand")
-    st.html(roles(python="rechnet aus Plan und Fortschritt"))
-    a, b, c, d = st.columns(4)
-    a.metric("Fortschritt", percent(result.progress))
-    b.metric("Planstunden", f"{hours_text(result.planned_hours)} h")
-    c.metric("Ist-Stunden bisher", f"{hours_text(result.actual_hours)} h")
-    d.metric("Abweichung fertiger Aufgaben", f"{signed_hours(result.finished_deviation)} h")
-    if not has_progress(tracking):
-        st.caption("Noch kein Fortschritt erfasst. Trage ihn auf der Seite Durchführung ein.")
+    if state.get("page_changed"):  # set by app.py: on arrival, the tab the verdict is about
+        state.kontrolle_tab = arrival_tab(outlook)
+    # on_change="rerun" keeps the choice in the session state; every tab is still drawn.
+    stand, prognose, plan_ist, numbers, demos, agent_tab = st.tabs(
+        TABS, key="kontrolle_tab", on_change="rerun"
+    )
+    with stand:
+        st.html(roles(python="rechnet aus Plan und Fortschritt"))
+        a, b, c, d = st.columns(4)
+        a.metric("Fortschritt", percent(result.progress))
+        b.metric("Planstunden", f"{hours_text(result.planned_hours)} h")
+        c.metric("Ist-Stunden bisher", f"{hours_text(result.actual_hours)} h")
+        d.metric("Abweichung fertiger Aufgaben", f"{signed_hours(result.finished_deviation)} h")
+        if not has_progress(tracking):
+            st.caption("Noch kein Fortschritt erfasst. Trage ihn auf der Seite Durchführung ein.")
 
-    # The late tasks once, with what waits for them: the verdict above is the alarm.
-    if result.overdue:
-        st.markdown(f"**Im Verzug: {len(result.overdue)}**")
-        st.dataframe(
-            pd.DataFrame(
-                [
-                    {
-                        "ID": t.id,
-                        "Aufgabe": t.title,
-                        "Person": t.member,
-                        "Geplant bis": f"{t.planned_end:%d.%m.%Y}",
-                        "Status": t.status,
-                        "Hält auf": ", ".join(outlook.blocked.get(t.id, [])),
-                    }
-                    for t in result.overdue
-                ]
-            ),
-            hide_index=True,
-        )
-    else:
-        st.caption("Keine Aufgabe im Verzug.")
-    if st.button("Fortschritt erfassen", icon=":material/edit_note:"):
-        st.switch_page("views/durchfuehrung.py")
+        # The late tasks once, with what waits for them: the verdict above is the alarm.
+        if result.overdue:
+            st.markdown(f"**Im Verzug: {len(result.overdue)}**")
+            st.dataframe(
+                pd.DataFrame(
+                    [
+                        {
+                            "ID": t.id,
+                            "Aufgabe": t.title,
+                            "Person": t.member,
+                            "Geplant bis": f"{t.planned_end:%d.%m.%Y}",
+                            "Status": t.status,
+                            "Hält auf": ", ".join(outlook.blocked.get(t.id, [])),
+                        }
+                        for t in result.overdue
+                    ]
+                ),
+                hide_index=True,
+            )
+        else:
+            st.caption("Keine Aufgabe im Verzug.")
+        if st.button("Fortschritt erfassen", icon=":material/edit_note:"):
+            st.switch_page("views/durchfuehrung.py")
 
-    with st.container(border=True, key="panel-forecast"):
+    with prognose.container(border=True, key="panel-forecast"):
         heading("trending_up", "Prognose", python="rechnet")
         if outlook.problem:
             st.error(
@@ -220,7 +237,7 @@ if tracking is not None:
                 "Durchführung einträgst, geht vor."
             )
 
-    with st.container(border=True, key="panel-earned"):
+    with numbers.container(border=True, key="panel-earned"):
         heading("monitoring", "Earned Value", python="rechnet")
         value = earned_value(tracking, result)
         # Two rows: five tiles in one row cut their labels off.
@@ -299,7 +316,7 @@ if tracking is not None:
             "Mitten in einer Aufgabe wirken beide Kennzahlen deshalb schlechter als die Lage."
         )
 
-    with st.container(border=True, key="panel-tasks"):
+    with plan_ist.container(border=True, key="panel-tasks"):
         heading("bar_chart", "Plan und Ist je Aufgabe", python="rechnet")
         per_task = pd.DataFrame(
             [
@@ -342,7 +359,7 @@ if tracking is not None:
             )
         history_table(tracking)
 
-    with st.container(border=True, key="panel-members"):
+    with plan_ist.container(border=True, key="panel-members"):
         heading("groups", "Plan und Ist je Person", python="rechnet")
         per_member = pd.DataFrame(result.by_member)
         # A person with only a part from an earlier plan whose booked hours stood for none
@@ -359,7 +376,7 @@ if tracking is not None:
             },
         )
 
-    with st.container(border=True, key="panel-requirements"):
+    with plan_ist.container(border=True, key="panel-requirements"):
         heading("checklist", "Plan und Ist je Anforderung", python="rechnet")
         if tracking.requirements:
             st.dataframe(
@@ -376,7 +393,7 @@ if tracking is not None:
                 "den Plan erneut."
             )
 
-    with st.container(border=True, key="panel-quality"):
+    with stand.container(border=True, key="panel-quality"):
         heading("bug_report", "Test und Fehler", python="zählt")
         try:
             plan_of_tests = lifecycle.case_plan(lifecycle.load())
@@ -391,7 +408,7 @@ if tracking is not None:
                 column.metric(label, value)
             st.page_link("views/testlauf.py", label="Zum Test", icon=":material/arrow_forward:")
 
-    with st.container(border=True, key="panel-retro"):
+    with demos.container(border=True, key="panel-retro"):
         heading(
             "slideshow",
             "Wochen-Demos und Rückblick",
@@ -477,7 +494,7 @@ if tracking is not None:
                     args=(retro.monday, key),
                 )
 
-    with st.container(border=True, key="panel-cost"):
+    with numbers.container(border=True, key="panel-cost"):
         heading("euro", "Kosten", du="setzt den Stundensatz", python="rechnet")
         rate = st.number_input(
             "Stundensatz (€)", min_value=0.0, value=None, step=5.0, placeholder="nicht gesetzt"
@@ -489,7 +506,7 @@ if tracking is not None:
         else:
             st.caption("Ohne Stundensatz werden keine Kosten berechnet.")
 
-    with st.container(border=True, key="panel-agent"):
+    with agent_tab.container(border=True, key="panel-agent"):
         heading(
             "smart_toy",
             "Kontroll-Agent",
@@ -555,7 +572,7 @@ if tracking is not None:
                     st.caption("Der Agent schlägt keine Gegenmaßnahmen vor.")
 
 if tracking is not None:
-    with st.container(border=True, key="panel-document"):
+    with agent_tab.container(border=True, key="panel-document"):
         heading("description", "Kontrollbericht", python="fasst alles zusammen")
         st.caption(
             "Alles von dieser Seite als ein Dokument: Kennzahlen, Prognose, Verzug, Kosten bei "
@@ -576,7 +593,8 @@ if tracking is not None:
             icon=":material/download:",
         )
 
-with st.container(border=True, key="panel-effort"):
+# Without a project there are no tabs: the effort stands below the notice.
+with (agent_tab if tracking is not None else st).container(border=True, key="panel-effort"):
     heading("timer", "Aufwand der Agenten", python="zählt aus den Protokollen")
     runs = agent_runs()  # a damaged log is a row that says so
     if runs:
