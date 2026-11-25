@@ -44,6 +44,7 @@
   /* The curve of what drifts to and fro for ever: as slow at both ends, so it turns without
      a jolt. Every change keeps --ease. */
   --sway: cubic-bezier(0.37, 0, 0.63, 1);
+  --stride: 380ms; /* one step of the runner while an agent runs */
 }
 
 /* ---- Motion ---------------------------------------------------------------------------- */
@@ -340,6 +341,141 @@
 .st-key-page-startseite [class*="st-key-tile-"]:active {
   transform: perspective(800px) rotateX(calc(var(--py, 0) * var(--tilt) * -2))
     rotateY(calc(var(--px, 0) * var(--tilt) * 2)) scale(var(--pushed));
+}
+
+/* ---- Agent run ------------------------------------------------------------------------- */
+
+/* Above the status box of an agent run: a runner on a lane of rounds, a flag at the end.
+   A dot per finished round behind it: green, or gold where Python's check sent the agent
+   back. The runner stumbles there; once a proposal is accepted it runs to the flag. */
+@keyframes stride {
+  from { transform: rotate(-30deg); }
+  to { transform: rotate(30deg); }
+}
+@keyframes swing {
+  from { transform: rotate(-35deg); }
+  to { transform: rotate(35deg); }
+}
+@keyframes bob {
+  from { transform: translateY(0); }
+  to { transform: translateY(-2px); }
+}
+@keyframes hop {
+  from { transform: translateX(-130%); }
+  to { transform: none; }
+}
+@keyframes stumble {
+  0%, 100% { transform: none; }
+  35% { transform: rotate(-16deg) translateX(-2px); }
+}
+@keyframes cheer {
+  0%, 100% { transform: none; }
+  40% { transform: translateY(-9px); }
+}
+@keyframes wave {
+  from { transform: skewY(0deg); }
+  to { transform: skewY(-12deg); }
+}
+.run {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  max-width: 560px;
+  height: 36px;
+  isolation: isolate;
+}
+.run::before { /* the lane */
+  content: "";
+  position: absolute;
+  inset: auto 0 5px 0;
+  border-bottom: 2px dashed var(--line);
+  z-index: -1;
+}
+.run .lap,
+.run .goal {
+  position: relative;
+  flex: 1;
+  min-width: 14px;
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+.run .lap::after {
+  content: "";
+  width: 8px;
+  height: 8px;
+  margin-bottom: 2px;
+  border-radius: 50%;
+  background: var(--line);
+}
+.run .lap.ok::after { background: var(--green); }
+.run .lap.found::after { background: var(--focus); }
+.run .lap.now::after { visibility: hidden; }
+.run .goal { flex: 1.4; }
+.run .hop {
+  position: absolute;
+  left: 50%;
+  bottom: 3px;
+  display: block;
+}
+.run .tilt { display: block; transform-origin: 50% 100%; }
+.runner {
+  display: block;
+  width: 22px;
+  height: 26px;
+  margin-left: -11px;
+  overflow: visible;
+  fill: none;
+  stroke: var(--green);
+  stroke-width: 2.2;
+  stroke-linecap: round;
+}
+.runner circle { fill: var(--green); stroke: none; }
+.runner g { transform-box: view-box; }
+.runner .leg-a,
+.runner .leg-b { transform-origin: 10.5px 16px; }
+.runner .arm-a,
+.runner .arm-b { transform-origin: 12.5px 10px; }
+.run .flag {
+  width: 14px;
+  height: 24px;
+  margin-bottom: 4px;
+  stroke: var(--ink);
+  stroke-width: 1.6;
+  fill: var(--focus);
+  transform-origin: 2px 7px;
+}
+.run .goal .hop { left: 22%; }
+.run-note {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.run-think .runner .leg-a,
+.run-back .runner .leg-a,
+.run-think .runner .arm-b,
+.run-back .runner .arm-b {
+  animation: stride var(--stride) var(--sway) infinite alternate;
+}
+.run-think .runner .leg-b,
+.run-back .runner .leg-b,
+.run-think .runner .arm-a,
+.run-back .runner .arm-a {
+  animation: swing var(--stride) var(--sway) infinite alternate-reverse;
+}
+.run-think .runner,
+.run-back .runner {
+  animation: bob calc(var(--stride) / 2) var(--sway) infinite alternate;
+}
+.run .lap.now .hop { animation: hop var(--page) var(--ease) both; }
+.run-back .tilt { animation: stumble calc(var(--page) * 2) var(--ease) var(--page) both; }
+.run-done .goal .hop { animation: hop var(--page) var(--ease) both; }
+.run-done .goal .tilt { animation: cheer calc(var(--page) * 2) var(--ease) var(--page) both; }
+.run-done .flag {
+  animation: wave calc(var(--page) * 1.5) var(--ease) calc(var(--page) * 2) 4 alternate both;
 }
 
 /* ---- Cards ----------------------------------------------------------------------------- */
@@ -690,6 +826,22 @@
   .st-key-page-startseite .st-key-hero::before,
   .st-key-page-startseite .st-key-hero h1 em,
   .st-key-page-startseite .flow-node { animation: none; }
+  /* The runner stands where the run is, without running there. */
+  .run-think .runner .leg-a,
+  .run-back .runner .leg-a,
+  .run-think .runner .arm-b,
+  .run-back .runner .arm-b,
+  .run-think .runner .leg-b,
+  .run-back .runner .leg-b,
+  .run-think .runner .arm-a,
+  .run-back .runner .arm-a,
+  .run-think .runner,
+  .run-back .runner,
+  .run .lap.now .hop,
+  .run-back .tilt,
+  .run-done .goal .hop,
+  .run-done .goal .tilt,
+  .run-done .flag { animation: none; }
   .st-key-page-startseite .st-key-hero h1 > span:first-child,
   .st-key-page-startseite .st-key-hero .lead,
   .st-key-page-startseite .st-key-hero .stButton,

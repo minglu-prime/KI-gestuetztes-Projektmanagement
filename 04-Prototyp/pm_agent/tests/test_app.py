@@ -175,6 +175,49 @@ def test_the_rounds_of_a_run_are_shown_once(app, monkeypatch):
     assert not log.proto.expanded
 
 
+def lane(at):
+    """The runner's lane of an agent run: its state and how each of the ten rounds ended."""
+    run = next(m.value for m in at.markdown if 'class="run ' in m.value)
+    return re.search(r'class="run run-(\w+)"', run)[1], re.findall(r'class="lap ?(\w*)"', run)
+
+
+def test_a_runner_shows_each_round_of_the_run(app, monkeypatch):
+    # While the agent works, a runner moves one lap per round. A gold dot marks a round in
+    # which Python sent the agent back; once a plan is accepted the runner reaches the flag.
+    found = json.dumps({"errors": [], "warnings": ["Kein Puffer"]})
+
+    def four_rounds(project, team, on_round=None):
+        on_round({"tool_results": [{"tool": "check_plan", "is_error": False, "content": found}]})
+        on_round({"tool_results": [{"tool": "set_absence", "is_error": False, "content": "OK"}]})
+        rejected = {"tool": "submit_plan", "is_error": True, "content": "Plan abgelehnt."}
+        on_round({"tool_results": [rejected]})
+        accepted = {"tool": "submit_plan", "is_error": False, "content": "Plan angenommen."}
+        on_round({"tool_results": [accepted]})
+        return PLAN
+
+    monkeypatch.setattr(agent, "run_planning", four_rounds)
+    at = fill_project(app)
+    button(at, "Plan mit dem Agenten erstellen").click()
+    at.run()
+    assert not at.exception
+    assert lane(at) == ("done", ["found", "ok", "found", "ok"] + [""] * 6)
+    assert any("Jetzt entscheidest du" in m.value for m in at.markdown)
+
+
+def test_a_failed_run_stops_the_runner(app, monkeypatch):
+    def gives_up(project, team, on_round=None):
+        rejected = {"tool": "submit_plan", "is_error": True, "content": "Plan abgelehnt."}
+        on_round({"tool_results": [rejected]})
+        raise AgentError("Kein Plan nach 1 Runde.")
+
+    monkeypatch.setattr(agent, "run_planning", gives_up)
+    at = fill_project(app)
+    button(at, "Plan mit dem Agenten erstellen").click()
+    at.run()
+    assert not at.exception
+    assert lane(at) == ("failed", ["found"] + [""] * 9)
+
+
 def test_a_change_proposal_shows_its_changes_without_the_rounds(with_plan):
     at = with_plan.chat_input(key="wish").set_value(WISH).run()
     assert not at.exception

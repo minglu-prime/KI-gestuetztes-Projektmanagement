@@ -73,8 +73,8 @@ Schritte schweben, die Zahlen des Projekts zählen hoch, und weiter unten ersche
 Kacheln beim Scrollen und neigen sich zum Zeiger. Browser ohne scrollgebundene Animationen
 (Firefox) zeigen die Kacheln sofort. Wer im System weniger Bewegung eingestellt hat, sieht
 nichts mehr wandern, sich heben, neigen oder nachgeben, auch nicht beim Auf- und Zuklappen;
-Neues blendet nur kurz ein, Licht und Diagramm der Startseite stehen still, und die Zahlen
-stehen sofort da.
+Neues blendet nur kurz ein, Licht und Diagramm der Startseite stehen still, die Figur eines
+Agentenlaufs läuft nicht, und die Zahlen stehen sofort da.
 
 Für KI-Runden im KI-Lab zusätzlich `OPENAI_API_KEY` und `PM_MODEL` in `.env` eintragen. Ohne
 sie funktionieren die Runden ohne KI, KI-Runden melden einen Fehler.
@@ -120,7 +120,11 @@ entwirft ein Ergebnis, ein Werkzeug prüft es deterministisch, der Agent korrigi
 Einreichen-Werkzeug es annimmt. Liegt nach 10 Runden kein gültiges Ergebnis vor, hört der Agent
 ohne Ergebnis auf oder wird eine Antwort abgeschnitten oder abgelehnt, bricht der Agent mit
 einer `AgentError` ab. Nach 10 Runden nennt die Meldung den letzten Grund, aus dem ein Werkzeug
-die Eingabe abgelehnt hat. Jeder Lauf wird in `logs/` protokolliert.
+die Eingabe abgelehnt hat. Jeder Lauf wird in `logs/` protokolliert. Während ein Agent
+arbeitet, läuft über seinem Statuskasten eine Figur je Runde ein Feld weiter (`ui.Track`, bis
+zu 10 Felder und eine Fahne). Eine Runde, in der Python etwas abgelehnt oder beanstandet hat,
+hinterlässt einen goldenen Punkt, die anderen einen grünen. Ist das Ergebnis angenommen,
+steht die Figur an der Fahne: Dann entscheidet die Projektleitung.
 
 | Agent | Aufruf | Werkzeuge | Die Prüfung verlangt |
 |---|---|---|---|
