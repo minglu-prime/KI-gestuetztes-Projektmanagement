@@ -14,7 +14,7 @@ import streamlit as st
 from openai import APIError
 
 from pm_agent import closing, lifecycle
-from pm_agent.agent import AgentError
+from pm_agent.agent import MAX_ROUNDS, AgentError
 from pm_agent.lifecycle import Lifecycle
 from pm_agent.models import Plan
 from pm_agent.tracking import (
@@ -602,17 +602,94 @@ def round_printer(start: Plan | None = None) -> Callable[[dict[str, Any]], None]
     return show
 
 
+# A small runner for the lane of rounds of an agent run (Track): arms and legs swing.
+RUNNER = (
+    '<span class="hop"><span class="tilt"><svg class="runner" viewBox="0 0 24 28">'
+    '<circle cx="14" cy="4.5" r="3"/><line x1="13" y1="8" x2="10.5" y2="16"/>'
+    '<g class="arm-a"><line x1="12.5" y1="10" x2="16.5" y2="13.5"/></g>'
+    '<g class="arm-b"><line x1="12.5" y1="10" x2="8" y2="12.5"/></g>'
+    '<g class="leg-a"><line x1="10.5" y1="16" x2="14" y2="23.5"/></g>'
+    '<g class="leg-b"><line x1="10.5" y1="16" x2="6.5" y2="23"/></g>'
+    "</svg></span></span>"
+)
+FLAG = (
+    '<svg class="flag" viewBox="0 0 16 26">'
+    '<line x1="2" y1="2" x2="2" y2="25"/><path d="M2 3 L14 7 L2 11 Z"/></svg>'
+)
+
+
+def lap(record: dict[str, Any]) -> str:
+    """How a round of an agent run ended: "done" when a submission was accepted, "found"
+    when Python refused something or its check of the plan found errors or warnings (the
+    agent has to look again), else "ok"."""
+    results = record.get("tool_results", [])
+    if any(r["tool"].startswith("submit_") and not r["is_error"] for r in results):
+        return "done"
+    # round_summary lists exactly these: refusals, errors, and what check_plan found.
+    return "found" if round_summary(0, record)[1] else "ok"
+
+
+class Track:
+    """A runner on a lane of rounds above the status box of an agent run, a flag at the end
+    of the lane. Each finished round leaves a dot: green, or gold where Python sent the agent
+    back. Once a submission is accepted the runner reaches the flag: now the project lead
+    decides."""
+
+    def __init__(self) -> None:
+        self.slot = st.empty()
+        self.laps: list[str] = []
+        self.state = ""
+        self.show("think")
+
+    def show(self, state: str) -> None:
+        if state == self.state == "done":  # drawn again, the end would play a second time
+            return
+        self.state = state
+        now = len(self.laps) + 1
+        note = {
+            "think": f"Runde {now} von höchstens {MAX_ROUNDS}",
+            "back": f"Runde {now} von höchstens {MAX_ROUNDS} · zurück an den Agenten",
+            "done": "Jetzt entscheidest du",
+            "failed": "",
+        }[state]
+        lane = []
+        for number in range(1, MAX_ROUNDS + 1):
+            if number <= len(self.laps):
+                lane.append(f'<span class="lap {self.laps[number - 1]}"></span>')
+            elif number == now and state in ("think", "back"):
+                lane.append(f'<span class="lap now">{RUNNER}</span>')
+            else:
+                lane.append('<span class="lap"></span>')
+        lane.append(f'<span class="goal">{RUNNER if state == "done" else ""}{FLAG}</span>')
+        # st.html sanitizes SVG away; every part here is fixed text.
+        self.slot.markdown(
+            f'<div class="run run-{state}" aria-hidden="true">{"".join(lane)}</div>'
+            f'<p class="run-note">{note}</p>',
+            unsafe_allow_html=True,
+        )
+
+    def round(self, record: dict[str, Any]) -> None:
+        ended = lap(record)
+        self.laps.append("ok" if ended == "done" else ended)
+        self.show({"done": "done", "found": "back", "ok": "think"}[ended])
+
+    def end(self, ok: bool) -> None:
+        self.show("done" if ok else "failed")
+
+
 def run_with_progress(label: str, run: Callable[[Callable[[dict[str, Any]], None]], T]) -> T | None:
     """Run an agent and show each round as it happens. `run` gets the on_round callback.
     If the agent fails, the page shows why and gets None."""
     rounds = 0
     result = failure = None
+    track = Track()
     with st.status(label, expanded=True) as status:
         st.caption(BUSY_HINT)
 
         def on_round(record: dict[str, Any]) -> None:
             nonlocal rounds
             rounds += 1
+            track.round(record)
             headline, messages = round_summary(rounds, record)
             st.write(as_text(headline))
             for message in messages:
@@ -624,6 +701,7 @@ def run_with_progress(label: str, run: Callable[[Callable[[dict[str, Any]], None
             failure = str(err)
         except APIError as err:
             failure = f"Die OpenAI API meldet einen Fehler: {err}"
+        track.end(not failure)
         status.update(
             label=f"Kein Ergebnis nach {rounds} Runden" if failure else "Vorschlag angenommen",
             state="error" if failure else "complete",

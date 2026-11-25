@@ -582,7 +582,7 @@ STILL = {
     "--tilt": "0deg",
 }
 # The tokens of the opening of the Startseite: slower and larger than the working pages.
-OPENING = ("--show", "--beat", "--show-rise", "--float", "--drift", "--glow", "--tilt", "--sway")
+OPENING = ("--show", "--beat", "--show-rise", "--float", "--drift", "--glow", "--tilt")
 
 
 def _rules(css: str) -> list[tuple[str, str]]:
@@ -640,9 +640,10 @@ def test_reduced_motion_stops_every_loop():
     # Something that moves for ever is the first thing to stop when less motion is asked for.
     block = CSS.index("@media (prefers-reduced-motion: reduce)")
     loops = {
-        selector.strip()
+        part.strip()
         for selector, body in _rules(CSS[:block])
         if re.search(r"animation\s*:[^;]*infinite", body)
+        for part in selector.split(",")
     }
     stopped = {
         part.strip()
@@ -652,6 +653,22 @@ def test_reduced_motion_stops_every_loop():
     }
     assert loops, "no loop found: the rule looks at the wrong thing"
     assert loops - stopped == set(), "Add `animation: none` for it in the reduced-motion block"
+
+
+def test_every_agent_run_shows_the_runner():
+    # The runner shows each round of an agent run (ui.Track). A status box of an agent run
+    # without it would run silently on one page and with a runner on the others.
+    missing = []
+    for path in SOURCES:
+        lines = path.read_text(encoding="utf-8").splitlines()
+        for number, line in enumerate(lines):
+            before = lines[max(0, number - 3) : number]
+            if "st.status(" in line and not any("= Track()" in s for s in before):
+                missing.append(f"{path.name}:{number + 1}")
+    assert missing == [], (
+        "Create `track = Track()` just before the status box, call `track.round(record)` in "
+        "on_round and `track.end(ok)` once the agent is done"
+    )
 
 
 def test_motion_moves_nothing_that_reflows_the_page():

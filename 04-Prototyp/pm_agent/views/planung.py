@@ -38,6 +38,7 @@ from pm_agent.ui import (
     LEGEND,
     PAGES,
     TASK_AXIS,
+    Track,
     as_text,
     check_verdict,
     chip,
@@ -500,12 +501,14 @@ with tabs[2]:
         )
         if ran_now:
             rounds = []
+            track = Track()
             with st.status("Der Agent plant …", expanded=True) as status:
                 st.caption(BUSY_HINT)
                 show_round = round_printer()
 
                 def on_round(record):
                     rounds.append(record)
+                    track.round(record)
                     show_round(record)
 
                 started = time.monotonic()
@@ -520,6 +523,7 @@ with tabs[2]:
                     show_plan(plan, rounds, "Agent", round(time.monotonic() - started, 1))
                     forget_conversation()
                 # The message goes below the box: a collapsed status would hide it.
+                track.end(not failure)
                 label = f"Kein Plan nach {len(rounds)} Runden" if failure else "Plan angenommen"
                 status.update(label=label, state="error" if failure else "complete", expanded=True)
             if failure:
@@ -908,6 +912,7 @@ with tabs[4]:
                 with st.chat_message("user"):
                     st.text(wish)
                 change_rounds = []
+                track = Track()
                 with st.status("Der Agent ändert den Plan …", expanded=True) as status:
                     st.caption(BUSY_HINT)
                     with st.container(key="rounds-change"):
@@ -915,6 +920,7 @@ with tabs[4]:
 
                         def on_change_round(record):
                             change_rounds.append(record)
+                            track.round(record)
                             show_change_round(record)
 
                         started = time.monotonic()
@@ -938,6 +944,7 @@ with tabs[4]:
                                 "rounds": change_rounds,
                                 "seconds": round(time.monotonic() - started, 1),
                             }
+                    track.end(not failure)
                     label = (
                         f"Kein Vorschlag nach {len(change_rounds)} Runden"
                         if failure
