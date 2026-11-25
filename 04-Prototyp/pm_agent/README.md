@@ -29,7 +29,7 @@ im Menü hervorgehoben bleibt. Die Seiten:
 
 | Seite | Inhalt |
 |---|---|
-| Startseite | Überblick, Stand des übernommenen Projekts und Prognose seines Endes |
+| Startseite | Überblick, Stand des übernommenen Projekts in Kacheln (Aufgaben, Fortschritt, im Verzug, voraussichtliches Ende) und „Als Nächstes“ mit Grund, ohne Ergebniszeile |
 | Vorbereiten · Projektauftrag | Idee und Termine eintragen; der Agent entwirft Ziel, Nutzen, Umfang, Beteiligte (als Rollen), Erfolgskriterien und Rahmenbedingungen; Python prüft; die Projektleitung ändert und gibt frei; als Markdown herunterladen |
 | Vorbereiten · Anforderungen | Der Agent entwirft User Stories mit Priorität (Muss, Soll, Kann) und Akzeptanzkriterien aus dem Projektauftrag; Python prüft, dass jedes Erfolgskriterium eine Anforderung hat; Bearbeiten in einer Tabelle, Freigabe, Markdown |
 | Vorbereiten · Entwurf | Der Agent entwirft Bausteine (Rollen, Komponenten, Fremdsysteme), Schnittstellen mit typisierten Feldern und Fehlercodes und die Abläufe zwischen ihnen; Python prüft jeden Schritt gegen seine Schnittstelle und dass jede Muss-Anforderung einen Ablauf hat, und zeichnet daraus die Sequenzdiagramme; vier Tabellen, Freigabe, Markdown mit Mermaid-Diagrammen |
@@ -49,7 +49,7 @@ Phase vor dem Plan, die nicht freigegeben ist (ein Entwurf, seit der Freigabe ge
 übersprungen, obwohl schon ein Projekt läuft), ist gestrichelt und sagt „nicht freigegeben“.
 Übersprungen werden darf sie: Die Planung arbeitet dann wie ohne Anforderungen bzw. ohne Entwurf. Mit einem übernommenen Projekt folgt eine
 Zeile „Jetzt dran“ mit einem Knopf zur passenden Seite; auf dieser Seite selbst entfällt sie,
-und neben der Prognose (Startseite, Durchführung) nennt sie nur, was zu tun ist. Jeder Abschnitt nennt, wer dort
+und neben der Prognose (Durchführung) nennt sie nur, was zu tun ist. Jeder Abschnitt nennt, wer dort
 handelt: AGENT schlägt vor, PYTHON rechnet und prüft, DU trägst ein und entscheidest.
 
 Darunter steht das Ergebnis der Seite in einer Zeile: rot mit „Achtung“, wenn etwas schiefgeht

@@ -1289,7 +1289,7 @@ def next_step(tracking: Tracking, today: date, forecast_shown: bool = False) -> 
 
 
 def forecast_text(outlook: Forecast, deadline: date) -> str:
-    """The forecast as one sentence, for the status report and the Startseite."""
+    """The forecast as one sentence, for the reports and the verdict lines."""
     if outlook.problem:
         return f"Nicht berechenbar: {outlook.problem}"
     if outlook.end is None:
