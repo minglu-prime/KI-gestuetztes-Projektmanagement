@@ -58,10 +58,23 @@ zehn Phasen und wie sie zusammenhängen in `04-Prototyp/pm_agent/docs/lebenszykl
   `Emulation.setEmulatedMedia`. Zahlen im Format „localized“ folgen `navigator.languages`.
 - **Tabellen in AppTest.** Bearbeitungen eines `st.data_editor` über den Helfer `edit_table`
   in `tests/test_app.py` nachstellen.
+- **Zweite Meinung.** Die Gemini-CLI bricht auf diesem Konto mit `IneligibleTierError` ab.
+  Ein Review durch GPT läuft über Codex mit dem Modell `gpt-5.6-sol`; das Standardmodell
+  steht diesem ChatGPT-Konto nicht offen.
+  - Gemini geht über die lokale Antigravity-CLI:
+    `agy -p "<Prompt>" --model gemini-4-carbon-high --sandbox` (`agy models` nennt Gemini 4
+    Carbon, Neon, Argon, Hydrogen).
+  - Im Modus `-p` lässt sich keine Werkzeuganfrage freigeben, ein Shell-Befehl beendet den
+    Lauf. Der Prompt sagt deshalb „nur read_file, keine Shell“, nennt die zu lesenden Dateien
+    und schließt `.env`, `data/` und `logs/` aus.
+  - Nicht `--mode plan` für eine Antwort: Das schreibt nur `implementation_plan.md` unter
+    `~/.gemini/antigravity-cli/brain/` und wartet auf „Proceed“.
+  - `agy agentapi` braucht Adresse und CSRF-Token des laufenden Sprachservers und liefert
+    keine Antwort: hier nicht brauchbar.
 - **Windows.** Python öffnet keine Pfade der Form `/d/...`, `D:/...` verwenden. Für Umlaute in
   der Konsole `PYTHONIOENCODING=utf-8` setzen.
 
-## Stand am 23.11.2026
+## Stand am 25.11.2026
 
 - **Seiten.**
   - Neun Schritte, vom Projektauftrag bis zum Abschluss.
@@ -82,8 +95,26 @@ zehn Phasen und wie sie zusammenhängen in `04-Prototyp/pm_agent/docs/lebenszykl
   - Eine Quellregel verlangt sie überall, wo `messages(` steht.
   - Die Runden eines Laufs stehen nur noch im Statuskasten (nach Erfolg zugeklappt).
   - Markdown-Vorschauen unter Downloads sind entfernt (Quellregel).
+- **Bedienung** (PR 99, 101):
+  - Jedes Speichern antwortet mit einer Meldung, die von selbst verschwindet (`ui.notify`, gezeigt von `ui.show_notice`). Quellregeln: `test_every_save_that_reruns_the_page_says_so`, `test_every_callback_that_saves_says_so`, `test_notices_go_through_one_helper`.
+  - Eine freigegebene Phase blendet ihre Freigabe aus, statt sie auszugrauen (Quellregel `test_an_approved_phase_hides_its_approval_instead_of_greying_it_out`).
+  - Erledigte Maßnahmen der Kontrolle lassen sich wieder öffnen.
+  - Testfälle ohne Ergebnis: die ersten 5, dann „und N weitere“.
+  - Planung, Schritt 2 übernimmt Idee und Daten aus dem Projektauftrag. Nach der Übernahme zeigt „Jetzt dran“ den nächsten Schritt, ohne erneut zu fragen.
+  - Test springt nach dem Speichern zum nächsten offenen Fall (`ui.next_open`); ein fehlgeschlagener Fall ist zum Erfassen eines Fehlers vorgewählt.
+  - Abschluss wählt „abgenommen“ nur vor, wenn die Nachweise „abnehmbar“ sagen; ändern sie sich, fällt die Vorwahl weg. Nach dem Speichern geht es zur nächsten offenen Anforderung.
+  - Die Startseite hat einen Hauptknopf.
+- **Bewegung** (PR 102):
+  - Eine Kurve und fünf Dauern in `:root` von `assets/style.css`: `--ease` `cubic-bezier(0.22, 1, 0.36, 1)`, `--press` 70 ms, `--hover` 140 ms, `--state` 200 ms, `--enter` 260 ms, `--page` 320 ms.
+  - Ein Seitenwechsel blendet von 4 px unterhalb ein; ein neuer Lauf nach einem Klick bewegt nichts erneut.
+  - Gedrückt schrumpft ein Knopf auf 0,98; unter dem Zeiger hebt er sich um 1 px, eine Karte um 2 px.
+  - Das Diagramm der Startseite läuft einmal ab. Zahlen haben gleich breite Ziffern.
+  - Mit „Bewegung reduzieren“ bleiben nur Überblendungen.
+  - Quellregeln: `test_motion_uses_one_set_of_durations`, `test_motion_moves_nothing_that_reflows_the_page`, `test_reduced_motion_stops_everything_that_travels`.
+  - Gemessen in Chrome headless bei 1440 px und 375 px: Median 7 ms je Bild auf langen Seiten, 13 Seiten ohne waagrechtes Scrollen.
 - **Modell.**
   - Die Agenten rufen die OpenAI Responses API auf (eigene Schleife in `agent._run`, Werkzeuge als `tools.Tool`, Reasoning `medium`).
+  - Findet ein Agent in 10 Runden kein annehmbares Ergebnis, nennt die Meldung den letzten Ablehnungsgrund („Zuletzt abgelehnt: …“, PR 98).
   - Die Oberfläche sagt „der Agent“, Kommentare und Docstrings „the agent“ (je eine Quellregel).
   - Freitexte der Agenten haben Längengrenzen: `tools.LIMITS`, etwa ein Satz, die Zusammenfassung 400 Zeichen. Jedes Einreichungswerkzeug schickt zu Langes zurück (`tools.too_long`); die Modelle nehmen längere Texte weiter an.
   - Eingaben der Agenten vor und nach dem Plan schreiben Daten und Zahlen deutsch (`tracking.as_shown`, `key_figures`; Quellregel). Der Planungsagent behält ISO-Daten für `set_absence`.
@@ -133,14 +164,17 @@ Echter Test: `uv run --env-file .env pytest tests/test_agent_live.py` (verbrauch
 nur auf Wort der Projektleitung). Chat Completions nimmt bei diesem Modell Werkzeuge nur mit
 `reasoning_effort` „none“ an; deshalb Responses.
 
-## Projekt in Zahlen (23.11.2026, `main` nach PR 88)
+## Projekt in Zahlen (25.11.2026, `main` nach PR 102)
 
-- **Repository:** 334 Commits auf `main` (250 ohne Merges) seit dem 28.10.2026, 76 gemergte PRs, **0 Releases, 0 Tags**.
-- **Fachcode:** rund 10 300 Zeilen Python (ohne Leerzeilen und Kommentare).
-  - `pm_agent` 9 638 (Paket und Seiten)
-  - `ki_lab` 656
+- **Repository:** 374 Commits auf `main` (275 ohne Merges) seit dem 28.10.2026, 90 gemergte PRs, **0 Releases, 0 Tags**.
+- **Fachcode:** rund 10 500 Zeilen Python (ohne Leerzeilen, Kommentare und Tests).
+  - `pm_agent` 9 834 (Paket und Seiten)
+  - `ki_lab` 658
   - dazu 9 Prompts, 8 Vorlagen, CSS
-- **Tests:** 717, alle ohne Netz (672 `pm_agent`, 45 `ki_lab`); dazu ein Live-Test, der sich ohne Schlüssel überspringt, und drei Browser-Tests (`tests/test_browsers.py`), die ohne `PM_BROWSERS` überspringen. CI: `pm-agent.yml` (Lint, Tests; Job `browsers`: jede Seite in Chromium, Firefox und WebKit bei 1440 px und 375 px, auf einem leeren Temp-Ordner über `smoke_app.py`) und `static.yml` (README als Pages).
+- **Tests:** 739, alle ohne Netz (694 `pm_agent`, 45 `ki_lab`); dazu ein Live-Test, der sich ohne Schlüssel überspringt, und drei Browser-Tests (`tests/test_browsers.py`), die ohne `PM_BROWSERS` überspringen.
+- **CI:**
+  - `pm-agent.yml`: Lint, Tests; Job `browsers`: jede Seite in Chromium, Firefox und WebKit bei 1440 px und 375 px, auf einem leeren Temp-Ordner über `smoke_app.py`.
+  - `static.yml`: README als Pages, in zwei Jobs `build` und `deploy` (PR 100). In einem Job fand `deploy-pages` das Artefakt zu früh („Found 0 artifact(s)“), vier Veröffentlichungen in Folge scheiterten beim ersten Versuch; seitdem gelingt der erste.
 - **Betrieb:** läuft lokal als Streamlit-Seite. Das Menü in 8 Einträgen ist in Chrome geprüft (1440 px und 375 px), am 22.11. auch in Edge (Codex, 13 Seiten bei 375 px ohne waagrechtes Scrollen); Firefox und WebKit seit dem 23.11. im CI-Job `browsers`. Kein öffentlicher Betrieb.
 - **Issues:** 11 (#1–#11, Meilensteine M1–M4).
   - #9 geschlossen.
@@ -164,11 +198,15 @@ nur auf Wort der Projektleitung). Chat Completions nimmt bei diesem Modell Werkz
 2. **Teilnahmeinformation fertig machen (#8).** Die Einwilligungen nennen seit PR 77 den richtigen Dienst, und das Lab fragt die freiwillige Einwilligung zu anonymen Zitaten (`quote_consent`) vor dem Start mit ab. In `03-Experiment/teilnahmeinformation.md` fehlen noch Kontakt, Löschdatum und Name des Dienstes (Agenda M2).
 3. **Mehrere Läufe je Agent.** Ein Lauf je Agent und Tag reicht nicht für Aussagen über Runden, Token oder Dauer. Am 23.11. liefen zwei Agenten je dreimal; die übrigen einmal. `03-Experiment/agentenlauf-2026-11-21/run_agents.py` wiederholt den ganzen Lauf (kostet Kontingent, nur auf Wort der Projektleitung).
 4. **Agenten fachlich.**
-   - Umplanung bei Abwesenheit: Am 23.11. verteilte sie in 1 von 3 Läufen nichts um. Seitdem weist `submit_plan` einen solchen Plan zurück; ein echter Lauf damit steht aus (kostet Kontingent, nur auf Wort der Projektleitung). Kann das Team die Arbeit gar nicht auffangen, findet der Agent keinen annehmbaren Plan und der Lauf endet mit einem Fehler.
+   - Umplanung bei Abwesenheit: Am 23.11. verteilte sie in 1 von 3 Läufen nichts um. Seitdem weist `submit_plan` einen solchen Plan zurück; ein echter Lauf damit steht aus (kostet Kontingent, nur auf Wort der Projektleitung). Kann das Team die Arbeit gar nicht auffangen, findet der Agent keinen annehmbaren Plan und der Lauf endet mit einem Fehler; die Meldung nennt dann den Grund (PR 98).
 5. **Einen Stand festhalten.** Es gibt kein Release. Ein `v0.1` mit „was geht, mit welchem Modell geprüft“ (öffentlich: nur auf Wort der Projektleitung).
 6. **Issues pflegen.** Zuständige eintragen; die Meilenstein-Issues in Aufgaben für einen Tag zerlegen.
-7. **Code, nicht dringend.**
+7. **Code und Oberfläche, nicht dringend.**
    - `views/planung.py` (rund 1 200 Zeilen) teilen, wenn dort wieder gearbeitet wird.
+   - Kein dunkles Design: Das Thema steht auf `base = "light"`, auch bei dunkler Systemeinstellung.
+   - Was verschwindet, verschwindet ohne Bewegung: Streamlit gibt CSS dafür keinen Anlass.
+   - Aufklappbereiche bewegen sich mit Streamlits eigener Kurve (500 ms), nicht mit `--ease`.
+   - Die Dauern der Bewegung sind nicht mit der Gruppe abgestimmt.
 8. **Betrieb im Netz.** Plan in `04-Prototyp/pm_agent/docs/betrieb-cloud.md`, Weg A (Streamlit-Container, Supabase). Vorher klären, Antwort steht aus:
    - Darf der KI:connect-Schlüssel auf einem Server für die Gruppe genutzt werden, und ist die API von außerhalb des Hochschulnetzes erreichbar? Ansprechpartner: KI:connect-Verantwortliche der HSBI, sonst `kiconnect@cls.rwth-aachen.de`.
    - Laut Hilfeseite von KI:connect gelten API-Schlüssel einen Monat, und die Hochschule legt Monatsbudget und parallele Anfragen je Gruppe fest. Ein Server braucht also einen Schlüsselwechsel je Monat.
@@ -186,4 +224,4 @@ nur auf Wort der Projektleitung). Chat Completions nimmt bei diesem Modell Werkz
 - Entfernte Branches außer `main`:
   - `feat/polish`: zusammengeführt, bleibt auf Wunsch
   - `feat/pm-experiment-lab`: PR 12, nicht anfassen
-  - Alle anderen Branches dieser Arbeit sind gelöscht. Die Branches des Teammitglieds (`test/planning-execution-control-flow`, PR 86, PR 88) sind am 23.11. nicht mehr auf `origin`; gelöscht hat sie nicht diese Arbeit.
+  - Alle anderen Branches dieser Arbeit sind gelöscht, zuletzt am 24./25.11. `fix/absence-deadline`, `fix/rounds-out-reason`, `ci/pages-two-jobs`, `fix/ux-answer-every-save`, `fix/ux-system-decides` und `feat/ui-motion`. Der Worktree `quizzical-keller-85d615` (UX-Prüfung und Bewegung) steht ohne Branch auf `5066640`. Die Branches des Teammitglieds (`test/planning-execution-control-flow`, PR 86, PR 88) sind am 23.11. nicht mehr auf `origin`; gelöscht hat sie nicht diese Arbeit.
