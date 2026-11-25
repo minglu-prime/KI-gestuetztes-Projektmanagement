@@ -1205,58 +1205,76 @@ def reassignment_effect(tracking: Tracking, today: date, task_ids: list[str], me
     return text
 
 
-def next_step(tracking: Tracking, today: date) -> tuple[str, str]:
+def next_step(tracking: Tracking, today: date, forecast_shown: bool = False) -> tuple[str, str]:
     """What the project lead should look at next, and on which page ("durchfuehrung",
     "kontrolle" or "testlauf"). The most urgent reason wins. The text names no page: it may
-    be shown on the page it points to."""
+    be shown on the page it points to. `forecast_shown`: the page shows the forecast
+    already (forecast_text), so a reason that only repeats it is left out."""
     outlook = forecast(tracking, today)
     late = len(evaluate(tracking, today).overdue)
+
+    def say(reason: str, action: str, page: str, in_forecast: bool) -> tuple[str, str]:
+        return (action if forecast_shown and in_forecast else f"{reason} {action}"), page
+
     if outlook.problem:
-        return (
-            f"Die Prognose lässt sich nicht berechnen: {outlook.problem}. Prüfe Status und "
-            "Rest-Stunden der Aufgaben.",
+        return say(
+            f"Die Prognose lässt sich nicht berechnen: {outlook.problem}.",
+            "Prüfe Status und Rest-Stunden der Aufgaben.",
             "durchfuehrung",
+            in_forecast=True,
         )
     open_defects = [d for d in tracking.defects if d.status == "offen"]
     if outlook.end is None and open_defects:
         count = "1 Fehler ist" if len(open_defects) == 1 else f"{len(open_defects)} Fehler sind"
-        return (
-            f"Alle Aufgaben sind fertig, aber {count} offen. Öffne die Aufgabe wieder oder "
-            "schließe den Fehler.",
+        return say(
+            f"Alle Aufgaben sind fertig, aber {count} offen.",
+            "Öffne die Aufgabe wieder oder schließe den Fehler.",
             "testlauf",
+            in_forecast=False,
         )
     if outlook.end is None:
-        return (
-            "Alle Aufgaben sind fertig. Halte den Abschluss im Statusbericht fest.",
+        return say(
+            "Alle Aufgaben sind fertig.",
+            "Halte den Abschluss im Statusbericht fest.",
             "durchfuehrung",
+            in_forecast=True,
         )
     if outlook.deadline_gap > 0:
-        return (
-            "Nach heutigem Stand wird die Deadline verpasst. Sieh nach, welche Aufgaben das "
-            "Ende verschieben.",
+        return say(
+            "Nach heutigem Stand wird die Deadline verpasst.",
+            "Sieh nach, welche Aufgaben das Ende verschieben.",
             "kontrolle",
+            in_forecast=True,
         )
     if late:
         count = "1 Aufgabe ist" if late == 1 else f"{late} Aufgaben sind"
-        return (
-            f"{count} im Verzug. Sieh nach, was daran hängt und wohin das Ende rückt.",
+        return say(
+            f"{count} im Verzug.",
+            "Sieh nach, was daran hängt und wohin das Ende rückt.",
             "kontrolle",
+            in_forecast=False,
         )
     if outlook.shift > 0:
         days = "1 Arbeitstag" if outlook.shift == 1 else f"{outlook.shift} Arbeitstage"
-        return (
+        return say(
             f"Nach heutigem Stand endet das Projekt {days} später als geplant; die Deadline "
-            "hält noch. Sieh nach, welche Aufgaben das Ende verschieben.",
+            "hält noch.",
+            "Sieh nach, welche Aufgaben das Ende verschieben.",
             "kontrolle",
+            in_forecast=True,
         )
     if not has_progress(tracking):
-        return (
-            "Noch kein Fortschritt erfasst. Trage Status und Ist-Stunden ein.",
+        return say(
+            "Noch kein Fortschritt erfasst.",
+            "Trage Status und Ist-Stunden ein.",
             "durchfuehrung",
+            in_forecast=False,
         )
-    return (
-        "Das Projekt liegt im Plan. Halte den Fortschritt aktuell.",
+    return say(
+        "Das Projekt liegt im Plan.",
+        "Halte den Fortschritt aktuell.",
         "durchfuehrung",
+        in_forecast=True,
     )
 
 

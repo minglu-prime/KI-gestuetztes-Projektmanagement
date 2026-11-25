@@ -351,8 +351,9 @@ def journey(page: str) -> None:
     which comes next, and which phase before the plan is not approved (a draft, changed since
     its approval, or skipped once a project is adopted: the gates are soft).
 
-    With an adopted project, one line below says what is next (`next_step`) and, if that is
-    another page, a button leads there. Before it, the first phase not approved is next.
+    With an adopted project, one line below says what is next (`next_step`) and a button
+    leads there; on the page it points to, no line. Before it, the first phase not approved
+    is next.
     What cannot be read shows no state: its page says why."""
     try:
         tracking, unreadable = load(), False
@@ -383,7 +384,11 @@ def journey(page: str) -> None:
         where = None  # these lead through their own steps and need no forecast
     else:
         # Looked up when called, like the pages do: the day is the one they evaluate on.
-        advice, where = next_step(tracking, datetime.date.today())
+        # These two pages open with the forecast: the line does not say it again.
+        shown = page in ("durchfuehrung", "kontrolle")
+        advice, where = next_step(tracking, datetime.date.today(), forecast_shown=shown)
+        if where == page:  # its verdict says why; the path marks the step in words
+            advice = None
     done = {
         **{slug: phase == "freigegeben" for slug, phase in phases.items()},
         "planung": tracking is not None,
@@ -430,12 +435,10 @@ def journey(page: str) -> None:
     if advice is None:
         return
     with st.container(horizontal=True, vertical_alignment="center", key="next-step"):
-        below = " ↓ Unten auf dieser Seite." if where == page else ""
-        st.markdown(f"**Jetzt dran:** {as_text(advice)}{below}")
-        if where != page:
-            target, label = PAGES[where]
-            if st.button(label, key="journey-go", type="primary", icon=":material/arrow_forward:"):
-                st.switch_page(target)
+        st.markdown(f"**Jetzt dran:** {as_text(advice)}")
+        target, label = PAGES[where]
+        if st.button(label, key="journey-go", type="primary", icon=":material/arrow_forward:"):
+            st.switch_page(target)
 
 
 def kept_editor(

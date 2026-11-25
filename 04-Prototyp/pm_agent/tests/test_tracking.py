@@ -502,6 +502,31 @@ def test_the_next_step_follows_from_the_state_of_the_project(tracking):
     )
 
 
+def test_beside_the_forecast_the_next_step_says_only_what_to_do(tracking):
+    # "Jetzt dran: Deadline verpasst" stood right above the verdict line saying the same
+    # (project lead, 25.11.2026). A page that shows the forecast gets the action alone; a
+    # reason the forecast does not say stays.
+    def advice(today, **status):
+        project = progressed(tracking, **status) if status else tracking
+        return next_step(project, today, forecast_shown=True)
+
+    assert advice(date(2026, 12, 21)) == (
+        "Sieh nach, welche Aufgaben das Ende verschieben.",
+        "kontrolle",
+    )
+    assert advice(date(2026, 11, 12), A="fertig", B="fertig") == (
+        "Halte den Abschluss im Statusbericht fest.",
+        "durchfuehrung",
+    )
+    assert advice(date(2026, 11, 10), A="fertig") == (
+        "Halte den Fortschritt aktuell.",
+        "durchfuehrung",
+    )
+    # Not in the forecast: the late tasks and a project without progress.
+    assert advice(date(2026, 11, 12))[0].startswith("2 Aufgaben sind im Verzug.")
+    assert advice(date(2026, 11, 9))[0].startswith("Noch kein Fortschritt erfasst.")
+
+
 def test_the_rest_of_a_project_is_a_project_from_today_with_what_is_left(tracking):
     # Thu 12.11.: A is finished, B has 4 of its 16 h booked.
     project, plan = rest_project(apply_rows(tracking, ROWS), date(2026, 11, 12))

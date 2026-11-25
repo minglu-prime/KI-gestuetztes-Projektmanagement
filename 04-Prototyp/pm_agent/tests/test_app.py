@@ -1137,18 +1137,25 @@ def test_without_a_project_the_path_waits_at_planen_and_says_nothing_twice(site)
 def test_with_a_project_the_path_says_what_is_next_and_leads_there(tracked):
     at = tracked.switch_page("views/durchfuehrung.py").run()
     assert not at.exception
-    advice, where = tracking.next_step(tracking.load(), date.today())
+    # The Durchführung shows the forecast: the line says what to do, not the forecast again.
+    advice, where = tracking.next_step(tracking.load(), date.today(), forecast_shown=True)
+    assert where == "kontrolle"  # two tasks are late
     assert '<span class="step done' in journey(at).split("Durchführung")[0]  # Planung is done
     assert any("Jetzt dran" in m.value and advice in m.value for m in at.markdown)
     # Said once on screen: by that line. In the path only for screen readers, else the
     # words push the last step onto a second row.
     assert "<em class=sr>als Nächstes</em>" in journey(at)
-    target = {"durchfuehrung": "Zur Durchführung", "kontrolle": "Zur Kontrolle"}[where]
-    # A button to the page the advice points to, unless the advice is about this page.
-    assert any(b.label == target for b in at.button) == (where != "durchfuehrung")
-    # Otherwise the line says it is this page.
-    here = any("Unten auf dieser Seite" in m.value for m in at.markdown)
-    assert here == (where == "durchfuehrung")
+    assert "Zur Kontrolle" in labels(at)
+
+
+def test_on_the_page_it_points_to_the_path_needs_no_line(tracked):
+    # "Jetzt dran … ↓ Unten auf dieser Seite" repeated the verdict line below it (project
+    # lead, 25.11.2026). On its own page the path marks the step in words, and that is all.
+    at = tracked.switch_page("views/kontrolle.py").run()
+    assert not at.exception
+    assert tracking.next_step(tracking.load(), date.today())[1] == "kontrolle"
+    assert not any("Jetzt dran" in m.value for m in at.markdown)
+    assert "<em>als Nächstes</em>" in journey(at)
 
 
 def test_a_damaged_project_leaves_the_path_without_a_state(site):
@@ -1176,7 +1183,7 @@ def test_the_planung_does_not_forecast_the_adopted_project(tracked, monkeypatch)
 def test_the_advice_is_shown_as_text(tracked, monkeypatch):
     # Task IDs from the plan end up in the advice; Markdown in them stays text.
     monkeypatch.setattr(
-        ui, "next_step", lambda t, d: ("Task ![x](http://e/x.png) hängt", "kontrolle")
+        ui, "next_step", lambda t, d, **_: ("Task ![x](http://e/x.png) hängt", "kontrolle")
     )
     at = tracked.switch_page("views/durchfuehrung.py").run()
     line = next(m.value for m in at.markdown if "Jetzt dran" in m.value)
@@ -3023,7 +3030,7 @@ def test_the_iteration_points_to_the_abschluss_instead_of_repeating_it(site, mon
 def test_the_startseite_says_the_forecast_once(tracked, monkeypatch, where):
     # "Deadline verpasst" stood in the forecast box and again in the line below it. What the
     # Kontrolle is for, the forecast and the delay already say; its button is the primary one.
-    monkeypatch.setattr(tracking, "next_step", lambda *_: ("Rat.", where))
+    monkeypatch.setattr(tracking, "next_step", lambda *_, **__: ("Rat.", where))
     at = tracked.run()
     assert not at.exception
     said = any(m.value.startswith("**Als Nächstes:** ") for m in at.markdown)

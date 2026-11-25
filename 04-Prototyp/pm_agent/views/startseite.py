@@ -70,7 +70,8 @@ with st.container(key="project"):
             a.metric("Aufgaben", len(result.tasks))
             b.metric("Fortschritt", percent(result.progress))
             c.metric("Im Verzug", len(result.overdue))
-            advice, where = next_step(tracking, date.today())
+            # The forecast stands above: the advice does not say it again.
+            advice, where = next_step(tracking, date.today(), forecast_shown=True)
             # Advice for the Kontrolle repeats the forecast or the delay shown above.
             if where != "kontrolle":
                 st.markdown(f"**Als Nächstes:** {as_text(advice)}")
