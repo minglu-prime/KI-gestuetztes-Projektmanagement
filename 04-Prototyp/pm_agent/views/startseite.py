@@ -5,7 +5,7 @@ from datetime import date
 import streamlit as st
 
 from pm_agent.tracking import evaluate, forecast, load, next_step, percent
-from pm_agent.ui import JOURNEY, PAGES, as_text, forecast_verdict, heading, verdict
+from pm_agent.ui import JOURNEY, PAGES, as_text, heading, overrun_text
 from pm_agent.workbench import InputError
 
 # How every agent works, as the diagram next to the headline (styled in assets/style.css).
@@ -65,16 +65,19 @@ with st.container(key="project"):
             result = evaluate(tracking, date.today())
             st.markdown(f"**{as_text(tracking.project.idea)}**")
             outlook = forecast(tracking, date.today())
-            verdict(*forecast_verdict(outlook, tracking.project.deadline, result))
-            a, b, c = st.columns(3)
+            # The end as a tile like the others: a red verdict box on the home page was too
+            # loud (project lead, 25.11.2026). The line below says what it means.
+            a, b, c, d = st.columns(4)
             a.metric("Aufgaben", len(result.tasks))
             b.metric("Fortschritt", percent(result.progress))
             c.metric("Im Verzug", len(result.overdue))
-            # The forecast stands above: the advice does not say it again.
-            advice, where = next_step(tracking, date.today(), forecast_shown=True)
-            # Advice for the Kontrolle repeats the forecast or the delay shown above.
-            if where != "kontrolle":
-                st.markdown(f"**Als Nächstes:** {as_text(advice)}")
+            end = "–" if outlook.problem else "fertig"  # no forecast, or nothing left
+            d.metric("Voraussichtliches Ende", f"{outlook.end:%d.%m.%Y}" if outlook.end else end)
+            # The box said this too; "im Plan" alone would hide it.
+            if over := overrun_text(result):
+                st.caption(over)
+            advice, where = next_step(tracking, date.today())  # with its reason
+            st.markdown(f"**Als Nächstes:** {as_text(advice)}")
             # The button for the page the advice points to is the primary one.
             with st.container(horizontal=True):
                 if st.button(

@@ -1405,12 +1405,26 @@ def test_kontrolle_offers_the_control_document(tracked, downloads):
     assert downloads["Kontrollbericht als Markdown herunterladen"].startswith("# Kontrollbericht")
 
 
+def test_the_startseite_says_the_forecast_without_an_alarm_box(tracked):
+    # The red forecast box on the Startseite was too loud (project lead, 25.11.2026). The end
+    # stands as a tile beside the others; the line below says what it means and what to do.
+    at = tracked.run()
+    assert not at.exception
+    assert verdict(at) == ""
+    outlook = tracking.forecast(tracking.load(), date.today())
+    assert {m.label: m.value for m in at.metric}["Voraussichtliches Ende"] == (
+        f"{outlook.end:%d.%m.%Y}"
+    )
+    advice, _ = tracking.next_step(tracking.load(), date.today())  # with its reason
+    assert f"**Als Nächstes:** {ui.as_text(advice)}" in [m.value for m in at.markdown]
+
+
 def test_the_startseite_says_where_the_project_is_heading(tracked):
     at = tracked.run()
     assert not at.exception
-    assert "Prognose: Voraussichtliches Ende" in verdict(at)
+    assert "Voraussichtliches Ende" in {m.label for m in at.metric}
     # And what to do about it: one of the two buttons is the recommended one (the line
-    # "Als Nächstes": test_the_startseite_says_the_forecast_once).
+    # "Als Nächstes": test_the_startseite_says_what_is_next_with_its_reason).
     assert sorted(b.proto.type for b in at.button if b.label in WAYS_ON) == [
         "primary",
         "secondary",
@@ -3068,14 +3082,13 @@ def test_the_iteration_points_to_the_abschluss_instead_of_repeating_it(site, mon
 
 
 @pytest.mark.parametrize("where", ["kontrolle", "durchfuehrung"])
-def test_the_startseite_says_the_forecast_once(tracked, monkeypatch, where):
-    # "Deadline verpasst" stood in the forecast box and again in the line below it. What the
-    # Kontrolle is for, the forecast and the delay already say; its button is the primary one.
-    monkeypatch.setattr(tracking, "next_step", lambda *_, **__: ("Rat.", where))
+def test_the_startseite_says_what_is_next_with_its_reason(tracked, monkeypatch, where):
+    # Without the forecast box (project lead, 25.11.2026) only this line says what the
+    # forecast means, "Deadline verpasst" included: for every page it points to.
+    monkeypatch.setattr(tracking, "next_step", lambda *_, **__: ("Grund. Rat.", where))
     at = tracked.run()
     assert not at.exception
-    said = any(m.value.startswith("**Als Nächstes:** ") for m in at.markdown)
-    assert said == (where != "kontrolle")
+    assert "**Als Nächstes:** Grund. Rat." in [m.value for m in at.markdown]
 
 
 def overdue_table(at):
@@ -3182,7 +3195,21 @@ def test_the_step_that_adopts_the_plan_says_so_in_its_tab(app, monkeypatch):
 FUTURE = PROJECT.model_copy(update={"start_date": date(2099, 1, 5), "deadline": date(2099, 12, 31)})
 
 
-@pytest.mark.parametrize("page", ["kontrolle", "durchfuehrung", "startseite"])
+def test_the_startseite_says_when_finished_work_took_more_hours(site):
+    # Its verdict box said so; without it (project lead, 25.11.2026) a quiet line does,
+    # else the page would read "im Plan" alone.
+    adopted = tracking.adopt(FUTURE, TEAM, PLAN)
+    tracking.save(tracking.apply_rows(adopted, [{"ID": "A", "Status": "fertig", "Ist (h)": 10}]))
+    at = site.run()
+    assert not at.exception and verdict(at) == ""
+    over = "Fertige Aufgaben brauchten 25 % mehr Stunden als geplant (+2 h)."
+    assert over in [c.value for c in at.caption]
+
+    tracking.save(tracking.apply_rows(adopted, [{"ID": "A", "Status": "fertig", "Ist (h)": 8}]))
+    assert not any("mehr Stunden" in c.value for c in at.run().caption)
+
+
+@pytest.mark.parametrize("page", ["kontrolle", "durchfuehrung"])
 def test_the_verdict_says_when_finished_work_took_more_hours(site, page):
     # The verdict read "In Ordnung" from the forecast alone while finished work had taken a
     # quarter more hours than planned (CPI 0,50 on the same page).

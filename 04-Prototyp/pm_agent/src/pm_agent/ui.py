@@ -181,6 +181,16 @@ def phase_verdict(phase: str, check: lifecycle.Check | None) -> tuple[str, str] 
 COST_TOLERANCE = 0.10
 
 
+def overrun_text(evaluation: Evaluation) -> str:
+    """Finished work that took more hours than planned beyond COST_TOLERANCE, as a
+    sentence; empty within it."""
+    over = evaluation.finished_deviation
+    if not evaluation.earned or over / evaluation.earned <= COST_TOLERANCE:
+        return ""
+    share = percent(over / evaluation.earned)
+    return f"Fertige Aufgaben brauchten {share} mehr Stunden als geplant (+{hours_text(over)} h)."
+
+
 def forecast_verdict(
     outlook: Forecast, deadline: datetime.date, evaluation: Evaluation
 ) -> tuple[str, str]:
@@ -198,12 +208,8 @@ def forecast_verdict(
         else:
             state = "ok"
         text = f"Prognose: {said}."
-    over = evaluation.finished_deviation
-    if evaluation.earned and over / evaluation.earned > COST_TOLERANCE:
-        share = percent(over / evaluation.earned)
-        text += (
-            f" Fertige Aufgaben brauchten {share} mehr Stunden als geplant (+{hours_text(over)} h)."
-        )
+    if over := overrun_text(evaluation):
+        text += f" {over}"
         state = "bad" if state == "bad" else "warn"
     return state, text
 
