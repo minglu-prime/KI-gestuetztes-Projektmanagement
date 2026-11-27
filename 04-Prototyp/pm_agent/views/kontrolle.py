@@ -148,7 +148,8 @@ if tracking is not None:
         if outlook.problem:
             st.error(
                 f"Die Prognose lässt sich nicht berechnen: {outlook.problem}. Prüfe Status und "
-                "Rest-Stunden auf der Seite Durchführung."
+                "Rest-Stunden auf der Seite Durchführung; das Team korrigiert sie in "
+                "„Mein Bereich“ (Ansicht Team)."
             )
         elif outlook.end is None:  # the verdict line says it
             st.caption("Alle Aufgaben sind fertig: Es bleibt nichts vorherzusagen.")
@@ -196,8 +197,7 @@ if tracking is not None:
                 "frühesten beginnen kann; bei Gleichstand Begonnenes vor Offenem. Eine offene "
                 "Aufgabe zählt mit ihrer Schätzung, eine begonnene mit Schätzung minus "
                 "Ist-Stunden; ist die Schätzung aufgebraucht, mit einer Stunde. Ein Rest, den "
-                "du auf der Seite "
-                "Durchführung einträgst, geht vor."
+                "das Team in „Mein Bereich“ (Ansicht Team) einträgt, geht vor."
             )
 
     with numbers.container(border=True, key="panel-earned"):

@@ -1229,7 +1229,8 @@ def next_step(tracking: Tracking, today: date, forecast_shown: bool = False) -> 
     if outlook.problem:
         return say(
             f"Die Prognose lässt sich nicht berechnen: {outlook.problem}.",
-            "Prüfe Status und Rest-Stunden der Aufgaben.",
+            "Prüfe Status und Rest-Stunden der Aufgaben und bitte das Team, sie in "
+            "„Mein Bereich“ (Ansicht Team) zu korrigieren.",
             "durchfuehrung",
             in_forecast=True,
         )
@@ -1341,7 +1342,7 @@ def forecast_bars(evaluation: Evaluation, outlook: Forecast) -> list[dict[str, A
     return bars
 
 
-# The columns of the progress table that the project lead cannot change.
+# The columns of the progress table that a team member cannot change.
 PROGRESS_READ_ONLY = PROGRESS_COLUMNS[:6]
 
 

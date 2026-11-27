@@ -56,7 +56,12 @@ st.markdown(
 - **Vorbereiten:** Projektauftrag, Anforderungen, Entwurf und Testplan. Der Agent entwirft,
   Python prüft, dass nichts fehlt, die Projektleitung gibt frei.
 - **Umsetzen:** Planung, Durchführung, Test, Kontrolle und Abschluss: vom geprüften Plan über
-  Fortschritt und Prognose bis zum Backlog der nächsten Runde.
+  Fortschritt und Prognose bis zum Backlog der nächsten Runde, mit optionalem Effizienzvergleich
+  (mit vs. ohne Agent) auf den vier Hauptseiten.
+- **Ansicht Team (Mein Bereich und Projektstand):** Über den Umschalter „Ansicht“ links im Menü
+  pflegen Teammitglieder unter **Mein Bereich** ihre Fähigkeiten, Wochenstunden, Abwesenheiten
+  und den Stand ihrer Aufgaben selbst; **Projektstand** zeigt allen Fortschritt und Prognose des
+  Projekts.
 - **KI-Lab:** kontrollierter Vergleich derselben Art von Planungsaufgabe ohne und mit KI-Hilfe.
 
 Teamdaten und Protokolle bleiben lokal und stehen nicht im Repository.

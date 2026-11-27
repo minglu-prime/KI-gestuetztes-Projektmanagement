@@ -751,6 +751,40 @@ def test_startseite_and_ueber_uns_describe_all_three_agents(site):
     assert "ohne LLM" not in start and "ohne LLM" not in about
     assert "Planungsagenten" not in start
     assert "Python rechnet, der Agent bewertet" in tiles
+    assert "Ansicht Team" in about and "Mein Bereich" in about and "Projektstand" in about
+
+
+def test_planung_with_empty_team_points_to_mein_bereich(site, monkeypatch):
+    # Empty team on Planung: lead is directed to Mein Bereich, not told to edit the read-only table.
+    monkeypatch.setattr(workbench, "load_team", lambda: [])
+    planung = site.switch_page(PLANUNG).run()
+    planung_md = " ".join(m.value for m in planung.markdown)
+    assert "Trage das Team ein" not in planung_md
+    assert "Mein Bereich" in planung_md and "Ansicht Team" in planung_md
+
+
+def test_durchfuehrung_and_kontrolle_point_to_team_view(tracked):
+    # Durchführung and Kontrolle point to the team's progress and Mein Bereich.
+    durch = tracked.switch_page("views/durchfuehrung.py").run()
+    durch_html = " ".join(h.value for h in durch.html)
+    assert "deinem Fortschritt" not in durch_html
+    assert "Fortschritt des Teams" in durch_html
+
+    kontrolle = tracked.switch_page("views/kontrolle.py").run()
+    kontrolle_cap = " ".join(c.value for c in kontrolle.caption)
+    assert "auf der Seite Durchführung einträgst" not in kontrolle_cap
+    assert "in „Mein Bereich“ (Ansicht Team) einträgt" in kontrolle_cap
+
+    # Uncomputable forecast errors on both pages name Mein Bereich (Ansicht Team) for fixing it.
+    saved = tracking.load()
+    absurd = tracking.apply_rows(
+        saved, [{"ID": "A", "Status": "in Arbeit", "Rest (h)": 20_000_000}]
+    )
+    tracking.save_if_current(saved, absurd)
+    for path in ("views/durchfuehrung.py", "views/kontrolle.py"):
+        page = tracked.switch_page(path).run()
+        errors = " ".join(e.value for e in page.error)
+        assert "Mein Bereich" in errors and "Ansicht Team" in errors, path
 
 
 def test_project_and_team_survive_a_visit_to_another_page(site):

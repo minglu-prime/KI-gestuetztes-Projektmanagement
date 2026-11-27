@@ -574,6 +574,7 @@ def test_a_rest_that_does_not_fit_the_calendar_is_a_problem_not_a_crash(tracking
     assert forecast_bars(evaluate(absurd, today), outlook) == []
     advice, page = next_step(absurd, today)
     assert advice.startswith("Die Prognose lässt sich nicht berechnen") and page == "durchfuehrung"
+    assert "Mein Bereich" in advice and "Ansicht Team" in advice
     # The status report and the facts for the agents are still written.
     assert "**Prognose:** Nicht berechenbar" in status_report(absurd, evaluate(absurd, today))
 

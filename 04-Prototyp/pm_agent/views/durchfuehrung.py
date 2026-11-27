@@ -73,7 +73,7 @@ with st.container(border=True, key="panel-ahead"):
     heading(
         "event_upcoming",
         "Die nächsten fünf Arbeitstage",
-        python="plant aus deinem Fortschritt voraus",
+        python="plant aus dem Fortschritt des Teams voraus",
     )
     ahead = week_ahead(tracking, date.today())
     demo = demo_this_week(tracking, date.today())
@@ -82,7 +82,7 @@ with st.container(border=True, key="panel-ahead"):
     if outlook.problem:
         st.error(
             f"{NO_WEEK_AHEAD} {outlook.problem}. Prüfe Status und Rest-Stunden in der Tabelle "
-            "unten."
+            "unten; das Team korrigiert sie in „Mein Bereich“ (Ansicht Team)."
         )
     elif outlook.end is None:
         st.success(NOTHING_LEFT)

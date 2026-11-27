@@ -633,7 +633,7 @@ PROGRESS_CONFIG = {
         min_value=0.0,
         step=0.5,
         help="Was noch zu tun ist, wenn es von Plan minus Ist abweicht. Leer lassen, wenn "
-        "unbekannt. Die Prognose auf der Seite Kontrolle rechnet damit.",
+        "unbekannt. Die Prognose (Kontrolle und Projektstand) rechnet damit.",
     ),
 }
 
@@ -675,7 +675,7 @@ def forecast_chart(tracking: Tracking, result: Evaluation, outlook: Forecast) ->
         bars + lines + names,
         "Balkendiagramm: je unfertiger Aufgabe der Zeitraum laut Plan und der Zeitraum laut "
         "Prognose, mit senkrechten Linien für heute und die Deadline. Die Prognose je Aufgabe "
-        "steht auch in der Spalte „Prognose Ende“ auf der Seite Durchführung.",
+        "steht auch in der Spalte „Prognose Ende“ (Durchführung bzw. Mein Bereich).",
     )
 
 
