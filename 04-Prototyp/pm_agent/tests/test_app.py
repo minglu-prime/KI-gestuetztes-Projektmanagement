@@ -17,7 +17,7 @@ import streamlit as st
 from streamlit.testing.v1 import AppTest
 from test_tools import PROJECT, TEAM, plan_input
 
-from pm_agent import agent, followup, lab_server, lifecycle, tracking, ui, workbench
+from pm_agent import agent, comparison, followup, lab_server, lifecycle, tracking, ui, workbench
 from pm_agent.agent import AgentError, PlanningError, Replan
 from pm_agent.models import (
     Absence,
@@ -42,6 +42,7 @@ def local(monkeypatch, tmp_path):
     monkeypatch.setattr(workbench, "load_team", lambda: list(TEAM))
     monkeypatch.setattr(workbench, "saved_runs", lambda: [])
     monkeypatch.setattr(workbench, "RUNS_CSV", tmp_path / "runs.csv")
+    monkeypatch.setattr(comparison, "COMPARISON_CSV", tmp_path / "agent_vergleich.csv")
     monkeypatch.setattr(tracking, "PROJECT_FILE", tmp_path / "projekt.json")
     monkeypatch.setattr(agent, "LOG_DIR", tmp_path)
     monkeypatch.setattr(lifecycle, "FILE", tmp_path / "vorhaben.json")
@@ -61,6 +62,7 @@ def test_no_test_reaches_the_real_data_or_logs():
         workbench.DATA_DIR,
         workbench.TEAM_FILE,
         workbench.RUNS_CSV,
+        comparison.COMPARISON_CSV,
         agent.LOG_DIR,
     ]
     assert [p for p in used if any(p == r or r in p.parents for r in real)] == []
@@ -3738,3 +3740,86 @@ def test_the_startseite_has_one_primary_button(tracked):
     at = tracked.switch_page("views/startseite.py").run()
     primary = [b.label for b in at.button if b.proto.type == "primary"]
     assert primary == ["Stand prüfen"]
+
+
+def test_efficiency_comparison_works_on_all_four_core_pages_and_keeps_draft_across_pages(tracked):
+    from test_comparison import sample_answers
+
+    # Partial draft on Planung survives switching to Kontrolle and back.
+    at = tracked.switch_page(PLANUNG).run()
+    assert not at.exception and not at.error
+    for q in comparison.questions_for("planung"):
+        assert at.radio(key=f"cmp_planung_{q.id}").value is None
+    at.radio(key="cmp_planung_mode").set_value(comparison.COMMON_QUESTIONS[0].options[0])
+    at.text_input(key="cmp_planung_note").input("Zwischenstand")
+    at = at.run()
+    at = at.switch_page("views/kontrolle.py").run()
+    at = at.switch_page(PLANUNG).run()
+    assert at.radio(key="cmp_planung_mode").value == comparison.COMMON_QUESTIONS[0].options[0]
+    assert at.text_input(key="cmp_planung_note").value == "Zwischenstand"
+
+    for phase, page, manual in [
+        ("planung", PLANUNG, False),
+        ("durchfuehrung", "views/durchfuehrung.py", False),
+        ("kontrolle", "views/kontrolle.py", True),
+        ("abschluss", "views/abschluss.py", False),
+    ]:
+        at = at.switch_page(page).run()
+        assert not at.exception and not at.error
+        for qid, val in sample_answers(phase, manual=manual).items():
+            at.radio(key=f"cmp_{phase}_{qid}").set_value(val)
+        at.text_input(key=f"cmp_{phase}_note").input(f"=Notiz {phase}")
+        at.button(key=f"cmp_{phase}_submit").click().run()
+        assert not at.exception and not at.error
+        assert any("Bewertung gespeichert" in s.value for s in at.success)
+
+    saved = comparison.read_comparisons()
+    assert [row["phase"] for row in saved] == ["planung", "durchfuehrung", "kontrolle", "abschluss"]
+
+
+def test_kontrolle_shows_efficiency_summary_download_and_empty_or_damaged_states(
+    tracked, downloads, monkeypatch, tmp_path
+):
+    from test_comparison import make_entry
+
+    # Missing logs folder -> clean empty state without error.
+    monkeypatch.setattr(
+        comparison, "COMPARISON_CSV", tmp_path / "noch-nicht-da" / "agent_vergleich.csv"
+    )
+    at = tracked.switch_page("views/kontrolle.py").run()
+    assert not at.exception and not at.error
+    assert "Noch keine Effizienz-Bewertungen erfasst." in [c.value for c in at.caption]
+
+    # Normal state -> summary table and German Excel CSV download with formula protection.
+    csv_path = tmp_path / "agent_vergleich.csv"
+    monkeypatch.setattr(comparison, "COMPARISON_CSV", csv_path)
+    comparison.record_comparison(
+        make_entry("planung", note="=SUMME(A1)", agent_seconds=11.5, agent_rounds=2)
+    )
+    comparison.record_comparison(make_entry("kontrolle", manual=True))
+    at = tracked.switch_page("views/kontrolle.py").run()
+    assert not at.exception and not at.error
+    assert any("Phase" in frame.value.columns for frame in at.dataframe)
+    exported = downloads["Effizienzvergleich als CSV herunterladen"]
+    assert exported.startswith("\ufeff") and ";11,5;" in exported and "'=SUMME(A1)" in exported
+
+    # Damaged CSV + put-aside file -> explicit error, no broken table, archive named.
+    csv_path.write_bytes(b"phase,notiz\r\nplanung,a,b\r\n")
+    (tmp_path / "agent_vergleich-bis-20261127-120000.csv").write_bytes(b"alt\r\n1\r\n")
+    at = at.run()
+    assert not at.exception
+    (message,) = [
+        e.value for e in at.error if "agent_vergleich.csv konnte nicht gelesen werden" in e.value
+    ]
+    assert "die nächste Bewertung legt sie beiseite" in message
+    assert not any("Phase" in frame.value.columns for frame in at.dataframe)
+    assert any(ui.as_text("agent_vergleich-bis-20261127-120000.csv") in c.value for c in at.caption)
+
+    # Unopenable directory -> error without promising put-aside.
+    csv_path.unlink()
+    csv_path.mkdir()
+    at = at.run()
+    (message,) = [
+        e.value for e in at.error if "agent_vergleich.csv konnte nicht gelesen werden" in e.value
+    ]
+    assert "legt sie beiseite" not in message

@@ -6,7 +6,7 @@ import altair as alt
 import pandas as pd
 import streamlit as st
 
-from pm_agent import followup, lifecycle, workbench
+from pm_agent import comparison, followup, lifecycle, workbench
 from pm_agent.tracking import (
     NO_COST_INDEX,
     NO_SCHEDULE_INDEX,
@@ -38,6 +38,7 @@ from pm_agent.ui import (
     LEGEND,
     adopted_project,
     as_text,
+    comparison_card,
     consent,
     forecast_chart,
     forecast_verdict,
@@ -533,6 +534,9 @@ if tracking is not None:
                 else:
                     st.caption("Der Agent schlägt keine Gegenmaßnahmen vor.")
 
+    with agent_tab:
+        comparison_card("kontrolle")
+
 if tracking is not None:
     with agent_tab.container(border=True, key="panel-document"):
         heading("description", "Kontrollbericht", python="fasst alles zusammen")
@@ -592,4 +596,53 @@ with (agent_tab if tracking is not None else st).container(border=True, key="pan
         st.caption(
             f"Ältere Exporte mit anderen Spalten liegen daneben in {record.parent.name}/: "
             + ", ".join(aside)
+        )
+
+with (agent_tab if tracking is not None else st).container(
+    border=True, key="panel-comparison-summary"
+):
+    heading(
+        "analytics",
+        "Effizienzvergleich (mit vs. ohne Agent)",
+        python="fasst die Bewertungen zusammen",
+    )
+    st.caption(
+        "Subjektive Arbeitsweisen-Bewertungen aus Planung, Durchführung, Kontrolle und Abschluss, "
+        "ergänzt um protokollierte Agenten-Kennzahlen (ergänzend zum kontrollierten KI-Lab). Pro "
+        "Phase zeigt die Übersicht den letzten gültigen Stand und die Anzahl aller Einträge."
+    )
+    comp_record = comparison.COMPARISON_CSV
+    try:
+        comp_rows = comparison.read_comparisons()
+    except workbench.InputError as err:
+        st.error(
+            f"{comp_record.parent.name}/{comp_record.name} konnte nicht gelesen werden: "
+            f"{as_text(str(err))}. Die Datei bleibt, wie sie ist; die nächste Bewertung legt sie "
+            "beiseite und beginnt eine neue."
+        )
+    except OSError as err:
+        st.error(
+            f"{comp_record.parent.name}/{comp_record.name} konnte nicht gelesen werden: "
+            f"{as_text(str(err))}."
+        )
+    else:
+        summary_rows = comparison.summarize_comparisons(comp_rows)
+        if summary_rows:
+            st.dataframe(pd.DataFrame(summary_rows), hide_index=True)
+            with st.expander(f"Alle erfassten Bewertungen ({len(comp_rows)})"):
+                st.dataframe(pd.DataFrame(comp_rows), hide_index=True)
+            st.download_button(
+                "Effizienzvergleich als CSV herunterladen",
+                comparison.to_comparison_csv(comp_rows),
+                file_name=f"effizienzvergleich-{date.today():%Y%m%d}.csv",
+                mime="text/csv",
+                icon=":material/download:",
+            )
+        else:
+            st.caption("Noch keine Effizienz-Bewertungen erfasst.")
+    comp_aside = comparison.put_aside_comparisons()
+    if comp_aside:
+        st.caption(
+            f"Ältere Bewertungen mit anderen Spalten liegen daneben in "
+            f"{comp_record.parent.name}/: " + as_text(", ".join(comp_aside))
         )
