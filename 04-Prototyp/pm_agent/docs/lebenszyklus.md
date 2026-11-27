@@ -96,4 +96,5 @@ sequenceDiagram
 | Testfälle, Prüfung der Abdeckung | `lifecycle.check_cases`, `views/testplan.py` |
 | Ergebnisse und Fehler | `tracking.record_result`, `record_defect`, `reopen`, `views/testlauf.py` |
 | Abnahme, Lessons Learned, Abschlussbericht, Betrieb, nächster Backlog | `src/pm_agent/closing.py`, `views/abschluss.py` (Betrieb und nächster Durchlauf als Reiter) |
+| Effizienzvergleich (mit vs. ohne Agent) | `src/pm_agent/comparison.py`, `ui.comparison_card` auf Planung, Durchführung, Kontrolle, Abschluss; Übersicht und CSV-Export auf `views/kontrolle.py` (`logs/agent_vergleich.csv`) |
 | Seiten | `views/auftrag.py`, `views/anforderungen.py`, `views/entwurf.py`; Projektpfad in `ui.journey` |

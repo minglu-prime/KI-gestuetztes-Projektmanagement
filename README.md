@@ -207,6 +207,14 @@ Alles zusammen gibt es als **Kontrollbericht**: ein Markdown-Dokument aus einer 
 Kennzahlen, Prognose, Verzug, Kosten und, wenn erstellt, der Bewertung des Agenten samt
 nachgerechneter Wirkung.
 
+Auf den vier Hauptseiten **Planung**, **Durchführung**, **Kontrolle** und **Abschluss** lässt sich
+optional ein kurzer strukturierter **Effizienzvergleich (mit vs. ohne Agent)** ausfüllen
+(Zeitaufwand, Qualität, Arbeitsbelastung, phasenspezifischer Nutzen). Python verknüpft die Antworten
+mit dem letzten gültigen Agentenlauf der Phase und schreibt sie lokal nach `logs/agent_vergleich.csv`;
+die Seite Kontrolle (Reiter „Agent und Bericht“) fasst alle vier Phasen zusammen und bietet einen
+CSV-Export. Die Bewertung ergänzt das kontrollierte KI-Lab um subjektive Eindrücke aus dem
+Arbeitsablauf.
+
 <div align="center">
 <img src="04-Prototyp/pm_agent/assets/screenshots/kontrolle.jpg" width="820" alt="Prognose auf der Seite Kontrolle: voraussichtliches Ende 29.12.2026, neun Arbeitstage nach Plan, Deadline um sieben Arbeitstage verpasst; die drei verspäteten Aufgaben, die andere aufhalten; der Knopf „Rest mit dem Agenten umplanen“; Diagramm mit Plan und Prognose je Aufgabe und Linien für heute und die Deadline">
 </div>

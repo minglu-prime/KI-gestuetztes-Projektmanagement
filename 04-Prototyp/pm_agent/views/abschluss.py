@@ -44,6 +44,7 @@ from pm_agent.ui import (
     adopted_project,
     as_text,
     check_verdict,
+    comparison_card,
     consent,
     heading,
     kept_editor,
@@ -304,6 +305,8 @@ with closing_tab:
                     st.rerun()
         if tracking.lessons:
             messages([], check_lessons(Lessons(items=tracking.lessons), tracking))
+
+    comparison_card("abschluss")
 
     with st.container(border=True, key="panel-document"):
         heading("description", "Abschlussbericht", python="füllt die Vorlage aus")

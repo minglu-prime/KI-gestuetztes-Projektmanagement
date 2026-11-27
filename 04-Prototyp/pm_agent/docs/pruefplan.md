@@ -46,13 +46,14 @@ Bestanden: `uv sync` ohne Fehler.
 | Lebenszyklus | `test_lifecycle.py`, `test_testplan.py` | Projektauftrag, Anforderungen, Entwurf, Testplan |
 | Abschluss, Folgeprojekt | `test_closing.py`, `test_followup.py` | Lessons learned, Kennzahlen, nächster Durchlauf |
 | Team und Dateien | `test_workbench.py`, `test_reports.py` | Teamdatei, Exporte (Markdown, CSV) |
+| Effizienzvergleich | `test_comparison.py` | Optionen/Modelle, objektive Log-Zuordnung (inkl. beschädigter Logs), `agent_vergleich.csv`, Excel-Export mit Formelschutz, isolierte Widget-Tests |
 | Werkzeuge der Agenten | `test_tools.py`, `test_agent.py` | Einreichungswerkzeuge, Längengrenzen (`tools.LIMITS`), Antwortprüfung |
 | Ergebniszeile | `test_verdict.py` | `check_verdict`, `phase_verdict`, `forecast_verdict` |
 | Diagramme, Barrierefreiheit | `test_diagram.py`, `test_accessibility.py` | Gantt/Diagramme, Kontrast ≥ 4,5 : 1, Bildbeschreibungen |
-| Quellregeln | `test_source_rules.py` | Verbotene Muster in allen Seiten (z. B. „Claude“ in der Oberfläche, Vorschauen, ISO-Daten) |
+| Quellregeln | `test_source_rules.py` | Verbotene Muster in allen Seiten (z. B. „Claude“ in der Oberfläche, Vorschauen, ISO-Daten, `comparison.py` ohne Streamlit, vier Seiten mit `comparison_card`) |
 | KI-Lab | in `ki_lab`: `uv run --no-project --python 3.11 python -m unittest discover -s tests -v` | Freeze, Abläufe, Zeitlimit, Auswertung (`summarize`), HTTP, Stil |
 
-Bestanden: alle grün. Erwartung zum Vergleich: 661 Tests `pm_agent` (+1 übersprungen), 43 `ki_lab`.
+Bestanden: alle grün. Erwartung zum Vergleich: 764 Tests `pm_agent` (+4 übersprungen: Live-API und `test_browsers.py` ohne `PM_BROWSERS`), 45 `ki_lab`.
 Abweichende Anzahl melden.
 
 ## 4. Integrations- und Kettentests (mehrere Module zusammen, weiter ohne Netz)
@@ -60,7 +61,7 @@ Abweichende Anzahl melden.
 | Kette | Datei | Was durchläuft |
 |---|---|---|
 | Agentenschleife | `test_agent_loop.py` | echter OpenAI-SDK-Client gegen eine geskriptete Fake-API: Runden, Ablehnung, Protokolle, fehlende Zugangsdaten |
-| Seiten mit Streamlit AppTest | `test_app.py` | jede Seite rendert; Menü und Reiter (`ui.GROUPS`); Ergebniszeile oben; Tabellen bearbeiten → Seite wechseln → zurück → speichern (`edit_table`) |
+| Seiten mit Streamlit AppTest | `test_app.py` | jede Seite rendert; Menü und Reiter (`ui.GROUPS`); Ergebniszeile oben; Tabellen bearbeiten → Seite wechseln → zurück → speichern (`edit_table`); Effizienzvergleich auf Planung/Durchführung/Kontrolle/Abschluss samt Kontrolle-Übersicht und beschädigter `agent_vergleich.csv` |
 | Robustheit | `test_robustness.py` | unlesbare/beschädigte Dateien, beschädigte Teamdatei, KI-Lab-Kindprozess |
 | Site ↔ KI-Lab | `test_lab_server.py` | echter Start des Studienservers, Antwort, erlaubter Frame, Stopp, belegter Port |
 | Start | `test_launch.py` | Streamlit bindet an Loopback |
@@ -68,8 +69,9 @@ Abweichende Anzahl melden.
 **Fachliche Kette** (AGENTS.md: ein Fall über alle Phasen):
 `uv run pytest tests/test_app.py -q -k one_project_goes_from_the_auftrag_to_the_next_run`
 führt ein Projekt nur über die Seiten durch alle neun Schritte, vom Projektauftrag bis zum
-neuen Durchlauf. Zusätzlich mit `-k "plan or durchf or kontroll or abschluss"` die Fälle
-heraussuchen, die einzelne Übergänge genauer prüfen. Berichten, welche Phasenübergänge
+neuen Durchlauf (ohne dass der optionale Effizienzvergleich blockiert). Zusätzlich mit
+`-k "plan or durchf or kontroll or abschluss or efficiency"` die Fälle
+heraussuchen, die einzelne Übergänge und den Effizienzvergleich genauer prüfen. Berichten, welche Phasenübergänge
 **kein** Test abdeckt (Lücke, keine Reparatur).
 
 Bestanden: alle grün, keine Warnung über offene Dateien oder hängende Prozesse.
@@ -107,10 +109,14 @@ Agenten starten**:
 4. Seiten mit Prüfung beginnen mit einer Ergebniszeile („Achtung“, „Zu entscheiden“ oder
    „In Ordnung“).
 5. Ohne `data/` (frischer Checkout): jede Seite zeigt einen leeren Zustand statt eines Fehlers.
-6. Breite 375 px: kein waagrechtes Scrollen (`document.documentElement.scrollWidth <= 375`).
-7. Je ein Screenshot von Startseite und Planung bei 1440 px.
+6. Effizienzvergleich auf Planung (Schritt 6), Durchführung, Kontrolle (Reiter „Agent und Bericht“)
+   und Abschluss: Karte samt Hinweis „Subjektive Arbeitsweisen-Bewertung (ergänzend zum
+   kontrollierten KI-Lab)“ sichtbar, keine vorausgewählte Option; auf Kontrolle Übersicht/Leerzustand
+   und CSV-Download ohne Fehler.
+7. Breite 375 px (hell und dunkel): kein waagrechtes Scrollen (`document.documentElement.scrollWidth <= 375`).
+8. Je ein Screenshot von Startseite und Planung bei 1440 px.
 
-Danach Server beenden. Bestanden: 1–6 erfüllt.
+Danach Server beenden. Bestanden: 1–7 erfüllt.
 
 ## 7. Smoke-Test KI-Lab (ohne KI-Aufruf)
 
@@ -137,8 +143,9 @@ diff /tmp/vorher.txt /tmp/nachher.txt && echo "Daten unverändert"
 git status --short
 ```
 
-Bestanden: „Daten unverändert“ und `git status` ohne Änderungen (außer diesem Plan, falls er
-noch nicht eingecheckt ist).
+Bestanden: „Daten unverändert“ (einschließlich `logs/agent_vergleich.csv` und eventueller
+`agent_vergleich-bis-*.csv`: der reine Lese-Smoke legt sie nicht neu an) und `git status` ohne
+Änderungen (außer diesem Plan, falls er noch nicht eingecheckt ist).
 
 ## Nicht Teil dieses Laufs
 

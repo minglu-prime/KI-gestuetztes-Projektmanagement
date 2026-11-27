@@ -704,3 +704,42 @@ def test_reduced_motion_stops_everything_that_travels():
     # the motion PR).
     app = (ROOT / "app.py").read_text(encoding="utf-8")
     assert "matchMedia('(prefers-reduced-motion: reduce)')" in app
+
+
+def test_comparison_module_stays_free_of_streamlit():
+    # Pure domain logic so unit tests and future storage backends run without Streamlit.
+    tree = ast.parse((ROOT / "src" / "pm_agent" / "comparison.py").read_text(encoding="utf-8"))
+    imports = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            imports += [alias.name for alias in node.names]
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            imports.append(node.module)
+    assert not [name for name in imports if name == "streamlit" or name.startswith("streamlit.")]
+
+
+def test_the_four_core_pages_each_mount_their_efficiency_comparison():
+    expected = {
+        "planung.py": "planung",
+        "durchfuehrung.py": "durchfuehrung",
+        "kontrolle.py": "kontrolle",
+        "abschluss.py": "abschluss",
+    }
+    for filename, phase in expected.items():
+        tree = ast.parse((ROOT / "views" / filename).read_text(encoding="utf-8"))
+        mounted = []
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            func = node.func
+            name = func.id if isinstance(func, ast.Name) else getattr(func, "attr", None)
+            if name == "comparison_card" and node.args and isinstance(node.args[0], ast.Constant):
+                mounted.append(node.args[0].value)
+        assert mounted == [phase], f"{filename}: {mounted}"
+
+
+def test_comparison_path_constant_follows_the_runtime_default_convention():
+    # Ensures COMPARISON_CSV stays inside the (_DIR|_FILE|_CSV|PORT)$ pattern checked above.
+    from pm_agent import comparison
+
+    assert hasattr(comparison, "COMPARISON_CSV")

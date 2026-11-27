@@ -42,6 +42,7 @@ from pm_agent.ui import (
     as_text,
     check_verdict,
     chip,
+    comparison_card,
     heading,
     messages,
     notify,
@@ -1151,6 +1152,16 @@ with tabs[5]:
                     )
                 else:
                     st.success("Übernommen. Weiter auf den Seiten Durchführung und Kontrolle.")
+
+    comparison_card(
+        "planung",
+        review_seconds=(
+            round(time.monotonic() - state.shown_at, 1)
+            if state.get("shown_at") is not None
+            else None
+        ),
+        edited=state.get("hand_edited", state.edited) if state.plan is not None else None,
+    )
 
 
 # Where the planning stands, above the steps.

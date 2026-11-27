@@ -26,6 +26,7 @@ from pm_agent.ui import (
     adopted_project,
     as_text,
     chip,
+    comparison_card,
     consent,
     forecast_verdict,
     heading,
@@ -147,6 +148,8 @@ with st.container(border=True, key="panel-agent"):
             for step in summary.next_steps:
                 st.markdown(f"- **{as_text(step.task_id)}:** {as_text(step.action)}")
         st.caption("Der Vorschlag steht jetzt auch im Statusbericht unten.")
+
+comparison_card("durchfuehrung")
 
 with st.container(border=True, key="panel-documents"):
     heading("description", "Dokumente aus Vorlagen", python="füllt sie aus")
