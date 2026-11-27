@@ -27,7 +27,7 @@ Projektordner für `uv` und die relative Datei `.env`.
 Ansicht ordnet die Seiten, sie schützt keine Daten. In der Ansicht Leitung hat das Menü acht
 Einträge. Vorbereiten, Kontrolle und Info fassen mehrere Seiten zusammen: Sie stehen als Reiter
 oben auf der Seite (`ui.GROUPS`), wobei der Eintrag der Gruppe im Menü hervorgehoben bleibt.
-Team, Stunden und Fortschritt sieht die Leitung nur: Sie trägt jedes Teammitglied selbst ein.
+Team, Stunden und Fortschritt sieht die Leitung nur: Jedes Teammitglied trägt sie selbst ein.
 In der Ansicht Team wählt man unter „Ich bin“ seinen Namen (oder „Neu im Team …“); das Menü
 zeigt dann Mein Bereich, Projektstand, KI-Lab und Info. Die Seiten:
 
@@ -89,10 +89,11 @@ sie funktionieren die Runden ohne KI, KI-Runden melden einen Fehler.
 
 Sechs Schritte als Reiter:
 
-1. **Team**: Personen mit Skills (z. B. `Python 4, SQL 3`), Wochenstunden und Abwesenheiten
-   (z. B. `01.12.2026–05.12.2026, 23.12.2026`: an diesen Tagen wird für die Person keine
-   Arbeit eingeplant); lokal speichern
-   in `data/team.json`. Ohne Zustimmung des Teams startet keine Planung.
+1. **Team**: zeigt das Team aus `data/team.json` nur lesend — Personen mit Skills (z. B.
+   `Python 4, SQL 3`), Wochenstunden und Abwesenheiten (z. B. `01.12.2026–05.12.2026, 23.12.2026`:
+   an diesen Tagen wird für die Person keine Arbeit eingeplant). Jedes Teammitglied pflegt seine
+   Angaben selbst in der Ansicht Team unter „Mein Bereich“. Ohne Zustimmung des Teams startet
+   keine Planung.
 2. **Projekt**: Idee, Start, Deadline und, wenn es welche gibt, freie Tage für alle
    (Feiertage, eine Pause), an denen niemand eingeplant wird.
 3. **Planung**: Der Agent plant, jede Runde erscheint sofort. Alternativ einen protokollierten Lauf
@@ -156,9 +157,10 @@ rechnen nicht selbst. Sie sind ein Gerüst: Weitere Werkzeuge (zum Beispiel eine
 Umplanung zum Durchrechnen) kommen in `followup.py` neben das Einreichen-Werkzeug. 
 
 Zugang: `.env.example` nach `.env` kopieren, `OPENAI_API_KEY` und das Modell in
-`PM_AGENT_MODEL` eintragen (kein Standard; ohne den Wert gilt `PM_MODEL` des KI-Labs). Ein
-anderer OpenAI-kompatibler Endpunkt lässt sich mit `OPENAI_BASE_URL` setzen; das Reasoning (Standard `medium`)
-steht in `PM_AGENT_REASONING_EFFORT`.
+`PM_AGENT_MODEL` eintragen (kein Standard; ohne den Wert gilt `PM_MODEL` des KI-Labs). Bei einem
+OpenAI-kompatiblen Endpunkt wie KI:connect der HSBI muss zusätzlich `OPENAI_BASE_URL` gesetzt sein
+(sonst gehen Anfragen an `api.openai.com` und scheitern mit 401); das Reasoning (Standard
+`medium`) steht in `PM_AGENT_REASONING_EFFORT`.
 
 ## Entwicklung
 
@@ -194,10 +196,10 @@ Das Repository ist öffentlich. Teamdaten (`data/`, auch Projektauftrag, Anforde
 ausgeschlossen. Für Projektauftrag, Anforderungen und Entwurf gehen nur Idee, Termine und die
 Texte von Auftrag und Anforderungen an die API, keine Angaben zum Team; Beteiligte stehen dort als Rollen.
 
-Der Agent schickt Projektidee und Teamdaten (Namen, Skills, Wochenstunden, Notizen) an den
-KI-Dienst in `OPENAI_BASE_URL` (in diesem Projekt der Endpunkt der Hochschule; ohne die Variable
-die OpenAI API). Teammitglieder müssen vorher zustimmen; die Zustimmung nennt den Dienst
-(`ui.ai_service`).
+Der Agent schickt Projektidee und Teamdaten (Namen, Skills, Wochenstunden, Abwesenheiten,
+Notizen) an den KI-Dienst in `OPENAI_BASE_URL` (in diesem Projekt der Endpunkt der Hochschule;
+ohne die Variable die OpenAI API). Teammitglieder müssen vorher zustimmen; die Zustimmung nennt
+den Dienst (`ui.ai_service`).
 
 Das KI-Lab speichert Sitzungen in `../ki_lab/data/` (ebenfalls ausgeschlossen) und schickt in
 KI-Runden Fallmaterial, Entwurf und Frage an denselben Dienst; die Einwilligung im Lab nennt ihn.

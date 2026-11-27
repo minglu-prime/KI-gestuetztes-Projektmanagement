@@ -223,8 +223,9 @@ Arbeitsablauf.
 
 Ein eigener kleiner Server für den kontrollierten Vergleich: zwei Planungsfälle, einer ohne und
 einer mit KI-Hilfe, je 25 Minuten, mit Protokoll und Auswertung. Die Website startet ihn und
-bettet ihn ein. Das KI-Lab nutzt die OpenAI API und braucht nur die Python-Standardbibliothek.
-Mehr dazu in [`04-Prototyp/ki_lab`](04-Prototyp/ki_lab/README.md).
+bettet ihn ein. Das KI-Lab nutzt die OpenAI-kompatible Schnittstelle (über `OPENAI_BASE_URL`) und
+braucht nur die Python-Standardbibliothek. Mehr dazu in
+[`04-Prototyp/ki_lab`](04-Prototyp/ki_lab/README.md).
 
 ## Schnellstart
 
@@ -233,7 +234,7 @@ Voraussetzung: [uv](https://docs.astral.sh/uv/) und Python 3.11 oder neuer.
 ```bash
 cd 04-Prototyp/pm_agent
 uv sync
-cp .env.example .env        # OPENAI_API_KEY und PM_AGENT_MODEL eintragen
+cp .env.example .env        # OPENAI_API_KEY, OPENAI_BASE_URL (für KI:connect) und PM_AGENT_MODEL eintragen
 uv run --env-file .env streamlit run app.py
 ```
 
@@ -282,8 +283,9 @@ Einzelheiten zu Seiten, Agenten und Entwicklung:
 
 Was der Prototyp bewusst vereinfacht:
 
-- **Kalender:** Arbeitstage Montag bis Freitag. Abwesenheiten trägt die Projektleitung je
-  Person ein; an diesen Tagen wird keine Arbeit eingeplant. Feiertage kennt der Kalender
+- **Kalender:** Arbeitstage Montag bis Freitag. Persönliche Abwesenheiten trägt jedes
+  Teammitglied selbst in „Mein Bereich“ (Ansicht Team) ein; an diesen Tagen wird für die Person
+  keine Arbeit eingeplant. Feiertage kennt der Kalender
   nicht von selbst: Die Projektleitung trägt sie beim Projekt als freie Tage für alle ein.
   Puffer und Verspätung zur Deadline zählen in Arbeitstagen des Projekts, also ohne diese
   freien Tage; Abwesenheiten einzelner Personen zählen dabei mit.
@@ -306,8 +308,9 @@ Was der Prototyp bewusst vereinfacht:
 Das Repository ist öffentlich. Teamdaten (`data/`), Protokolle (`logs/`), Sitzungen des KI-Labs
 und `.env` bleiben lokal und sind per `.gitignore` ausgeschlossen.
 
-Die Agenten schicken Projektidee und Teamdaten (Namen, Skills, Wochenstunden, Notizen) an den
-KI-Dienst in `OPENAI_BASE_URL` (in diesem Projekt der OpenAI-kompatible Endpunkt der Hochschule),
+Die Agenten schicken Projektidee und Teamdaten (Namen, Skills, Wochenstunden, Abwesenheiten,
+Notizen) an den KI-Dienst in `OPENAI_BASE_URL` (in diesem Projekt der OpenAI-kompatible Endpunkt
+der Hochschule),
 das KI-Lab schickt in KI-Runden Fallmaterial, Entwurf und Frage an denselben Dienst. Die Website
 verlangt deshalb vor jedem Aufruf die Bestätigung, dass alle Personen zugestimmt haben; der Text
 nennt den Dienst.
