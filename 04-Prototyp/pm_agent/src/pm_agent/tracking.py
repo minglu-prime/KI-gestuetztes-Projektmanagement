@@ -539,11 +539,15 @@ def demo_this_week(tracking: Tracking, today: date) -> str | None:
     return None
 
 
-def record_result(tracking: Tracking, result: CaseResult, plan: CasePlan) -> Tracking:
+def record_result(
+    tracking: Tracking, result: CaseResult, plan: CasePlan, today: date | None = None
+) -> Tracking:
     """The result of a test case, replacing an earlier one of the same case."""
     version = plan.versions.get(result.case_id)
     if version is None:
         raise InputError(f"Testfall '{result.case_id}' ist nicht eindeutig im Testplan")
+    if today is not None and result.on > today:
+        raise InputError(f"Das Testdatum {_date(result.on)} liegt in der Zukunft")
     result = result.model_copy(update={"version": version})
     others = [r for r in tracking.results if r.case_id != result.case_id]
     return tracking.model_copy(update={"results": [*others, result]})
@@ -558,6 +562,22 @@ def current_results(tracking: Tracking, plan: CasePlan | None) -> dict[str, Case
         for r in tracking.results
         if r.version is not None and r.version == plan.versions.get(r.case_id)
     }
+
+
+def defect_cases(plan: CasePlan, defect: Defect | None = None) -> dict[str, str]:
+    """Case ID -> label for the defect form, keeping a deleted case while editing its defect."""
+    labels = {c.id: f"{c.id} · {c.title}" for c in plan.cases}
+    if defect is not None and defect.case_id not in labels:
+        labels[defect.case_id] = f"{defect.case_id} · nicht mehr im Testplan"
+    return labels
+
+
+def defect_tasks(tracking: Tracking, defect: Defect | None = None) -> dict[str, str]:
+    """Task ID -> label for the defect form, keeping a removed task while editing its defect."""
+    labels = {"": "keine", **{t.id: f"{t.id} · {t.title}" for t in tracking.plan.tasks}}
+    if defect is not None and defect.task_id and defect.task_id not in labels:
+        labels[defect.task_id] = f"{defect.task_id} · nicht mehr im Plan"
+    return labels
 
 
 def record_defect(tracking: Tracking, defect: Defect) -> Tracking:
@@ -579,17 +599,34 @@ def record_defect(tracking: Tracking, defect: Defect) -> Tracking:
     return tracking.model_copy(update={"defects": [*others, defect]})
 
 
+def can_reopen(tracking: Tracking, defect: Defect) -> bool:
+    """Whether `defect` is open and points to a finished task of the current plan."""
+    return (
+        defect.status == "offen"
+        and bool(defect.task_id)
+        and defect.task_id in tracking.progress
+        and tracking.progress[defect.task_id].status == "fertig"
+    )
+
+
 def reopen(tracking: Tracking, defect_id: str) -> Tracking:
     """The task of a defect goes back to "in Arbeit": the defect is work again."""
     defect = next((d for d in tracking.defects if d.id == defect_id), None)
     if defect is None or not defect.task_id:
         raise InputError(f"Der Fehler {defect_id} hat keine Aufgabe, die sich öffnen ließe")
+    if defect.status != "offen":
+        raise InputError(f"Der Fehler {defect_id} ist bereits behoben.")
     if defect.task_id not in tracking.progress:
         raise InputError(
             f"Die Aufgabe '{defect.task_id}' von {defect_id} ist nicht mehr im Plan. Plane sie "
             "neu ein oder gib den Fehler einer anderen Aufgabe."
         )
     done = tracking.progress[defect.task_id]
+    if done.status != "fertig":
+        raise InputError(
+            f"Die Aufgabe '{defect.task_id}' von {defect_id} ist nicht fertig "
+            f"(Status: {done.status}) und muss nicht wieder geöffnet werden."
+        )
     progress = {
         **tracking.progress,
         defect.task_id: done.model_copy(update={"status": "in Arbeit", "finished_on": None}),
@@ -660,9 +697,7 @@ def check_results(tracking: Tracking, plan: CasePlan) -> RetroCheck:
     warnings += [
         f"Fehler {d.id} ist offen, seine Aufgabe '{d.task_id}' ist aber fertig"
         for d in tracking.defects
-        if d.status == "offen"
-        and d.task_id in tracking.progress
-        and tracking.progress[d.task_id].status == "fertig"
+        if can_reopen(tracking, d)
     ]
     return RetroCheck(errors, warnings)
 

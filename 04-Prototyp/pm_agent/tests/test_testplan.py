@@ -464,3 +464,81 @@ def test_open_defects_come_next_when_all_tasks_are_done(adopted):
     tracking = record_defect(done, Defect(case_id="T2", severity="schwer", cause="x", task_id="B"))
     advice, page = next_step(tracking, date(2026, 11, 20))
     assert page == "testlauf" and "1 Fehler ist offen" in advice
+
+
+def test_reopen_only_allows_finished_tasks_of_open_defects(adopted):
+    from pm_agent.tracking import Defect, apply_rows, can_reopen, record_defect, reopen
+
+    open_task = record_defect(
+        adopted, Defect(case_id="T2", severity="mittel", cause="x", task_id="B")
+    )
+    assert not can_reopen(open_task, open_task.defects[0])
+    with pytest.raises(InputError, match="nicht fertig"):
+        reopen(open_task, "F1")
+
+    started = apply_rows(open_task, [{"ID": "B", "Status": "in Arbeit"}])
+    assert not can_reopen(started, started.defects[0])
+    with pytest.raises(InputError, match="nicht fertig"):
+        reopen(started, "F1")
+
+    finished = apply_rows(open_task, [{"ID": "B", "Status": "fertig"}])
+    assert can_reopen(finished, finished.defects[0])
+    closed = record_defect(finished, finished.defects[0].model_copy(update={"status": "behoben"}))
+    assert not can_reopen(closed, closed.defects[0])
+    with pytest.raises(InputError, match="bereits behoben"):
+        reopen(closed, "F1")
+
+    gone = finished.model_copy(update={"progress": {"A": finished.progress["A"]}})
+    assert not can_reopen(gone, gone.defects[0])
+
+
+def test_record_result_rejects_a_future_date_when_today_is_given(adopted):
+    from datetime import date
+
+    from pm_agent.tracking import CaseResult, record_result
+
+    plan = evidence()
+    today = date(2026, 11, 20)
+    earlier = record_result(
+        adopted,
+        CaseResult(case_id="T1", result="bestanden", on=date(2026, 11, 18)),
+        plan,
+        today=today,
+    )
+    assert earlier.results[0].on == date(2026, 11, 18)
+    with pytest.raises(InputError, match="liegt in der Zukunft"):
+        record_result(
+            adopted,
+            CaseResult(case_id="T1", result="bestanden", on=date(2026, 11, 21)),
+            plan,
+            today=today,
+        )
+
+
+def test_defect_form_options_keep_deleted_case_and_removed_task_while_editing(adopted):
+    from pm_agent.tracking import Defect, defect_cases, defect_tasks
+
+    plan = evidence(ACCEPT, INTEGRATE)
+    trimmed = adopted.model_copy(
+        update={
+            "plan": adopted.plan.model_copy(update={"tasks": [adopted.plan.tasks[1]]}),
+            "progress": {"B": adopted.progress["B"]},
+        }
+    )
+    assert defect_cases(plan) == {
+        "T1": "T1 · Buchung erscheint",
+        "T2": "T2 · Server legt Buchung an",
+    }
+    assert defect_tasks(trimmed) == {"": "keine", "B": "B · API"}
+
+    editing = Defect(id="F1", case_id="T9", severity="schwer", cause="Alt", task_id="A")
+    assert defect_cases(plan, editing) == {
+        "T1": "T1 · Buchung erscheint",
+        "T2": "T2 · Server legt Buchung an",
+        "T9": "T9 · nicht mehr im Testplan",
+    }
+    assert defect_tasks(trimmed, editing) == {
+        "": "keine",
+        "B": "B · API",
+        "A": "A · nicht mehr im Plan",
+    }

@@ -17,9 +17,12 @@ from pm_agent.tracking import (
     CaseResult,
     Defect,
     Tracking,
+    can_reopen,
     case_status,
     check_results,
     current_results,
+    defect_cases,
+    defect_tasks,
     load,
     record_defect,
     record_result,
@@ -64,8 +67,13 @@ def change(make, done: Callable[[Tracking], str]) -> Tracking | None:
 
 def on_result(plan: CasePlan) -> None:
     versions = plan.versions
+    tested_on = state.get("test_date")
+    if tested_on is None:
+        state.test_page_error = "Bitte das Testdatum angeben."
+        return
+    today = date.today()
     result = CaseResult(
-        case_id=state.test_case, result=state.test_result, on=date.today(), note=state.test_note
+        case_id=state.test_case, result=state.test_result, on=tested_on, note=state.test_note
     )
 
     checked = []  # the test plan as it stood when saving
@@ -75,15 +83,19 @@ def on_result(plan: CasePlan) -> None:
         if current is None or current.versions.get(result.case_id) != versions.get(result.case_id):
             raise InputError("Der Testfall wurde inzwischen geändert. Prüfe ihn erneut.")
         checked.append(current)
-        return record_result(t, result, current)
+        return record_result(t, result, current, today=today)
 
     saved = change(record, lambda t: f"Ergebnis gespeichert: {result.case_id} {result.result}.")
     if saved is not None:
         state.test_note = ""
         # On to the next case without a result, counted against the cases as they are now.
         state.test_case = first_open(checked[-1], saved, after=result.case_id)
-        # A failure without an open defect waits for one in the form below.
-        if result.result == "fehlgeschlagen" and result.case_id not in open_defects(saved):
+        # A failure without an open defect waits for one in the form below (unless editing one).
+        if (
+            result.result == "fehlgeschlagen"
+            and result.case_id not in open_defects(saved)
+            and not state.get("defect_id")
+        ):
             state.defect_case = result.case_id
 
 
@@ -111,6 +123,8 @@ def on_defect() -> None:
     def record(t: Tracking) -> Tracking:
         # A chosen entry keeps what the form does not show: its status and the day of the fix.
         old = next((d for d in t.defects if d.id == chosen), None)
+        if chosen and old is None:
+            raise InputError(f"Fehler {chosen} ist nicht mehr vorhanden.")
         defect = Defect(**{**old.model_dump(), **fields}) if old else Defect(**fields)
         return record_defect(t, defect)
 
@@ -122,15 +136,14 @@ def on_defect() -> None:
         state.defect_task = ""
 
 
-def on_pick_defect(defects: dict[str, Defect], cases: dict[str, str]) -> None:
+def on_pick_defect(defects: dict[str, Defect]) -> None:
     """Fill the form with the chosen defect, or empty it for a new one."""
     defect = defects.get(state.defect_id)
     state.defect_cause = defect.cause if defect else ""
     state.defect_task = (defect.task_id or "") if defect else ""
     if defect:
         state.defect_severity = defect.severity
-        if defect.case_id in cases:
-            state.defect_case = defect.case_id
+        state.defect_case = defect.case_id
 
 
 def on_reopen(defect_id: str) -> None:
@@ -202,6 +215,9 @@ with st.container(border=True, key="panel-results"):
     st.radio(
         "Ergebnis", ["bestanden", "fehlgeschlagen", "blockiert"], horizontal=True, key="test_result"
     )
+    if "test_date" not in state:
+        state.test_date = date.today()
+    st.date_input("Getestet am", max_value=date.today(), format="DD.MM.YYYY", key="test_date")
     st.text_input("Notiz", key="test_note")
     st.button("Ergebnis speichern", icon=":material/save:", on_click=on_result, args=(plan,))
 
@@ -213,8 +229,9 @@ with st.container(border=True, key="panel-defects"):
         [w for w in warnings if w not in untested(tracking, plan)],
         said=said_in_full(errors, warnings),
     )
-    tasks = {t.id: t.title for t in tracking.plan.tasks}
     defects_by_id = {d.id: d for d in tracking.defects}
+    if state.get("defect_id") and state.get("defect_id") not in defects_by_id:
+        state.defect_id = ""
     if defects_by_id:
         st.selectbox(
             "Eintrag",
@@ -222,9 +239,11 @@ with st.container(border=True, key="panel-defects"):
             format_func=lambda d: f"{d} ändern ({defects_by_id[d].cause})" if d else "Neuer Fehler",
             key="defect_id",
             on_change=on_pick_defect,
-            args=(defects_by_id, titles),
+            args=(defects_by_id,),
         )
-    if state.get("defect_case") not in titles:
+    editing = defects_by_id.get(state.get("defect_id", ""))
+    case_labels = defect_cases(plan, editing)
+    if state.get("defect_case") not in case_labels:
         # A failed case without an open defect is what the form is most likely for.
         latest = current_results(tracking, plan)
         open_cases = open_defects(tracking)
@@ -239,17 +258,26 @@ with st.container(border=True, key="panel-defects"):
             plan.cases[0].id,
         )
     st.selectbox(
-        "Gefunden von", list(titles), format_func=lambda c: f"{c} · {titles[c]}", key="defect_case"
+        "Gefunden von",
+        list(case_labels),
+        format_func=case_labels.__getitem__,
+        key="defect_case",
     )
     st.radio("Schwere", ["schwer", "mittel", "leicht"], horizontal=True, key="defect_severity")
     st.text_input("Vermutete Ursache", key="defect_cause")
+    task_labels = defect_tasks(tracking, editing)
+    if state.get("defect_task") not in task_labels:
+        state.defect_task = ""
     st.selectbox(
         "Aufgabe, die ihn behebt",
-        ["", *tasks],
-        format_func=lambda t: f"{t} · {tasks[t]}" if t else "keine",
+        list(task_labels),
+        format_func=task_labels.__getitem__,
         key="defect_task",
     )
-    st.button("Fehler erfassen", icon=":material/add:", on_click=on_defect)
+    if editing is not None:
+        st.button("Änderungen speichern", icon=":material/save:", on_click=on_defect)
+    else:
+        st.button("Fehler erfassen", icon=":material/add:", on_click=on_defect)
     if tracking.defects:
         st.dataframe(
             pd.DataFrame(
@@ -272,8 +300,8 @@ with st.container(border=True, key="panel-defects"):
             hide_index=True,
         )
         for defect in [d for d in tracking.defects if d.status == "offen"]:
-            left, right = st.columns(2)
-            if defect.task_id:
+            if can_reopen(tracking, defect):
+                left, right = st.columns(2)
                 left.button(
                     f"{defect.id}: Aufgabe {defect.task_id} wieder öffnen",
                     key=f"reopen_{defect.id}",
@@ -281,7 +309,10 @@ with st.container(border=True, key="panel-defects"):
                     on_click=on_reopen,
                     args=(defect.id,),
                 )
-            right.button(
+                target = right
+            else:
+                target = st
+            target.button(
                 f"{defect.id}: behoben",
                 key=f"fixed_{defect.id}",
                 icon=":material/check:",
