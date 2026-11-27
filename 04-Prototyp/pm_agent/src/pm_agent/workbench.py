@@ -888,17 +888,17 @@ def to_csv(plan: Plan, result: CheckResult) -> str:
     for row in plan_rows(plan):
         s = dates.get(row["ID"])
         writer.writerow(
-            [_csv_cell(row[c]) for c in PLAN_COLUMNS[:-1]]
+            [csv_cell(row[c]) for c in PLAN_COLUMNS[:-1]]
             + [
                 _date(s.start) if s else "",
                 _date(s.end) if s else "",
-                _csv_cell(row["Begründung"]),
+                csv_cell(row["Begründung"]),
             ]
         )
     return out.getvalue()
 
 
-def _csv_cell(value: Any) -> Any:
+def csv_cell(value: Any) -> Any:
     """A number with a decimal comma; text that Excel would run as a formula (it begins with
     = + - @ or a tab or line break) with an apostrophe in front, so Excel shows it as text."""
     if isinstance(value, float):
@@ -906,6 +906,9 @@ def _csv_cell(value: Any) -> Any:
     if isinstance(value, str) and value[:1] in ("=", "+", "-", "@", "\t", "\r", "\n"):
         return "'" + value
     return value
+
+
+_csv_cell = csv_cell
 
 
 def _skills(text: str) -> dict[str, int]:

@@ -9,7 +9,7 @@ import os
 import runpy
 from pathlib import Path
 
-from pm_agent import agent, lab_server, lifecycle, tracking, workbench
+from pm_agent import agent, comparison, lab_server, lifecycle, tracking, workbench
 
 folder = Path(os.environ["PM_SMOKE_DIR"])
 tracking.PROJECT_FILE = folder / "data" / "projekt.json"
@@ -17,6 +17,7 @@ lifecycle.FILE = folder / "data" / "vorhaben.json"
 workbench.DATA_DIR = folder / "data"
 workbench.TEAM_FILE = folder / "data" / "team.json"
 workbench.RUNS_CSV = folder / "logs" / "runs.csv"
+comparison.COMPARISON_CSV = folder / "logs" / "agent_vergleich.csv"
 agent.LOG_DIR = folder / "logs"
 lab_server.PORT = int(os.environ["PM_SMOKE_LAB_PORT"])
 

@@ -1,10 +1,12 @@
 """Streamlit pieces that several pages share."""
 
 import datetime
+import math
 import os
 import re
 from collections.abc import Callable, Sequence
 from html import escape
+from pathlib import Path
 from typing import Any, TypeVar
 from urllib.parse import urlsplit
 
@@ -12,8 +14,9 @@ import altair as alt
 import pandas as pd
 import streamlit as st
 from openai import APIError
+from pydantic import ValidationError
 
-from pm_agent import closing, lifecycle
+from pm_agent import closing, comparison, lifecycle
 from pm_agent.agent import MAX_ROUNDS, AgentError
 from pm_agent.lifecycle import Lifecycle
 from pm_agent.models import Plan
@@ -793,3 +796,123 @@ def on_panel(chart: Any, description: str) -> Any:
     `description` is what a screen reader reads out instead of the picture: what the chart
     shows and where the same numbers stand as text."""
     return chart.properties(background="#ffffff", description=description)
+
+
+def comparison_card(
+    phase: comparison.PhaseId,
+    *,
+    review_seconds: float | None = None,
+    edited: bool | None = None,
+    log_dir: Path | None = None,
+) -> None:
+    """Optional structured choice-based Q&A comparing work with and without the agent.
+
+    All radios start unselected (`index=None`) and keep unsaved drafts across page switches via
+    `persist_state="session"`. No validation error is shown until the user clicks submit.
+    """
+    spec = comparison.PHASES[phase]
+    questions = comparison.questions_for(phase)
+    state = st.session_state
+    prefix = f"cmp_{phase}_"
+    saved_key = f"{prefix}saved"
+    skipped_key = f"{prefix}skipped"
+    error_key = f"{prefix}error"
+    note_key = f"{prefix}note"
+
+    def on_submit() -> None:
+        answers = {q.id: state.get(f"{prefix}{q.id}") for q in questions}
+        missing = [q.short_label for q in questions if answers[q.id] is None]
+        if missing:
+            state[error_key] = "Bitte wähle eine Option für: " + ", ".join(missing) + "."
+            return
+        if answers["mode"] == comparison.MANUAL_MODE:
+            metrics, skipped = None, []
+        else:
+            lookup = comparison.latest_run_metrics(phase, log_dir=log_dir)
+            metrics, skipped = lookup.metrics, lookup.skipped_corrupt
+        clean_review = (
+            round(review_seconds, 1)
+            if review_seconds is not None and math.isfinite(review_seconds) and review_seconds >= 0
+            else None
+        )
+        try:
+            entry = comparison.ComparisonEntry(
+                phase=phase,
+                mode=answers["mode"],
+                time_comparison=answers["time_comparison"],
+                manual_estimate=answers["manual_estimate"],
+                quality_comparison=answers["quality_comparison"],
+                workload_change=answers["workload_change"],
+                phase_q1=answers["phase_q1"],
+                phase_q2=answers["phase_q2"],
+                note=(state.get(note_key) or "").strip(),
+                log_file=metrics.log_file if metrics else "",
+                agent_seconds=metrics.seconds if metrics else None,
+                agent_rounds=metrics.rounds if metrics else None,
+                input_tokens=metrics.input_tokens if metrics else None,
+                output_tokens=metrics.output_tokens if metrics else None,
+                model=metrics.model if metrics else "",
+                review_seconds=clean_review,
+                edited=edited,
+            )
+        except ValidationError as err:
+            state[error_key] = f"Eingabe ungültig: {err.errors()[0]['msg']}"
+            return
+        try:
+            comparison.record_comparison(entry)
+        except (OSError, ValueError) as err:
+            state[error_key] = f"Die Bewertung konnte nicht gespeichert werden: {err}"
+            return
+        state[saved_key] = True
+        notify(f"Bewertung für {spec.label} gespeichert.")
+        if skipped:
+            state[skipped_key] = skipped
+        for q in questions:
+            state[f"{prefix}{q.id}"] = None
+        state[note_key] = ""
+
+    with st.container(border=True, key=f"panel-comparison-{phase}"):
+        heading(
+            "compare_arrows",
+            f"Effizienzvergleich ({spec.label})",
+            du="bewertest mit vs. ohne Agent",
+            python="protokolliert lokal",
+        )
+        st.caption(
+            "Subjektive Arbeitsweisen-Bewertung (ergänzend zum kontrollierten KI-Lab). Optional – "
+            "die Bewertung blockiert keinen Schritt und bleibt lokal in logs/agent_vergleich.csv."
+        )
+        if state.pop(saved_key, False):
+            st.success(
+                "Bewertung gespeichert (lokal in logs/agent_vergleich.csv, nicht im Repository)."
+            )
+        if skipped := state.pop(skipped_key, None):
+            st.warning(
+                "Neuere beschädigte Protokolle wurden bei der Zuordnung übersprungen: "
+                + as_text(", ".join(skipped))
+            )
+        failure = state.pop(error_key, None)
+        if failure:
+            st.error(as_text(failure))
+        with st.expander("Effizienzvergleich erfassen (optional)", expanded=bool(failure)):
+            for question in questions:
+                st.radio(
+                    question.label,
+                    question.options,
+                    index=None,
+                    key=f"{prefix}{question.id}",
+                    persist_state="session",
+                )
+            st.text_input(
+                "Kurze Notiz (optional, höchstens 400 Zeichen)",
+                max_chars=comparison.MAX_NOTE_LENGTH,
+                key=note_key,
+                persist_state="session",
+                placeholder="z. B. Welche Aufgabe hat am meisten Zeit gespart oder gekostet?",
+            )
+            st.button(
+                "Bewertung speichern",
+                key=f"{prefix}submit",
+                icon=":material/save:",
+                on_click=on_submit,
+            )

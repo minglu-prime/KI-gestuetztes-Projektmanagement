@@ -6,7 +6,7 @@ import httpx2 as httpx  # the HTTP client the openai SDK is built on
 import pytest
 from openai import OpenAI
 
-from pm_agent import agent, lifecycle, tracking, workbench
+from pm_agent import agent, comparison, lifecycle, tracking, workbench
 
 
 @pytest.fixture(autouse=True)
@@ -18,6 +18,7 @@ def no_real_data(monkeypatch, tmp_path):
     monkeypatch.setattr(workbench, "DATA_DIR", data)
     monkeypatch.setattr(workbench, "TEAM_FILE", data / "team.json")
     monkeypatch.setattr(workbench, "RUNS_CSV", tmp_path / "logs" / "runs.csv")
+    monkeypatch.setattr(comparison, "COMPARISON_CSV", tmp_path / "logs" / "agent_vergleich.csv")
     monkeypatch.setattr(tracking, "PROJECT_FILE", data / "projekt.json")
     monkeypatch.setattr(lifecycle, "FILE", data / "vorhaben.json")
     monkeypatch.setattr(agent, "LOG_DIR", tmp_path / "logs")
