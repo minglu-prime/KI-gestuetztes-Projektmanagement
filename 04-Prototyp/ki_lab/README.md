@@ -37,7 +37,11 @@ Angabe gelten die öffentlichen Demofälle. `private/` ist per `.gitignore` ausg
 Datei oder fehlt ihr ein Feld, startet das Lab nicht und nennt den Grund. Der Freeze hält Version,
 Prüfsumme und Quelle (`öffentlich`/`privat`) fest, nicht den Pfad.
 
-Studienleitung (Einladungen, Export, Auswertung): `python manage.py --help`.
+Studienleitung (Einladungen, Export, Auswertung, Löschung): `python manage.py --help`.
+
+- Auswertung mit getrennten Bewertungsdateien: `python manage.py analyze --ratings R1/ratings.json R2/ratings.json --out private/report.json` (`--ratings` ist auch mehrfach nutzbar). Fehlt eine zweite Bewertung, meldet die Auswertung dies ausdrücklich (`single_rater_ratings`, `warnings`).
+- Raterkalibrierung auf Pilot-Sitzungen: `python manage.py analyze --include-pilots --ratings R1/ratings.json R2/ratings.json --out private/pilot-report.json` (ohne `--include-pilots` bleiben Piloten ausgeschlossen).
+- Löschung auf Anfrage nach Teilnehmerkennung: `python manage.py delete P001 --confirm`.
 
 ## Tests
 

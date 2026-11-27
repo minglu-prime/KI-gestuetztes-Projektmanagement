@@ -2,6 +2,7 @@
 import argparse
 import json
 import random
+import sys
 from pathlib import Path
 
 from analysis import export_bundle, summarize
@@ -13,7 +14,23 @@ def write_json(path, value):
     path.write_text(json.dumps(value, ensure_ascii=False, indent=2), encoding='utf-8')
 
 
-def main():
+def load_ratings(paths):
+    rows = []
+    for raw_path in paths:
+        path = Path(raw_path)
+        try:
+            data = json.loads(path.read_text(encoding='utf-8'))
+        except FileNotFoundError:
+            raise Problem(f'Bewertungsdatei nicht gefunden: {path}') from None
+        except (OSError, ValueError) as exc:
+            raise Problem(f'Bewertungsdatei ungültig: {path} ({exc})') from None
+        if not isinstance(data, list):
+            raise Problem(f'Bewertungsdatei ungültig: {path} muss eine JSON-Liste enthalten.')
+        rows.extend(data)
+    return rows
+
+
+def main(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument('--db', default=str(ROOT / 'data' / 'lab.db'))
     parser.add_argument('--materials', default=None, metavar='DATEI',
@@ -30,10 +47,16 @@ def main():
     export.add_argument('--out', required=True)
     export.add_argument('--include-pilots', action='store_true')
     analyze = sub.add_parser('analyze')
-    analyze.add_argument('--ratings')
+    analyze.add_argument('--ratings', action='extend', nargs='+', metavar='DATEI',
+                         help='Bewertungsdatei(en), z. B. R1/ratings.json R2/ratings.json (mehrfach nutzbar)')
+    analyze.add_argument('--include-pilots', action='store_true',
+                         help='Pilot-Sitzungen einschließen (z. B. für Raterkalibrierung)')
     analyze.add_argument('--out', required=True)
+    delete = sub.add_parser('delete', help='Sitzung einer Teilnehmerkennung dauerhaft löschen')
+    delete.add_argument('participant', metavar='KENNUNG', help='Teilnehmerkennung, z. B. P001 oder PILOT-…')
+    delete.add_argument('--confirm', action='store_true', help='Dauerhaftes Löschen ausdrücklich bestätigen')
     sub.add_parser('status')
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     try:
         lab = Lab(args.db, materials=args.materials)
     except Problem as exc:  # missing or malformed case file: say why and stop
@@ -74,11 +97,37 @@ def main():
                 write_json(destination / rater / 'ratings.json', [r for r in bundle['ratings_template'] if r['rater']==rater])
             print(f'{len(bundle["blinded"])} Ergebnisse exportiert. Nur R1 bzw. R2 an die Bewertenden geben.')
         elif args.command == 'analyze':
-            ratings = json.loads(Path(args.ratings).read_text(encoding='utf-8')) if args.ratings else None
-            report = summarize(lab.raw(), ratings)
+            ratings = load_ratings(args.ratings) if args.ratings else None
+            report = summarize(lab.raw(), ratings, include_pilots=args.include_pilots)
             write_json(Path(args.out), report)
-            print(f'Analyse: {report["participants"]} formale Teilnehmende, {report["complete_pairs"]} vollständige Zeitpaare.')
-        else:
+            scope = 'Teilnehmende (inkl. Piloten)' if args.include_pilots else 'formale Teilnehmende'
+            not_started = len(report['not_started_participants'])
+            extra = f' ({report["invited"]} eingeladen, {not_started} nicht gestartet)' if not_started else ''
+            pairs_n = report['complete_pairs']
+            qpairs_n = len(report['quality_pairs'])
+            pairs_label = 'vollständiges Zeitpaar' if pairs_n == 1 else 'vollständige Zeitpaare'
+            qpairs_label = 'Qualitätspaar' if qpairs_n == 1 else 'Qualitätspaare'
+            print(
+                f'Analyse: {report["participants"]} {scope}{extra}, '
+                f'{pairs_n} {pairs_label}, {qpairs_n} {qpairs_label}.'
+            )
+            for warning in report['warnings']:
+                print('Warnung: ' + warning, file=sys.stderr)
+        elif args.command == 'delete':
+            if not args.confirm:
+                raise Problem(f'Löschen von {args.participant} nicht bestätigt. Mit --confirm erneut ausführen.')
+            result = lab.delete(args.participant)
+            print(
+                f'Gelöscht: {result["deleted"]} ({result["sessions_removed"]} Sitzung(en) entfernt). '
+                'Vorhandene Exporte und Einladungslisten bei Bedarf getrennt prüfen.'
+            )
+            if not result['compacted']:
+                print(
+                    'Warnung: Datenbankdatei konnte wegen aktivem Zugriff nicht verdichtet werden '
+                    '(Server stoppen und Datenbank prüfen).',
+                    file=sys.stderr,
+                )
+        elif args.command == 'status':
             records = lab.raw()
             print(json.dumps({'pilot_sessions':sum(s['pilot'] for s in records),
                               'formal_sessions':sum(not s['pilot'] for s in records),
