@@ -106,6 +106,18 @@ class HttpTests(unittest.TestCase):
             with self.assertRaises(ValueError, msg=origin):
                 make_server(self.lab, port=0, frame_ancestors=[origin]).server_close()
 
+    def test_web_ui_guards_download_for_shared_study_computers(self):
+        status, body = self.request('/app.js')
+        self.assertEqual(status, 200)
+        script = body.decode('utf-8')
+        # Formal study sessions must not render the local download button onto a shared computer.
+        self.assertNotIn('<button id="export" class="full-width">Eigene Aufzeichnung herunterladen', script)
+        self.assertNotIn('id="next">Zweite Runde starten →</button><button id="export">', script)
+        self.assertIn('state.pilot ?', script)
+        self.assertIn('geteilte', script.lower())
+        # Leaving a session clears any leftover draft backups in sessionStorage.
+        self.assertIn("startsWith('pm-draft-')", script)
+
 
 if __name__ == '__main__':
     unittest.main()
