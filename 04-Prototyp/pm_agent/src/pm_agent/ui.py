@@ -249,6 +249,34 @@ def saved_lifecycle() -> Lifecycle | None:
 
 # Keys of the fields on the pages Projektauftrag, Anforderungen and Entwurf.
 FIELD_PREFIXES = ("auftrag_", "charter_", "requirements_", "design_", "cases_")
+# Prefixes and keys of session state belonging to one project run (cleared on starting a new run).
+RUN_STATE_PREFIXES = (
+    *FIELD_PREFIXES, "plan_", "team_", "retro_", "measure_", "test_", "defect_",
+    "progress_", "signoff_", "lessons_", "operations_", "incident_", "next_run_",
+    "adopt_", "consent_",
+)  # fmt: skip
+RUN_STATE_KEYS = frozenset(
+    {
+        "idea", "start", "deadline", "free_days", "consent", "plan", "original", "rounds",
+        "rounds_start", "source", "agent_seconds", "round_count", "shown_at", "edited",
+        "hand_edited", "risks_text", "editor_version", "chat", "proposal", "planning_rest",
+        "asked", "covered", "step", "status_summary", "control_report", "kontrolle_tab",
+        "hourly_rate", "closing_error", "export_error", "rest_requested", "replan_log_warning",
+    }
+)  # fmt: skip
+
+
+def clear_run_state(skip_keys: Sequence[str] = (), skip_prefixes: Sequence[str] = ()) -> None:
+    """Drop session state from an archived project run, keeping navigation and identity.
+
+    `skip_keys` / `skip_prefixes` leave widgets currently mounted on the calling page intact
+    until Streamlit drops them on page switch."""
+    skip = set(skip_keys)
+    for key in list(st.session_state):
+        if key in skip or any(key.startswith(prefix) for prefix in skip_prefixes):
+            continue
+        if key in RUN_STATE_KEYS or key.startswith(RUN_STATE_PREFIXES):
+            del st.session_state[key]
 
 
 def store(old: Lifecycle | None, new: Lifecycle) -> Lifecycle | None:
@@ -725,7 +753,7 @@ class Track:
         if state == self.state == "done":  # drawn again, the end would play a second time
             return
         self.state = state
-        now = len(self.laps) + 1
+        now = min(len(self.laps) + 1, MAX_ROUNDS)
         note = {
             "think": f"Runde {now} von höchstens {MAX_ROUNDS}",
             "back": f"Runde {now} von höchstens {MAX_ROUNDS} · zurück an den Agenten",

@@ -71,3 +71,25 @@ def test_the_next_open_entry_comes_after_the_current_one_and_wraps():
     assert next_open(order, {"T3", "T4"}, "T4") == "T1"  # from the start again
     assert next_open(order, set(order), "T2") == "T2"  # all done: stays
     assert next_open(order, set(), "T9") == "T1"  # unknown: the first open one
+
+
+def test_track_clamps_round_display_and_rounds_text_uses_singular(monkeypatch):
+    from pm_agent import ui
+    from pm_agent.agent import MAX_ROUNDS
+
+    rendered = []
+
+    class Slot:
+        def markdown(self, body, unsafe_allow_html=False):
+            rendered.append(body)
+
+    monkeypatch.setattr(ui.st, "empty", Slot)
+    track = ui.Track()
+    rejected = {"tool_results": [{"tool": "submit_plan", "is_error": True, "content": "Fehler"}]}
+    for _ in range(MAX_ROUNDS):
+        track.round(rejected)
+    assert f"Runde {MAX_ROUNDS + 1} von" not in rendered[-1]
+    assert f"Runde {MAX_ROUNDS} von höchstens {MAX_ROUNDS}" in rendered[-1]
+    assert ui.rounds_text(0) == "0 Runden"
+    assert ui.rounds_text(1) == "1 Runde"
+    assert ui.rounds_text(2) == "2 Runden"

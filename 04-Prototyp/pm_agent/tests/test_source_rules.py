@@ -756,3 +756,34 @@ def test_comparison_path_constant_follows_the_runtime_default_convention():
     from pm_agent import comparison
 
     assert hasattr(comparison, "COMPARISON_CSV")
+
+
+def test_status_box_does_not_shadow_status_container():
+    # views/planung.py bound `status = st.container()` at the top and then shadowed it with
+    # `with st.status(...) as status:`, rendering the top status strip inside the run box.
+    shadowed = []
+    for path in (ROOT / "views").glob("*.py"):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        containers = {
+            target.id
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Assign)
+            and isinstance(node.value, ast.Call)
+            and isinstance(node.value.func, ast.Attribute)
+            and node.value.func.attr == "container"
+            for target in node.targets
+            if isinstance(target, ast.Name)
+        }
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.With):
+                continue
+            for item in node.items:
+                if (
+                    isinstance(item.optional_vars, ast.Name)
+                    and item.optional_vars.id in containers
+                    and isinstance(item.context_expr, ast.Call)
+                    and isinstance(item.context_expr.func, ast.Attribute)
+                    and item.context_expr.func.attr == "status"
+                ):
+                    shadowed.append(f"{path.name}:{node.lineno}")
+    assert shadowed == []

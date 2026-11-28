@@ -175,11 +175,11 @@ def check_plan(
                     f"{item.member} {reason}, hat aber {_hours(item.assigned_hours)} h zugewiesen",
                 )
         elif round(item.utilization, _DIGITS) > 1:
-            percent = math.ceil(round(item.utilization * 100, _DIGITS))  # never reads "100%"
+            percent = math.ceil(round(item.utilization * 100, _DIGITS))  # never reads "100 %"
             warn(
                 ("overload", item.member),
                 f"{item.member} ist überlastet: {_hours(item.assigned_hours)} h zugewiesen, "
-                f"bis zur Deadline sind {_hours(item.capacity_hours)} h verfügbar ({percent}%)",
+                f"bis zur Deadline sind {_hours(item.capacity_hours)} h verfügbar ({percent} %)",
             )
     for task in plan.tasks:
         member = members[owner[task.id]]
@@ -668,5 +668,10 @@ def _fmt(day: date) -> str:
     return day.strftime("%d.%m.%Y")
 
 
-def _hours(value: float) -> str:
-    return f"{round(value, 1):g}"
+def hours_text(value: float) -> str:
+    """Hours with at most one decimal, the German way: 41.6 -> "41,6", 8.0 -> "8"."""
+    # "+ 0.0" turns a rounded -0.0 into 0.0.
+    return f"{round(value, 1) + 0.0:.1f}".removesuffix(".0").replace(".", ",")
+
+
+_hours = hours_text

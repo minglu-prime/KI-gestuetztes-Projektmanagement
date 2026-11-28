@@ -26,8 +26,8 @@ from pm_agent.agent import (
     run_replanning,
 )
 from pm_agent.models import Project
-from pm_agent.planning import check_plan
-from pm_agent.tools import with_absences
+from pm_agent.planning import check_plan, hours_text
+from pm_agent.tools import german, with_absences
 from pm_agent.tracking import (
     PROJECT_WRITE_LOCK,
     adopt,
@@ -473,8 +473,12 @@ with tabs[1]:
     )
     project = None
     project_gap = "Projektidee und Deadline (Schritt 2)"  # what step 3 says is missing
-    if not idea.strip() or deadline is None:
-        st.info("Beschreibe die Projektidee und wähle eine Deadline.")
+    if not idea.strip() or start is None or deadline is None:
+        if start is None:
+            st.info("Beschreibe die Projektidee und wähle Start und Deadline.")
+            project_gap = "Projektidee, Start und Deadline (Schritt 2)"
+        else:
+            st.info("Beschreibe die Projektidee und wähle eine Deadline.")
     else:
         try:
             project = Project(
@@ -484,7 +488,7 @@ with tabs[1]:
             st.error(f"Freie Tage: {as_text(str(err))}")
             project_gap = "lesbare freie Tage (Schritt 2)"
         except ValidationError as err:
-            st.error("; ".join(e["msg"].removeprefix("Value error, ") for e in err.errors()))
+            st.error("; ".join(german(e) for e in err.errors()))
             project_gap = "ein gültiges Projekt (Schritt 2)"
     next_step("Weiter zur Planung", STEPS[2], project is not None, "to_planning")
 
@@ -524,7 +528,7 @@ with tabs[2]:
         if ran_now:
             rounds = []
             track = Track()
-            with st.status("Der Agent plant …", expanded=True) as status:
+            with st.status("Der Agent plant …", expanded=True) as run_status:
                 st.caption(BUSY_HINT)
                 show_round = round_printer()
 
@@ -551,7 +555,9 @@ with tabs[2]:
                 label = (
                     f"Kein Plan nach {rounds_text(len(rounds))}" if failure else "Plan angenommen"
                 )
-                status.update(label=label, state="error" if failure else "complete", expanded=True)
+                run_status.update(
+                    label=label, state="error" if failure else "complete", expanded=True
+                )
             if failure:
                 st.error(as_text(failure))
             else:
@@ -762,7 +768,7 @@ with tabs[3]:
                 st.html(
                     strip(
                         chip(view["member"], "plain"),
-                        chip(f"{view['hours']:g} h", "plain"),
+                        chip(f"{hours_text(view['hours'])} h", "plain"),
                         chip(f"{view['start']:%d.%m.} – {view['end']:%d.%m.%Y}", "plain"),
                         room,
                     )
@@ -830,6 +836,7 @@ with tabs[3]:
             next_step("Weiter zum Export", STEPS[5], not result.errors, "to_export")
 
 # 5 · Anpassen -----------------------------------------------------------------------------
+unchecked = False
 with tabs[4]:
     st.subheader("Anpassen und erneut prüfen")
     if state.plan is None:
@@ -941,7 +948,7 @@ with tabs[4]:
                     st.text(wish)
                 change_rounds = []
                 track = Track()
-                with st.status("Der Agent ändert den Plan …", expanded=True) as status:
+                with st.status("Der Agent ändert den Plan …", expanded=True) as change_status:
                     st.caption(BUSY_HINT)
                     with st.container(key="rounds-change"):
                         show_change_round = round_printer(state.plan)
@@ -985,7 +992,7 @@ with tabs[4]:
                         if failure
                         else f"Vorschlag nach {rounds_text(len(change_rounds))}"
                     )
-                    status.update(
+                    change_status.update(
                         label=label, state="error" if failure else "complete", expanded=True
                     )
                 # The message goes below the box: a collapsed status would hide it.
@@ -1083,6 +1090,12 @@ with tabs[5]:
     if state.plan is None or result is None:
         st.info("Noch kein geprüfter Plan zum Exportieren.")
     else:
+        if unchecked:
+            st.warning(
+                "Im Schritt Anpassen stehen ungeprüfte Änderungen in der Tabelle. Klicke dort "
+                "auf „Erneut prüfen“ oder setze die Tabelle zurück, bevor du den Plan übernimmst "
+                "oder herunterlädst."
+            )
         if result.errors:
             st.warning("Der Plan hat noch Fehler (siehe Schritt 4). Export ist trotzdem möglich.")
 
@@ -1123,6 +1136,7 @@ with tabs[5]:
                     mime="text/markdown",
                     on_click=record_export,
                     args=("markdown",),
+                    disabled=unchecked,
                 )
                 st.download_button(
                     "Als CSV herunterladen",
@@ -1131,6 +1145,7 @@ with tabs[5]:
                     mime="text/csv",
                     on_click=record_export,
                     args=("csv",),
+                    disabled=unchecked,
                 )
             st.caption(
                 f"Jeder Export wird mit Dauer und Änderungen in "
@@ -1191,11 +1206,15 @@ with tabs[5]:
                 st.caption(f"Ersetzt das am {adopted.adopted:%d.%m.%Y} übernommene Projekt.")
             if result.errors:
                 st.caption("Erst möglich, wenn der Plan keine Fehler mehr hat (siehe Schritt 4).")
-            if st.button(
-                "Plan als Projekt übernehmen",
-                type="primary",
-                icon=":material/flag:",
-                disabled=bool(result.errors) or not overwrite,
+            can_adopt = not result.errors and overwrite and not unchecked
+            if (
+                st.button(
+                    "Plan als Projekt übernehmen",
+                    type="primary",
+                    icon=":material/flag:",
+                    disabled=not can_adopt,
+                )
+                and can_adopt
             ):
                 try:
                     with PROJECT_WRITE_LOCK:

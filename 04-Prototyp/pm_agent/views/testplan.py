@@ -63,11 +63,27 @@ elif life.requirements is None:
     st.page_link(
         "views/anforderungen.py", label="Zu den Anforderungen", icon=":material/arrow_forward:"
     )
-elif "freigegeben" not in (requirements_state(life), design_state(life)):
-    st.warning(
-        "Anforderungen und Entwurf sind nicht freigegeben. Der Testplan lässt sich trotzdem "
-        "anlegen; geprüft wird gegen den Stand, wie er gerade ist."
-    )
+else:
+    unapproved = [
+        name
+        for name, phase in (
+            ("Anforderungen", requirements_state(life)),
+            ("Entwurf", design_state(life)),
+        )
+        if phase != "freigegeben"
+    ]
+    if unapproved:
+        subject = (
+            "Anforderungen und Entwurf sind"
+            if len(unapproved) == 2
+            else (
+                "Die Anforderungen sind" if unapproved[0] == "Anforderungen" else "Der Entwurf ist"
+            )
+        )
+        st.warning(
+            f"{subject} nicht freigegeben. Der Testplan lässt sich trotzdem anlegen; geprüft "
+            "wird gegen den Stand, wie er gerade ist."
+        )
 
 # 2 · Entwurf vom Agenten ------------------------------------------------------------------
 with st.container(border=True, key="panel-draft"):

@@ -7,7 +7,7 @@ import altair as alt
 import pandas as pd
 import streamlit as st
 
-from pm_agent.tracking import evaluate, forecast, load, percent
+from pm_agent.tracking import evaluate, forecast, load, member_status_hours, percent
 from pm_agent.ui import LEGEND, as_text, forecast_chart, heading, on_panel
 from pm_agent.workbench import InputError
 
@@ -49,11 +49,10 @@ with st.container(border=True, key="panel-people"):
     rows = pd.DataFrame(
         [
             {
-                "Person": f"{t.member} (du)" if t.member == me else t.member,
-                "Status": t.status,
-                "Stunden": t.planned_hours,
+                **row,
+                "Person": f"{row['Person']} (du)" if row["Person"] == me else row["Person"],
             }
-            for t in result.tasks
+            for row in member_status_hours(result)
         ]
     )
     st.altair_chart(

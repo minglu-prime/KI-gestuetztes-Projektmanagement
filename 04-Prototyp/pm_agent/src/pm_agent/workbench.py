@@ -31,7 +31,7 @@ from pm_agent.models import (
     Requirement,
     Task,
 )
-from pm_agent.planning import check_plan, project_weeks, workday_shift, working_shift
+from pm_agent.planning import check_plan, hours_text, project_weeks, workday_shift, working_shift
 from pm_agent.tools import german, with_absences
 
 DATA_DIR = agents.LOG_DIR.parent / "data"
@@ -581,7 +581,8 @@ def plan_changes(before: Plan, after: Plan) -> list[str]:
     old_owner = {a.task_id: a.member for a in before.assignments}
     new_owner = {a.task_id: a.member for a in after.assignments}
     lines = [
-        f"Neu: {tid} · {task.title} ({new_owner.get(tid, 'niemand')}, {task.estimate_hours:g} h)"
+        f"Neu: {tid} · {task.title} ({new_owner.get(tid, 'niemand')}, "
+        f"{hours_text(task.estimate_hours)} h)"
         for tid, task in new.items()
         if tid not in origin
     ]
@@ -604,7 +605,9 @@ def plan_changes(before: Plan, after: Plan) -> list[str]:
         if old_owner.get(old_id) != new_owner.get(tid):
             parts.append(f"{old_owner.get(old_id, 'niemand')} → {new_owner.get(tid, 'niemand')}")
         if task.estimate_hours != was.estimate_hours:
-            parts.append(f"{was.estimate_hours:g} h → {task.estimate_hours:g} h")
+            parts.append(
+                f"{hours_text(was.estimate_hours)} h → {hours_text(task.estimate_hours)} h"
+            )
         if set(task.depends_on) != set(needed):
             parts.append(
                 f"hängt ab von {', '.join(task.depends_on) or 'nichts'} "
@@ -737,7 +740,8 @@ def describe_round(number: int, record: dict[str, Any], previous: Plan | None) -
         "said": record.get("text", ""),
         "draft": draft,
         "size": (
-            f"{len(draft.tasks)} Aufgaben, {sum(t.estimate_hours for t in draft.tasks):g} h"
+            f"{len(draft.tasks)} Aufgaben, "
+            f"{hours_text(sum(t.estimate_hours for t in draft.tasks))} h"
             if draft
             else ""
         ),
@@ -813,7 +817,7 @@ def to_markdown(
         s, a = dates.get(t.id), owner.get(t.id)
         lines.append(
             f"| {_md(t.id)} | {_md(t.title)} | {_md(a.member) if a else ''} | "
-            f"{t.estimate_hours:g} | "
+            f"{hours_text(t.estimate_hours)} | "
             f"{_date(s.start) if s else ''} | {_date(s.end) if s else ''} | "
             f"{_md(a.reason) if a else ''} |"
         )

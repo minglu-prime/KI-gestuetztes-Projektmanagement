@@ -34,6 +34,7 @@ from pm_agent.models import (
 from pm_agent.planning import (
     add_working_days,
     check_plan,
+    hours_text,
     planned_work,
     project_weeks,
     working_shift,
@@ -231,6 +232,9 @@ class Tracking(BaseModel):
     # The planned end of the first plan adopted, kept when the rest is adopted again. None:
     # adopted before this was recorded.
     first_planned_end: date | None = None
+    # The start date of the first plan adopted, kept when the rest is adopted again. None:
+    # adopted before this was recorded (falls back to project.start_date).
+    first_start_date: date | None = None
 
 
 @dataclass(frozen=True)
@@ -302,13 +306,26 @@ def adopt(
     if keep is not None:
         previous = {need.id: need for need in keep.requirements}
         unchanged = {need.id for need in requirements if previous.get(need.id) == need}
-        for entry in [*keep.history, *_closed(keep, adopted.date())]:
+        continuing = set(progress)
+        all_entries = [*keep.history, *_closed(keep, adopted.date())]
+        finished_history = {entry.id for entry in all_entries if entry.finished}
+        for entry in all_entries:
             obsolete = [
                 rid
                 for rid in entry.requirement_ids
                 if rid in entry.superseded_requirement_ids or rid not in unchanged
             ]
-            history.append(entry.model_copy(update={"superseded_requirement_ids": obsolete}))
+            # A started task dropped from the new plan keeps its actual hours (sunk effort),
+            # but its planned share drops to 0 so the remaining project can reach 100 %.
+            dropped = (
+                not entry.finished
+                and entry.id not in continuing
+                and entry.id not in finished_history
+            )
+            updates: dict[str, Any] = {"superseded_requirement_ids": obsolete}
+            if dropped:
+                updates["planned_hours"] = 0.0
+            history.append(entry.model_copy(update=updates))
         signoffs = [
             decision.model_copy(update={"superseded": True})
             if decision.requirement_id not in unchanged
@@ -334,6 +351,9 @@ def adopt(
         operations=keep.operations if keep is not None else [],
         incidents=keep.incidents if keep is not None else [],
         first_planned_end=keep.first_planned_end if keep is not None else checked.end_date,
+        first_start_date=(
+            min(project_start(keep), project.start_date) if keep is not None else project.start_date
+        ),
     )
     save(tracking, path)
     return tracking
@@ -793,6 +813,13 @@ def has_progress(tracking: Tracking) -> bool:
     return bool(tracking.history) or any(p != Progress() for p in tracking.progress.values())
 
 
+def project_start(tracking: Tracking) -> date:
+    """The start date of the first adopted plan, kept across replannings."""
+    if tracking.first_start_date is None:
+        return tracking.project.start_date
+    return min(tracking.first_start_date, tracking.project.start_date)
+
+
 def _finish_date(value: Any, where: str) -> date | None:
     """A cell of "Fertig am": empty, a date, or a date as text in either form."""
     text = _cell(value)  # empty for None, NaN and pandas.NaT (a datetime unequal to itself)
@@ -829,7 +856,8 @@ def _finished_on(
             )
         return None
     if before.status != "fertig" and entered is None:
-        return today
+        # Before the project starts there is no valid date in [start, today]; keep unknown.
+        return today if today >= start else None
     if entered is not None and entered > today:
         raise InputError(f"{where}: Fertig am {_date(entered)} liegt in der Zukunft")
     if entered is not None and entered < start:
@@ -880,7 +908,7 @@ def apply_rows(
             status,
             row,
             where,
-            tracking.project.start_date,
+            project_start(tracking),
             today,
         )
         progress[task_id] = Progress(
@@ -891,6 +919,49 @@ def apply_rows(
             finished_on=finished_on,
         )
     return tracking.model_copy(update={"progress": progress})
+
+
+def _work_items(
+    tasks: list[TaskState], history: list[Earlier]
+) -> list[tuple[str, str | None, float, float, bool]]:
+    """Every piece of work of the project as (member, status, planned_hours, actual_hours, done).
+
+    A history part is finished once its task finished in this plan or in a later history entry.
+    A started task that was dropped from the active plan keeps its actual hours (sunk effort)
+    with 0 planned hours so progress still reaches 100 %."""
+    finished_ids = {t.id for t in tasks if t.status == "fertig"} | {
+        e.id for e in history if e.finished
+    }
+    active_status = {t.id: t.status for t in tasks}
+    items: list[tuple[str, str | None, float, float, bool]] = [
+        (t.member, t.status, t.planned_hours, t.actual_hours, t.id in finished_ids) for t in tasks
+    ]
+    for e in history:
+        if e.finished or e.id in finished_ids:
+            items.append((e.member, "fertig", e.planned_hours, e.actual_hours, True))
+        elif e.id in active_status:
+            items.append((e.member, active_status[e.id], e.planned_hours, e.actual_hours, False))
+        else:
+            items.append((e.member, None, 0.0, e.actual_hours, False))
+    return items
+
+
+def member_status_hours(evaluation: Evaluation) -> list[dict[str, Any]]:
+    """Planned hours per member and status, counting history like evaluate()."""
+    items = _work_items(evaluation.tasks, evaluation.history)
+    totals: dict[tuple[str, str], float] = {}
+    members: list[str] = []
+    for member, status, planned, _, _ in items:
+        if member not in members:
+            members.append(member)
+        if status is not None and planned > 0:
+            totals[(member, status)] = totals.get((member, status), 0.0) + planned
+    return [
+        {"Person": member, "Status": status, "Stunden": totals[(member, status)]}
+        for member in members
+        for status in ("fertig", "in Arbeit", "offen")
+        if (member, status) in totals
+    ]
 
 
 def evaluate(tracking: Tracking, today: date) -> Evaluation:
@@ -915,33 +986,24 @@ def evaluate(tracking: Tracking, today: date) -> Evaluation:
                 finished_on=done.finished_on,
             )
         )
-    finished_ids = {t.id for t in tasks if t.status == "fertig"}
-    # Plan and actual of every piece of work: the tasks of the plan and the history. A part
-    # in the history is finished once the task it went on as is finished, in this plan or in
-    # a later one that is history now itself.
-    finished_ids |= {e.id for e in tracking.history if e.finished}
-    work = [(t.member, t.planned_hours, t.actual_hours, t.id in finished_ids) for t in tasks]
-    work += [
-        (e.member, e.planned_hours, e.actual_hours, e.finished or e.id in finished_ids)
-        for e in tracking.history
-    ]
-    planned_hours = sum(planned for _, planned, _, _ in work)
-    earned = sum(planned for _, planned, _, done in work if done)
+    work = _work_items(tasks, tracking.history)
+    planned_hours = sum(planned for _, _, planned, _, _ in work)
+    earned = sum(planned for _, _, planned, _, done in work if done)
     return Evaluation(
         today=today,
         tasks=tasks,
         history=tracking.history,
         planned_hours=planned_hours,
-        actual_hours=sum(actual for _, _, actual, _ in work),
+        actual_hours=sum(actual for _, _, _, actual, _ in work),
         earned=earned,
         progress=earned / planned_hours,
-        finished_deviation=sum(actual - planned for _, planned, actual, done in work if done),
+        finished_deviation=sum(actual - planned for _, _, planned, actual, done in work if done),
         by_member=[
             {
                 "Person": member,
-                "Plan (h)": sum(w[1] for w in work if w[0] == member),
-                "Ist (h)": sum(w[2] for w in work if w[0] == member),
-                "Fertig (Plan-h)": sum(w[1] for w in work if w[0] == member and w[3]),
+                "Plan (h)": sum(w[2] for w in work if w[0] == member),
+                "Ist (h)": sum(w[3] for w in work if w[0] == member),
+                "Fertig (Plan-h)": sum(w[2] for w in work if w[0] == member and w[4]),
             }
             for member in dict.fromkeys(w[0] for w in work)
         ],
@@ -986,19 +1048,20 @@ def earned_value(tracking: Tracking, evaluation: Evaluation) -> EarnedValue:
     reached = [
         point["Stunden"] for point in planned_curve(tracking) if point["Tag"] <= evaluation.today
     ]
+    active_ids = {t.id for t in tracking.plan.tasks}
+    finished_ids = {e.id for e in tracking.history if e.finished}
+    history_planned = sum(
+        e.planned_hours
+        for e in tracking.history
+        if e.finished or e.id in active_ids or e.id in finished_ids
+    )
     return EarnedValue(
         # Between two kept days the curve is flat or the later day is kept too. The work of
         # earlier plans was due before this plan began.
-        planned=(reached[-1] if reached else 0.0) + sum(e.planned_hours for e in tracking.history),
+        planned=(reached[-1] if reached else 0.0) + history_planned,
         earned=evaluation.earned,
         actual=evaluation.actual_hours,
     )
-
-
-def hours_text(value: float) -> str:
-    """Hours with at most one decimal, the German way: 41.6 -> "41,6", 8.0 -> "8"."""
-    # "+ 0.0" turns a rounded -0.0 into 0.0.
-    return f"{round(value, 1) + 0.0:.1f}".removesuffix(".0").replace(".", ",")
 
 
 def key_figures(evaluation: "Evaluation") -> dict[str, str]:
@@ -1305,11 +1368,28 @@ def reassignment_effect(tracking: Tracking, today: date, task_ids: list[str], me
     return text
 
 
+def _is_closed(tracking: Tracking) -> bool:
+    """Whether requirements are signed off without open Muss items (matches ui.journey)."""
+    if not tracking.requirements:
+        return False
+    known = {n.id for n in tracking.requirements}
+    decided = {
+        s.requirement_id
+        for s in tracking.signoffs
+        if not s.superseded
+        and s.requirement_id in known
+        and (s.decision != "zurückgestellt" or s.reason)
+    }
+    return bool(decided) and all(
+        n.id in decided for n in tracking.requirements if n.priority == "Muss"
+    )
+
+
 def next_step(tracking: Tracking, today: date, forecast_shown: bool = False) -> tuple[str, str]:
     """What the project lead should look at next, and on which page ("durchfuehrung",
-    "kontrolle" or "testlauf"). The most urgent reason wins. The text names no page: it may
-    be shown on the page it points to. `forecast_shown`: the page shows the forecast
-    already (forecast_text), so a reason that only repeats it is left out."""
+    "kontrolle", "testlauf" or "abschluss"). The most urgent reason wins. The text names no
+    page: it may be shown on the page it points to. `forecast_shown`: the page shows the
+    forecast already (forecast_text), so a reason that only repeats it is left out."""
     outlook = forecast(tracking, today)
     late = len(evaluate(tracking, today).overdue)
 
@@ -1334,10 +1414,17 @@ def next_step(tracking: Tracking, today: date, forecast_shown: bool = False) -> 
             in_forecast=False,
         )
     if outlook.end is None:
+        if _is_closed(tracking):
+            return say(
+                "Alle Aufgaben sind fertig und abgenommen.",
+                "Lade den Abschlussbericht herunter oder beginne den nächsten Durchlauf.",
+                "abschluss",
+                in_forecast=False,
+            )
         return say(
             "Alle Aufgaben sind fertig.",
-            "Halte den Abschluss im Statusbericht fest.",
-            "durchfuehrung",
+            "Prüfe die Abnahme und schließe das Projekt ab.",
+            "abschluss",
             in_forecast=True,
         )
     if outlook.deadline_gap > 0:
@@ -1471,16 +1558,23 @@ def progress_rows(tracking: Tracking, today: date | None = None) -> list[dict[st
 
 
 PART = "Teil, ging weiter"  # a started task whose rest went into the next plan
+DROPPED = "entfallen"  # a started task dropped from the next plan
 
 
 def history_rows(tracking: Tracking) -> list[dict[str, Any]]:
     """The work of earlier plans, one row per entry, for tables and documents."""
+    active_ids = {t.id for t in tracking.plan.tasks}
+    finished_ids = {e.id for e in tracking.history if e.finished}
     return [
         {
             "ID": e.id,
             "Aufgabe": e.title,
             "Person": e.member,
-            "Stand": "fertig" if e.finished else PART,
+            "Stand": (
+                "fertig"
+                if e.finished
+                else (PART if e.id in active_ids or e.id in finished_ids else DROPPED)
+            ),
             "Plan (h)": e.planned_hours,
             "Ist (h)": e.actual_hours,
             "Notiz": e.note,
@@ -1495,7 +1589,7 @@ def _history_text(tracking: Tracking) -> str:
         return "Keine: Der Plan wurde nicht neu übernommen."
     rows = [
         f"| {_md(r['ID'])} | {_md(r['Aufgabe'])} | {_md(r['Person'])} | {r['Stand']} | "
-        f"{r['Plan (h)']:g} | {r['Ist (h)']:g} | {_md(r['Notiz'])} |"
+        f"{hours_text(r['Plan (h)'])} | {hours_text(r['Ist (h)'])} | {_md(r['Notiz'])} |"
         for r in history_rows(tracking)
     ]
     head = [
@@ -1546,7 +1640,7 @@ def status_report(
         "statusbericht.md",
         projekt=_md(project.idea),
         stand=_date(evaluation.today),
-        start=_date(project.start_date),
+        start=_date(project_start(tracking)),
         deadline=_date(project.deadline),
         planende=_date(max(t.planned_end for t in tasks)),
         prognose=forecast_text(outlook, project.deadline),
@@ -1636,7 +1730,7 @@ def control_document(
         "kontrollbericht.md",
         projekt=_md(project.idea),
         stand=_date(today),
-        start=_date(project.start_date),
+        start=_date(project_start(tracking)),
         deadline=_date(project.deadline),
         planende=_date(max(t.planned_end for t in evaluation.tasks)),
         prognose=forecast_text(outlook, project.deadline),
@@ -1722,7 +1816,7 @@ def work_packages(tracking: Tracking) -> str:
     return _fill(
         "arbeitspakete.md",
         projekt=_md(project.idea),
-        start=_date(project.start_date),
+        start=_date(project_start(tracking)),
         deadline=_date(project.deadline),
         pakete="\n\n".join(packages),
     )

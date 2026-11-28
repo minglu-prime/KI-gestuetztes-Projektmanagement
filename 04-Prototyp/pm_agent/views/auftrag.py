@@ -18,7 +18,7 @@ from pm_agent.lifecycle import (
     lines_to_criteria,
 )
 from pm_agent.models import Charter, Project
-from pm_agent.tools import invalid_input
+from pm_agent.tools import german, invalid_input
 from pm_agent.ui import (
     as_text,
     consent,
@@ -50,8 +50,12 @@ FIELDS = {
 }
 
 
-def show(charter: Charter) -> None:
-    """Put a charter into the fields. Only before they are drawn in this run."""
+def show(charter: Charter | None) -> None:
+    """Put a charter into the fields (empty for None). Only before they are drawn in this run."""
+    state.charter_basis = charter
+    if charter is None:
+        state.update(dict.fromkeys(FIELDS, ""))
+        return
     state.update(
         charter_goal=charter.goal,
         charter_benefit=charter.benefit,
@@ -103,7 +107,7 @@ with st.container(border=True, key="panel-eckdaten"):
                 free_days=life.project.free_days if life.project else [],
             )
         except ValidationError as err:
-            st.error("; ".join(e["msg"].removeprefix("Value error, ") for e in err.errors()))
+            st.error("; ".join(german(e) for e in err.errors()))
     if project is not None and project != life.project:
         # Saved right away: an approval made for other dates is then shown as changed.
         if (updated := store(life, life.model_copy(update={"project": project}))) is not None:
@@ -153,11 +157,8 @@ with st.container(border=True, key="panel-charter"):
         st.info(
             "Noch kein Projektauftrag. Lass ihn vom Agenten entwerfen oder schreib ihn hier selbst."
         )
-    if "charter_goal" not in state:
-        if life.charter is not None:
-            show(life.charter)
-        else:
-            state.update(dict.fromkeys(FIELDS, ""))
+    if "charter_goal" not in state or state.get("charter_basis") != life.charter:
+        show(life.charter)
     for key, label in FIELDS.items():
         st.text_area(label, key=key, height="content")
     typed = any(state[key].strip() for key in FIELDS)
@@ -187,6 +188,7 @@ with st.container(border=True, key="panel-charter"):
         disabled=edited is None or not unsaved,
     ):
         if store(life, life.model_copy(update={"charter": edited})) is not None:
+            state.charter_basis = edited
             notify("Projektauftrag gespeichert.")
             st.rerun()
     errors = []

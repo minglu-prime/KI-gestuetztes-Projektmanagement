@@ -161,7 +161,7 @@ def test_overload_and_missed_deadline_are_warnings_not_errors():
     assert result.end_date == date(2026, 11, 18)
     assert result.warnings == [
         "Der Plan endet am 18.11.2026, 3 Arbeitstage nach der Deadline (13.11.2026)",
-        "Clara ist überlastet: 15 h zugewiesen, bis zur Deadline sind 10 h verfügbar (150%)",
+        "Clara ist überlastet: 15 h zugewiesen, bis zur Deadline sind 10 h verfügbar (150 %)",
     ]
 
 
@@ -183,7 +183,7 @@ def test_a_late_team_that_lacks_the_hours_is_told_so_with_the_earliest_end():
     chain = plan(task("A", 40), task("B", 8, deps=["A"]), owners={"A": "Anna", "B": "Anna"})
     assert check_plan(chain, [ANNA, BEN], project(deadline=date(2026, 11, 13))).warnings == [
         "Der Plan endet am 16.11.2026, 1 Arbeitstag nach der Deadline (13.11.2026)",
-        "Anna ist überlastet: 48 h zugewiesen, bis zur Deadline sind 40 h verfügbar (120%)",
+        "Anna ist überlastet: 48 h zugewiesen, bis zur Deadline sind 40 h verfügbar (120 %)",
     ]
 
 
@@ -192,7 +192,7 @@ def test_slight_overload_reads_101_percent_and_one_day_late_is_singular():
     result = check_plan(p, [ANNA], project(deadline=date(2026, 11, 13)))
     assert result.warnings == [
         "Der Plan endet am 16.11.2026, 1 Arbeitstag nach der Deadline (13.11.2026)",
-        "Anna ist überlastet: 40.1 h zugewiesen, bis zur Deadline sind 40 h verfügbar (101%)",
+        "Anna ist überlastet: 40,1 h zugewiesen, bis zur Deadline sind 40 h verfügbar (101 %)",
     ]
 
 
@@ -349,7 +349,7 @@ def test_absent_days_are_not_available_until_the_deadline():
     result = check_plan(p, [two_days], project(deadline=date(2026, 11, 13)))
     assert result.load[0].capacity_hours == 24
     assert result.load[0].utilization == pytest.approx(32 / 24)
-    assert "Anna ist überlastet: 32 h zugewiesen, bis zur Deadline sind 24 h verfügbar (134%)" in (
+    assert "Anna ist überlastet: 32 h zugewiesen, bis zur Deadline sind 24 h verfügbar (134 %)" in (
         result.warnings
     )
 
@@ -895,3 +895,17 @@ def test_a_week_of_free_days_needs_no_demo():
     result = check_plan(plan, [ANNA], free)
     assert ("demo_missing", "2") not in result.warning_kinds
     assert ("demo_missing", "3") in result.warning_kinds  # B ends in week 3
+
+
+def test_warnings_and_plan_exports_format_german_numbers_and_percent_space():
+    from pm_agent.workbench import plan_changes, to_markdown
+
+    p = plan(task("A", 40.5), owners={"A": "Anna"})
+    result = check_plan(p, [ANNA], project(deadline=date(2026, 11, 13)))
+    assert (
+        "Anna ist überlastet: 40,5 h zugewiesen, bis zur Deadline sind 40 h verfügbar (102 %)"
+        in result.warnings
+    )
+    assert "| A | Task A | Anna | 40,5 |" in to_markdown(project(), p, result)
+    p2 = plan(task("A", 41.5), owners={"A": "Anna"})
+    assert plan_changes(p, p2) == ["A · Task A: 40,5 h → 41,5 h"]
