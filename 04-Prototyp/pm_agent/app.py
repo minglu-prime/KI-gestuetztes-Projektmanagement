@@ -5,12 +5,16 @@ link to a page as first visit in tests/test_app.py).
 Run from 04-Prototyp/pm_agent:  uv run --env-file .env streamlit run app.py
 """
 
+import logging
 from pathlib import Path
 
 import streamlit as st
 
+from pm_agent import tracking, workbench
 from pm_agent.ui import NEW_MEMBER, PAGES, as_text, group_tabs, journey, show_notice
-from pm_agent.workbench import InputError, load_team
+from pm_agent.workbench import InputError
+
+logger = logging.getLogger(__name__)
 
 ROOT = Path(__file__).parent
 # Streamlit opens and closes an expander (and st.status) by animating its height for 0.5 s
@@ -66,19 +70,63 @@ TEAM = {
     ],
 }
 with st.sidebar:
+    if "role" not in state and st.query_params.get("ansicht") in ("Leitung", "Team"):
+        state.role = st.query_params["ansicht"]
     role = st.radio("Ansicht", ["Leitung", "Team"], horizontal=True, key="role")
     if role == "Team":
-        if "me_next" in state:  # a new member saved their name on Mein Bereich
-            state.me = state.pop("me_next")
+        st.query_params["ansicht"] = "Team"
         try:
-            names = [m.name for m in load_team()]
+            names, team_damaged = [m.name for m in workbench.load_team()], False
         except InputError as err:
-            names = []
+            names, team_damaged = [], True
             st.error(f"Das Team konnte nicht gelesen werden: {as_text(str(err))}")
-        st.selectbox("Ich bin", [*names, NEW_MEMBER], key="me")
+        try:
+            adopted = tracking.load()
+        except InputError as err:
+            adopted = None
+            # Mein Bereich and Projektstand show the full error on the page.
+            logger.warning("Could not read projekt.json for sidebar member list: %s", err)
+        former = (
+            list(dict.fromkeys(a.member for a in adopted.plan.assignments if a.member not in names))
+            if adopted is not None
+            else []
+        )
+        options = [*names, *former, NEW_MEMBER]
+        selectable = {*names, *former}
+        if "me_next" in state:  # member joined, saved, or left on Mein Bereich
+            nxt = state.pop("me_next")
+            state.me = nxt if nxt in selectable else None
+            state.me_last = state.me
+        elif "me" not in state:
+            saved_me = state.get("me_last") or st.query_params.get("ich")
+            if saved_me in selectable:
+                state.me = saved_me
+        elif state.me is not None and state.me not in options:
+            state.me = None
+        me = st.selectbox(
+            "Ich bin",
+            options,
+            index=None,
+            placeholder="Name wählen",
+            format_func=lambda n: (
+                f"{n} (nicht mehr im Team)" if (not team_damaged and n in former) else n
+            ),
+            key="me",
+        )
+        state.me_last = me if me in selectable else None
+        if me in selectable:
+            st.query_params["ich"] = me
+        else:
+            st.query_params.pop("ich", None)
+    else:
+        st.query_params.pop("ansicht", None)
+        st.query_params.pop("ich", None)
 page = st.navigation(MENU if role == "Leitung" else TEAM)
-# The Planung page restores its table editors after a visit to another page.
-state.page_changed = state.get("page") != page.url_path
+# Restore table editors after a page change, Ansicht change (Startseite and Mein Bereich both
+# have url_path == ""), or member switch in Team view.
+view = (role, page.url_path, state.get("me") if role == "Team" else None)
+state.page_changed = state.get("page_view") != view
+state.page_view = view
 state.page = page.url_path
 
 st.html(ROOT / "assets" / "style.css")

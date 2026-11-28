@@ -2,7 +2,7 @@
 
 All six steps are tabs on this page, so every widget is rendered on every run. Streamlit drops
 the state of widgets that are not rendered. For the other pages of the site the simple widgets
-use persist_state="session"; the two table editors cannot, so their content is kept in the
+use persist_state="session"; the plan table editor cannot, so its content is kept in the
 session state and restored when the user comes back (see restore_editors).
 """
 
@@ -26,6 +26,7 @@ from pm_agent.tracking import (
     PROJECT_WRITE_LOCK,
     adopt,
     covered_requirements,
+    current_team,
     finished_again,
     has_progress,
     require_current,
@@ -93,14 +94,45 @@ KEEP = "Als frühere Arbeit behalten"
 DROP = "Verwerfen"
 
 
+def set_team(members: list, override: str | None = None) -> None:
+    """Update the displayed team table. `override` names the source when it differs from
+    team.json (a logged run, the rest of the adopted project, or an accepted absence)."""
+    frame = pd.DataFrame(team_rows(members), columns=TEAM_COLUMNS)
+    state.team_override = members if override is not None else None
+    state.team_override_source = override
+    if "team_df" not in state or not state.team_df.equals(frame):
+        state.team_df = frame
+        state.team_version = state.get("team_version", 0) + 1
+
+
+def sync_team() -> None:
+    """Reload team.json on every run unless an explicit override is active."""
+    if state.get("team_override") is not None:
+        state.team_file_error = None
+        return
+    try:
+        members, state.team_file_error = load_team(), None
+    except InputError as err:
+        members, state.team_file_error = [], str(err)
+    set_team(members)
+
+
+def clear_team_override() -> None:
+    """Callback: drop a logged-run or what-if team override and reload team.json."""
+    state.team_override = None
+    state.team_override_source = None
+
+
 def init() -> None:
     if "team_df" in state:
         return
-    try:
-        team, state.team_file_error = load_team(), None
-    except InputError as err:
-        team, state.team_file_error = [], str(err)
-    state.team_df = pd.DataFrame(team_rows(team), columns=TEAM_COLUMNS)
+    state.update(
+        team_version=0,
+        team_override=None,
+        team_override_source=None,
+        team_file_error=None,
+    )
+    sync_team()
     # Widget defaults live in the session state, so open_run can overwrite them.
     state.update(idea="", start=date.today(), deadline=None, free_days="", consent=False)
     state.update(
@@ -113,7 +145,6 @@ def init() -> None:
         edited=False,
         plan_df=None,
         editor_version=0,
-        team_version=0,
         # The conversation that changes the plan (step 5) and its open proposal.
         chat=[],
         proposal=None,
@@ -123,11 +154,7 @@ def init() -> None:
 
 
 def restore_editors() -> None:
-    """After a visit to another page the table editors start again from their last content."""
-    if state.get("team_current") is not None:
-        # Added rows carry their own index labels; a fresh index keeps the index column hidden.
-        state.team_df = state.team_current.reset_index(drop=True)
-        state.team_version += 1
+    """After a visit to another page the plan table editor starts again from its last content."""
     if state.get("plan_current") is not None and state.plan is not None:
         state.plan_df = state.plan_current.reset_index(drop=True)
         state.editor_version += 1
@@ -208,9 +235,7 @@ def take_dates(project: Project) -> None:
 def open_run(path) -> None:
     """Callback: runs before the widgets, so it may fill their keys."""
     project, team, plan, record = load_run(path)
-    state.team_df = pd.DataFrame(team_rows(team), columns=TEAM_COLUMNS)
-    state.team_current = None
-    state.team_version += 1
+    set_team(team, override=f"Protokoll {path.name}")
     fill_project(project)
     state.planning_rest = False  # a whole plan: nothing done outside it
     show_plan(plan, record["rounds"], f"Protokoll {path.name}", record.get("seconds"))
@@ -226,9 +251,7 @@ def load_rest() -> None:
     if adopted is None:
         raise InputError("Es ist kein Projekt übernommen")
     project, plan = rest_project(adopted, date.today())
-    state.team_df = pd.DataFrame(team_rows(adopted.team), columns=TEAM_COLUMNS)
-    state.team_current = None
-    state.team_version += 1
+    set_team(current_team(adopted), override="Rest des übernommenen Projekts")
     fill_project(project)
     show_plan(plan, [], "Rest des übernommenen Projekts", None)
     forget_conversation()
@@ -254,11 +277,9 @@ def decide(accept: bool) -> None:
         {"wish": proposal["wish"], "changes": proposal["changes"], "accepted": accept}
     )
     if accept and proposal.get("absences"):
-        # The absences the wish named go into the team table, as if typed there.
+        # The absences the wish named go into the team table for this planning session.
         team = with_absences(proposal["team"], proposal["absences"])
-        state.team_df = pd.DataFrame(team_rows(team), columns=TEAM_COLUMNS)
-        state.team_current = None
-        state.team_version += 1
+        set_team(team, override="Übernommener Änderungsvorschlag")
     if accept:
         # What the export record says about the plan as a whole goes on: the agent's time
         # and rounds add up, a hand edit stays a hand edit, the review began when it began.
@@ -307,6 +328,7 @@ if state.pop("rest_requested", False):  # set by the Kontrolle page
         load_rest()
     except InputError as err:
         rest_error = str(err)
+sync_team()
 try:
     life = lifecycle.load()
 except InputError:
@@ -355,6 +377,16 @@ with tabs[0]:
         st.error(
             f"Gespeichertes Team konnte nicht geladen werden: {as_text(state.team_file_error)}"
         )
+    if state.get("team_override") is not None:
+        st.caption(
+            f"Angezeigt wird das Team aus „{as_text(state.team_override_source or '')}“ "
+            "(nicht die aktuelle Datei data/team.json)."
+        )
+        st.button(
+            "Aktuelles Team laden",
+            icon=":material/refresh:",
+            on_click=clear_team_override,
+        )
     edited_team = st.data_editor(
         state.team_df,
         key=f"team_editor_{state.team_version}",
@@ -376,7 +408,6 @@ with tabs[0]:
             "Notiz": st.column_config.TextColumn(help="z. B. Urlaub, Prüfungsphase"),
         },
     )
-    state.team_current = edited_team
     try:
         team = rows_to_team(edited_team.to_dict("records"))
     except InputError as err:

@@ -753,17 +753,14 @@ def test_startseite_and_ueber_uns_describe_all_three_agents(site):
     assert "Python rechnet, der Agent bewertet" in tiles
 
 
-def test_project_and_team_survive_a_visit_to_another_page(site):
+def test_project_and_team_survive_a_visit_to_another_page(site, monkeypatch):
+    monkeypatch.setattr(workbench, "load_team", REAL_LOAD_TEAM)
+    workbench.save_team(TEAM)
     at = fill_project(site.switch_page(PLANUNG).run())
-    # What the team editor returned after the project lead added Ben.
-    edited = pd.DataFrame(
-        workbench.team_rows(TEAM)
-        + [{"Name": "Ben", "Skills": "SQL 3", "Stunden/Woche": 10, "Notiz": ""}],
-        columns=workbench.TEAM_COLUMNS,
-    )
-    at.session_state["team_current"] = edited
-
+    # While the project lead visits Kontrolle, Ben joins via team.json.
     at = at.switch_page("views/kontrolle.py").run()
+    ben = workbench.Member(name="Ben", skills={"SQL": 3}, hours_per_week=10)
+    workbench.save_team([*TEAM, ben])
     at = at.switch_page(PLANUNG).run()
 
     assert not at.exception
@@ -3823,3 +3820,206 @@ def test_kontrolle_shows_efficiency_summary_download_and_empty_or_damaged_states
         e.value for e in at.error if "agent_vergleich.csv konnte nicht gelesen werden" in e.value
     ]
     assert "legt sie beiseite" not in message
+
+
+def _real_team(monkeypatch, members=TEAM, *, adopt_plan=None, project=PROJECT):
+    monkeypatch.setattr(workbench, "load_team", REAL_LOAD_TEAM)
+    workbench.save_team(members)
+    if adopt_plan is not None:
+        tracking.adopt(project, members, adopt_plan)
+
+
+def _two_member_setup(monkeypatch):
+    ben = workbench.Member(name="Ben", skills={"Python": 4}, hours_per_week=40)
+    data = plan_input()
+    data["assignments"][1]["member"] = "Ben"
+    _real_team(monkeypatch, [*TEAM, ben], adopt_plan=Plan.model_validate(data))
+
+
+def test_switching_member_in_mein_bereich_does_not_leak_unsaved_edits(site, monkeypatch):
+    _two_member_setup(monkeypatch)
+    at = edit_progress(as_member(site, "Anna"), {0: {"Status": "in Arbeit", "Notiz": "Annas"}})
+    # Switching to Ben must not leak Anna's unsaved edits onto Ben's row.
+    at.selectbox(key="me").set_value("Ben").run()
+    assert not at.exception
+    assert (progress_editor(at).iloc[0]["ID"], progress_editor(at).iloc[0]["Notiz"]) == ("B", "")
+
+    button(at, "Fortschritt speichern").click()
+    at = at.run()
+    saved = tracking.load().progress
+    assert (saved["A"].note, saved["B"].note) == ("", "")
+
+    # Returning to Anna still restores her own unsaved draft.
+    at.selectbox(key="me").set_value("Anna").run()
+    assert progress_editor(at).iloc[0]["Notiz"] == "Annas"
+
+
+def test_team_view_asks_for_a_name_instead_of_picking_the_first_member(site):
+    at = site.radio(key="role").set_value("Team").run()
+    assert not at.exception
+    assert at.selectbox(key="me").value is None
+    assert at.selectbox(key="me").proto.placeholder == "Name wählen"
+    assert at.header[0].value == "Mein Bereich"
+    assert any("Wähle links unter „Ich bin“ deinen Namen." in i.value for i in at.info)
+    assert not [b for b in at.button if b.label == "Speichern"]
+
+
+def test_planung_reloads_team_file_on_each_run_while_keeping_overrides(site, monkeypatch, tmp_path):
+    _real_team(monkeypatch, [TEAM[0].model_copy(update={"hours_per_week": 20})])
+    at = site.switch_page(PLANUNG).run()
+    assert list(at.session_state["team_df"]["Stunden/Woche"]) == [20]
+
+    # Another browser session updates team.json: Planung picks it up on the next run.
+    ben = workbench.Member(name="Ben", skills={"SQL": 3}, hours_per_week=15)
+    workbench.save_team([TEAM[0].model_copy(update={"hours_per_week": 30}), ben])
+    at = at.run()
+    assert list(at.session_state["team_df"]["Name"]) == ["Anna", "Ben"]
+    assert list(at.session_state["team_df"]["Stunden/Woche"]) == [30, 15]
+
+    # Opening a logged run keeps its own team until the lead loads the live team again.
+    clara = workbench.Member(name="Clara", skills={"Python": 3}, hours_per_week=12)
+    log = tmp_path / "run-20261109-120000.json"
+    record = {
+        "project": PROJECT.model_dump(mode="json"),
+        "team": [clara.model_dump(mode="json")],
+        "plan": plan_input(member="Clara"),
+        "rounds": [],
+    }
+    log.write_text(json.dumps(record), encoding="utf-8")
+    monkeypatch.setattr(workbench, "saved_runs", lambda: [log])
+    at = at.run()
+    button(at, "Lauf öffnen").click()
+    at = at.run()
+    assert list(at.session_state["team_df"]["Name"]) == ["Clara"]
+    assert list(at.run().session_state["team_df"]["Name"]) == ["Clara"]
+
+    button(at, "Aktuelles Team laden").click()
+    assert list(at.run().session_state["team_df"]["Name"]) == ["Anna", "Ben"]
+
+
+def test_absences_saved_on_mein_bereich_reach_forecast_and_rest_replanning(site, monkeypatch):
+    _real_team(monkeypatch, adopt_plan=PLAN, project=FUTURE)
+    at = as_member(site, "Anna")
+    next(t for t in at.text_input if t.label == "Abwesend").input("06.01.2099–07.01.2099")
+    button(at, "Speichern").click()
+    at = at.run()
+    assert not at.exception and not at.error
+
+    at = as_lead(at).switch_page("views/kontrolle.py").run()
+    assert {m.label: m.value for m in at.metric}["Voraussichtliches Ende"] == "09.01.2099"
+    button(at, "Rest mit dem Agenten umplanen").click()
+    at.run()
+    at = at.switch_page(PLANUNG).run()
+    assert not at.exception and not at.error
+    assert list(at.session_state["team_df"]["Abwesend"]) == ["06.01.2099–07.01.2099"]
+    assert {m.label: m.value for m in at.metric}["Planende"] == "09.01.2099"
+
+
+def test_unsaved_progress_survives_switching_ansicht_and_other_members_saves(site, monkeypatch):
+    _two_member_setup(monkeypatch)
+    at = edit_progress(as_member(site, "Anna"), {0: {"Status": "in Arbeit", "Notiz": "Annas"}})
+    # Switching Ansicht (Startseite <-> Mein Bereich both have url_path == "") keeps the draft.
+    at = as_lead(at).radio(key="role").set_value("Team").run()
+    assert not at.exception and at.selectbox(key="me").value == "Anna"
+    assert progress_editor(at).iloc[0]["Notiz"] == "Annas"
+
+    # Ben saves his own task meanwhile: Anna's draft is neither dropped nor blocked.
+    ben_done = [{"ID": "B", "Status": "fertig", "Ist (h)": 16, "Notiz": "Bens"}]
+    tracking.save(tracking.apply_rows(tracking.load(), ben_done))
+    button(at, "Fortschritt speichern").click()
+    at = at.run()
+    assert not at.exception and not at.error
+    assert not [w.value for w in at.warning if "inzwischen geändert" in w.value]
+    stored = tracking.load().progress
+    assert (stored["A"].status, stored["A"].note) == ("in Arbeit", "Annas")
+    assert (stored["B"].status, stored["B"].note) == ("fertig", "Bens")
+
+
+def test_a_member_can_leave_the_team_and_their_open_tasks_stay_updatable(site, monkeypatch):
+    _two_member_setup(monkeypatch)
+    at = as_member(site, "Ben")
+    assert button(at, "Team verlassen").disabled
+    at.checkbox(key="leave_team_sure_Ben").check().run()
+    assert not button(at, "Team verlassen").disabled
+    button(at, "Team verlassen").click()
+    at = at.run()
+    assert not at.exception and not at.error
+    assert [m.name for m in REAL_LOAD_TEAM()] == ["Anna"]
+    assert at.selectbox(key="me").value is None and notices(at) == ["Ben hat das Team verlassen."]
+
+    # Ben still owns task B in the adopted plan: selectable to finish/update that task.
+    at.selectbox(key="me").set_value("Ben").run()
+    assert not at.exception and not at.error
+    assert any("nicht mehr im Team" in i.value for i in at.info)
+    assert not [b for b in at.button if b.label == "Speichern"]
+    at = edit_progress(at, {0: {"Status": "fertig", "Ist (h)": 14, "Notiz": "übergeben"}})
+    button(at, "Fortschritt speichern").click()
+    at = at.run()
+    assert not at.exception and not at.error
+    saved = tracking.load().progress["B"]
+    assert (saved.status, saved.note) == ("fertig", "übergeben")
+
+
+def test_leaving_team_with_braces_in_name_does_not_crash(site, monkeypatch):
+    name = "Ben {1} {place}"
+    _real_team(monkeypatch, [*TEAM, workbench.Member(name=name, hours_per_week=10)])
+    at = as_member(site, name)
+    at.checkbox(key=f"leave_team_sure_{name}").check().run()
+    button(at, "Team verlassen").click()
+    at = at.run()
+    assert not at.exception and not at.error
+    assert [m.name for m in REAL_LOAD_TEAM()] == ["Anna"]
+    assert notices(at) == [f"{name} hat das Team verlassen."]
+
+
+def test_team_view_and_member_survive_a_fresh_session_with_query_params(site, monkeypatch):
+    _real_team(monkeypatch)
+    at = as_member(site, "Anna")
+    assert (at.query_params.get("ansicht"), at.query_params.get("ich")) == ("Team", "Anna")
+
+    # Simulate F5: a brand-new session starts with the URL's query parameters.
+    fresh = AppTest.from_file(str(SITE), default_timeout=30)
+    fresh.query_params["ansicht"], fresh.query_params["ich"] = "Team", "Anna"
+    fresh.run()
+    assert not fresh.exception
+    assert (fresh.radio(key="role").value, fresh.selectbox(key="me").value) == ("Team", "Anna")
+    assert fresh.header[0].value == "Mein Bereich · Anna"
+
+    fresh = as_lead(fresh)
+    assert "ansicht" not in fresh.query_params and "ich" not in fresh.query_params
+
+    # Unknown member in URL does not crash and asks to pick a name.
+    stale = AppTest.from_file(str(SITE), default_timeout=30)
+    stale.query_params["ansicht"], stale.query_params["ich"] = "Team", "Unbekannt"
+    stale.run()
+    assert not stale.exception and stale.radio(key="role").value == "Team"
+    assert stale.selectbox(key="me").value is None
+
+
+def test_mein_bereich_accepts_decimal_hours_and_omits_row_number_in_errors(site, monkeypatch):
+    _real_team(monkeypatch)
+    at = as_member(site, "Anna")
+    next(t for t in at.text_input if t.label == "Fähigkeiten mit Stufe 1–5").input("Python super")
+    button(at, "Speichern").click()
+    at = at.run()
+    assert any("Python super" in e.value for e in at.error)
+    assert not any("Zeile 1" in e.value for e in at.error)
+
+    next(t for t in at.text_input if t.label == "Fähigkeiten mit Stufe 1–5").input("Python 4")
+    hours_input = next(n for n in at.number_input if n.label == "Stunden pro Woche")
+    assert hours_input.proto.step == 0.5
+    hours_input.set_value(12.5)
+    button(at, "Speichern").click()
+    at = at.run()
+    assert not at.exception and not at.error
+    assert [m.hours_per_week for m in REAL_LOAD_TEAM()] == [12.5]
+
+
+def test_mein_bereich_disables_save_button_on_conflict(site):
+    tracking.adopt(PROJECT, TEAM, PLAN)
+    at = edit_progress(as_member(site, "Anna"), {0: {"Notiz": "Entwurf"}})
+    tracking.save(tracking.apply_rows(tracking.load(), [{"ID": "A", "Notiz": "anderer Tab"}]))
+    at = at.run()
+    assert not at.exception
+    assert any("inzwischen geändert" in w.value for w in at.warning)
+    assert button(at, "Fortschritt speichern").disabled

@@ -85,6 +85,20 @@ def free_days_text(days: list[Absence]) -> str:
     )
 
 
+def parse_member(row: dict[str, Any]) -> Member:
+    """One member from form or table fields. Raises InputError with a German message."""
+    try:
+        return Member(
+            name=_cell(row.get("Name")),
+            skills=_skills(_cell(row.get("Skills"))),
+            hours_per_week=row.get("Stunden/Woche"),
+            absences=_absences(_cell(row.get("Abwesend"))),
+            note=_cell(row.get("Notiz")),
+        )
+    except (InputError, ValidationError) as err:
+        raise InputError(_reason(err)) from err
+
+
 def rows_to_team(rows: list[dict[str, Any]]) -> list[Member]:
     """Rows without a name are ignored, so an empty last row of the editor does no harm."""
     team, errors = [], []
@@ -93,17 +107,9 @@ def rows_to_team(rows: list[dict[str, Any]]) -> list[Member]:
         if not name:
             continue
         try:
-            team.append(
-                Member(
-                    name=name,
-                    skills=_skills(_cell(row.get("Skills"))),
-                    hours_per_week=row.get("Stunden/Woche"),
-                    absences=_absences(_cell(row.get("Abwesend"))),
-                    note=_cell(row.get("Notiz")),
-                )
-            )
-        except (InputError, ValidationError) as err:
-            errors.append(f"Zeile {number} ({name}): {_reason(err)}")
+            team.append(parse_member(row))
+        except InputError as err:
+            errors.append(f"Zeile {number} ({name}): {err}")
     if errors:
         raise InputError("\n".join(errors))
     return team
