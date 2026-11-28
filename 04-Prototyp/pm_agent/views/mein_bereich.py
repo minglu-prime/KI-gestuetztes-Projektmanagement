@@ -75,7 +75,7 @@ def _save_team_file(updated: list, notice: str, next_me: str | None) -> None:
             "Die gespeicherte Datei bleibt, wie sie ist."
         )
     else:
-        notify(notice.format(place=place))
+        notify(notice)
         state.me_next = next_me  # the sidebar updates the selection on the next run
         st.rerun()
 
@@ -147,8 +147,9 @@ with st.container(border=True, key="panel-me"):
                     st.error(f"{as_text(mine.name)} gibt es im Team schon. Wähle links den Namen.")
                 else:
                     updated = team + [mine] if new else [mine if m.name == me else m for m in team]
+                    place = f"{TEAM_FILE.parent.name}/{TEAM_FILE.name}"
                     _save_team_file(
-                        updated, "Deine Angaben sind gespeichert (lokal in {place}).", mine.name
+                        updated, f"Deine Angaben sind gespeichert (lokal in {place}).", mine.name
                     )
         if member is not None:
             with st.expander("Team verlassen"):

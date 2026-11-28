@@ -3960,6 +3960,18 @@ def test_a_member_can_leave_the_team_and_their_open_tasks_stay_updatable(site, m
     assert (saved.status, saved.note) == ("fertig", "übergeben")
 
 
+def test_leaving_team_with_braces_in_name_does_not_crash(site, monkeypatch):
+    name = "Ben {1} {place}"
+    _real_team(monkeypatch, [*TEAM, workbench.Member(name=name, hours_per_week=10)])
+    at = as_member(site, name)
+    at.checkbox(key=f"leave_team_sure_{name}").check().run()
+    button(at, "Team verlassen").click()
+    at = at.run()
+    assert not at.exception and not at.error
+    assert [m.name for m in REAL_LOAD_TEAM()] == ["Anna"]
+    assert notices(at) == [f"{name} hat das Team verlassen."]
+
+
 def test_team_view_and_member_survive_a_fresh_session_with_query_params(site, monkeypatch):
     _real_team(monkeypatch)
     at = as_member(site, "Anna")
