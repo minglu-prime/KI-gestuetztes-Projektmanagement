@@ -894,3 +894,14 @@ def test_the_readers_of_the_logs_follow_agent_log_dir(monkeypatch, tmp_path):
     monkeypatch.setattr(agent, "LOG_DIR", tmp_path)
     assert workbench.saved_runs() == [run]
     assert [r["Lauf"] for r in tracking.agent_runs()] == [run.name]
+
+
+def test_parse_member_validates_one_member_without_table_row_prefix():
+    member = workbench.parse_member(
+        {"Name": "Anna", "Skills": "Python 4", "Stunden/Woche": 12.5, "Abwesend": "", "Notiz": ""}
+    )
+    assert member.hours_per_week == 12.5
+    with pytest.raises(InputError) as err:
+        workbench.parse_member({"Name": "Anna", "Skills": "Python sehr gut", "Stunden/Woche": 12.5})
+    assert "Skill 'Python sehr gut' nicht lesbar" in str(err.value)
+    assert "Zeile 1" not in str(err.value)

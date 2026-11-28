@@ -21,8 +21,27 @@ BROWSERS = [b for b in os.environ.get("PM_BROWSERS", "").split(",") if b]
 pytestmark = pytest.mark.skipif(not BROWSERS, reason="PM_BROWSERS is not set")
 
 ROOT = Path(__file__).parents[1]
-# Every page of the site by its address; "" is the Startseite.
-PAGES = ["", *sorted(p.stem for p in (ROOT / "views").glob("*.py") if p.stem != "startseite")]
+# Every page of the site by its address and expected heading (h1/h2): a silent fallback to
+# the Startseite fails the check.
+LEAD_PAGES = [
+    ("", "Der Agent schlägt vor."),
+    ("abschluss", "Abschluss"),
+    ("anforderungen", "Anforderungen"),
+    ("auftrag", "Projektauftrag"),
+    ("durchfuehrung", "Durchführung"),
+    ("entwurf", "Entwurf"),
+    ("impressum", "Impressum"),
+    ("ki_lab", "KI-Lab"),
+    ("kontrolle", "Kontrolle"),
+    ("planung", "Planung"),
+    ("testlauf", "Test"),
+    ("testplan", "Testplan"),
+    ("ueber_uns", "Über uns"),
+]
+TEAM_PAGES = [
+    ("?ansicht=Team", "Mein Bereich"),
+    ("projektstand?ansicht=Team", "Projektstand"),
+]
 MENU = [
     "Startseite",
     "Vorbereiten",
@@ -33,6 +52,7 @@ MENU = [
     "KI-Lab",
     "Info",
 ]
+TEAM_MENU = ["Mein Bereich", "Projektstand", "KI-Lab", "Info"]
 
 
 def free_port() -> int:
@@ -100,9 +120,8 @@ def browser(request):
         launched.close()
 
 
-def opened(page, url: str) -> None:
-    """Open `url` and wait until Streamlit has run the page to its end."""
-    page.goto(url, wait_until="domcontentloaded")
+def settled(page) -> None:
+    """Wait until Streamlit has finished rendering the current run."""
     page.wait_for_selector('[data-testid="stMainBlockContainer"] :is(h1, h2, h3)', timeout=30_000)
     page.wait_for_function(
         "!document.querySelector('[data-stale=\"true\"]')",
@@ -110,14 +129,39 @@ def opened(page, url: str) -> None:
     )
 
 
+def opened(page, url: str) -> None:
+    """Open `url` and wait until Streamlit has run the page to its end."""
+    page.goto(url, wait_until="domcontentloaded")
+    settled(page)
+
+
+def heading_text(page) -> str:
+    return page.locator('[data-testid="stMainBlockContainer"] :is(h1, h2)').first.inner_text()
+
+
+def menu_titles(page) -> list[str]:
+    # Each link starts with the name of its icon (a ligature of the icon font), then the title.
+    links = page.locator('[data-testid="stSidebarNavLink"]').all_inner_texts()
+    return [link.split(None, 1)[-1].strip() for link in links]
+
+
 @pytest.mark.parametrize("width", [1440, 375])
 def test_every_page_opens_without_an_error(site, browser, width):
+    covered = {"startseite" if p == "" else p for p, _ in LEAD_PAGES} | {
+        "mein_bereich" if p.startswith("?") else p.split("?")[0] for p, _ in TEAM_PAGES
+    }
+    assert covered == {p.stem for p in (ROOT / "views").glob("*.py")}
+
     page = browser.new_page(viewport={"width": width, "height": 900})
     errors = []
-    for path in PAGES:
-        opened(page, f"{site}/{path}")
+    for path, expected in [*LEAD_PAGES, *TEAM_PAGES]:
+        url = f"{site}/{path}" if path and not path.startswith("?") else f"{site}{path}"
+        opened(page, url)
         if page.locator('[data-testid="stException"]').count():
             errors.append(f"/{path}: Ausnahme auf der Seite")
+        shown = heading_text(page)
+        if expected not in shown:
+            errors.append(f"/{path}: erwartete Überschrift '{expected}', sah '{shown}'")
         overflow = page.evaluate("document.documentElement.scrollWidth - window.innerWidth")
         if overflow > 0:
             errors.append(f"/{path}: {overflow} px waagrecht zu breit")
@@ -128,7 +172,38 @@ def test_every_page_opens_without_an_error(site, browser, width):
 def test_the_menu_has_its_eight_entries(site, browser):
     page = browser.new_page(viewport={"width": 1440, "height": 900})
     opened(page, site)
-    links = page.locator('[data-testid="stSidebarNavLink"]').all_inner_texts()
+    titles = menu_titles(page)
     page.close()
-    # Each link starts with the name of its icon (a ligature of the icon font), then the title.
-    assert [link.split()[-1] for link in links] == MENU
+    assert titles == MENU
+
+
+def test_team_view_opens_mein_bereich_and_projektstand_and_survives_reload(site, browser):
+    page = browser.new_page(viewport={"width": 1440, "height": 900})
+    opened(page, site)
+    page.locator('[data-testid="stSidebar"]').get_by_text("Team", exact=True).click()
+    page.locator('[data-testid="stMainBlockContainer"] h2', has_text="Mein Bereich").wait_for(
+        timeout=30_000
+    )
+    page.get_by_text("Wähle links unter „Ich bin“ deinen Namen.").wait_for(
+        state="visible", timeout=30_000
+    )
+    settled(page)
+    assert menu_titles(page) == TEAM_MENU
+
+    page.locator('[data-testid="stSidebarNavLink"]').filter(has_text="Projektstand").click()
+    page.locator('[data-testid="stMainBlockContainer"] h2', has_text="Projektstand").wait_for(
+        timeout=30_000
+    )
+    page.get_by_text("Noch kein Projekt übernommen.").wait_for(state="visible", timeout=30_000)
+    settled(page)
+
+    # Refreshing in Team view keeps the view and current page via query parameters.
+    page.reload(wait_until="domcontentloaded")
+    page.locator('[data-testid="stMainBlockContainer"] h2', has_text="Projektstand").wait_for(
+        timeout=30_000
+    )
+    page.get_by_text("Noch kein Projekt übernommen.").wait_for(state="visible", timeout=30_000)
+    settled(page)
+    assert not page.locator('[data-testid="stException"]').count()
+    assert menu_titles(page) == TEAM_MENU
+    page.close()

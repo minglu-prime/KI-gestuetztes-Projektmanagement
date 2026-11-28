@@ -1219,3 +1219,51 @@ def test_retros_stay_with_their_calendar_week_when_the_rest_is_planned_again(tmp
     )
     rows = demo_status(again, date(2026, 11, 18))
     assert [(r["Demo"], r["Gezeigt"]) for r in rows] == [("Rest A", "nein"), ("Rest B", "kommt")]
+
+
+def test_forecast_and_reassignment_pick_up_team_changes_after_adoption(tracking):
+    from pm_agent import tracking as mod
+    from pm_agent import workbench
+
+    done_a = apply_rows(tracking, [{"ID": "A", "Status": "fertig", "Ist (h)": 8}])
+    anna_away = TEAM[0].model_copy(
+        update={"absences": [Absence(first=date(2026, 11, 10), last=date(2026, 11, 11))]}
+    )
+    ben = Member(name="Ben", skills={"Python": 4}, hours_per_week=40)
+    workbench.save_team([anna_away, ben])
+
+    tuesday = date(2026, 11, 10)
+    # The baseline snapshot stays untouched: only the forecast and rest-replanning move.
+    assert evaluate(done_a, tuesday).tasks[1].planned_end == date(2026, 11, 11)
+    outlook = forecast(done_a, tuesday)
+    assert (outlook.planned_end, outlook.end, outlook.shift) == (
+        date(2026, 11, 11),
+        date(2026, 11, 13),
+        2,
+    )
+    project, rest = rest_project(done_a, tuesday)
+    assert check_plan(rest, mod.current_team(done_a), project).end_date == outlook.end
+    assert reassignment_effect(done_a, tuesday, ["B"], "Ben") == (
+        "Voraussichtliches Ende 11.11.2026 statt 13.11.2026 (2 Arbeitstage früher)"
+    )
+
+
+def test_current_team_keeps_former_member_with_open_tasks_and_surfaces_damaged_team(tmp_path):
+    from pm_agent import tracking as mod
+    from pm_agent import workbench
+
+    ben = Member(name="Ben", skills={"Python": 4}, hours_per_week=40)
+    data = plan_input()
+    data["assignments"][1]["member"] = "Ben"
+    adopted = adopt(PROJECT, [*TEAM, ben], Plan.model_validate(data), path=tmp_path / "p.json")
+
+    # Ben leaves team.json while still owning open task B: forecast keeps Ben from snapshot.
+    workbench.save_team(TEAM)
+    assert [m.name for m in mod.current_team(adopted)] == ["Anna", "Ben"]
+    outlook = forecast(adopted, date(2026, 11, 9))
+    assert outlook.problem is None and outlook.end == date(2026, 11, 11)
+
+    # A damaged team.json is reported as a forecast problem rather than crashing or vanishing.
+    workbench.TEAM_FILE.write_text("{kaputt", encoding="utf-8")
+    broken = forecast(adopted, date(2026, 11, 9))
+    assert broken.end is None and broken.problem and "team.json ist beschädigt" in broken.problem

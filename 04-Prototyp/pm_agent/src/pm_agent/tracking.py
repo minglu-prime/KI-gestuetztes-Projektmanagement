@@ -18,6 +18,7 @@ from typing import Any, Literal, NamedTuple, get_args
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from pm_agent import agent as agents
+from pm_agent import workbench
 from pm_agent.models import (
     Case,
     ControlReport,
@@ -1092,6 +1093,44 @@ def rest_project(tracking: Tracking, today: date) -> tuple[Project, Plan]:
     return project.model_copy(update={"start_date": start}), rest
 
 
+def current_team(tracking: Tracking, team: list[Member] | None = None) -> list[Member]:
+    """The team to forecast and replan the rest with: latest member details from team.json
+    merged onto the adopted snapshot.
+
+    Members present in team.json supply their current skills, weekly hours, note, and any
+    absences added since adoption while keeping absences already adopted with the plan.
+    Newly joined members are included; members who left team.json stay while unfinished tasks
+    are still assigned to them so scheduling keeps working. Without a saved team file (empty),
+    the adopted snapshot is returned unchanged."""
+    latest = workbench.load_team() if team is None else team
+    if not latest:
+        return list(tracking.team)
+    by_name = {m.name: m for m in latest}
+    open_owners = {
+        a.member
+        for a in tracking.plan.assignments
+        if tracking.progress[a.task_id].status != "fertig"
+    }
+    merged: list[Member] = []
+    seen: set[str] = set()
+    for member in tracking.team:
+        if member.name in by_name:
+            now = by_name[member.name]
+            absences = list(now.absences)
+            for away in member.absences:
+                if away not in absences:
+                    absences.append(away)
+            merged.append(now.model_copy(update={"absences": absences}))
+            seen.add(member.name)
+        elif member.name in open_owners:
+            merged.append(member)
+            seen.add(member.name)
+    for member in latest:
+        if member.name not in seen:
+            merged.append(member)
+    return merged
+
+
 def forecast(tracking: Tracking, today: date, reassign: dict[str, str] | None = None) -> Forecast:
     """Schedule what is not finished (rest_plan) from today on and compare it with the plan.
     The same scheduling as for the plan itself (planning.check_plan), so both ends are
@@ -1106,6 +1145,18 @@ def forecast(tracking: Tracking, today: date, reassign: dict[str, str] | None = 
         return Forecast(
             planned_end=planned_end, end=None, shift=0, deadline_gap=0, blocked={}, schedule=[]
         )
+    try:
+        active_team = current_team(tracking)
+    except InputError as err:
+        return Forecast(
+            planned_end=planned_end,
+            end=None,
+            shift=0,
+            deadline_gap=0,
+            blocked={},
+            schedule=[],
+            problem=str(err),
+        )
     # The last possible date as deadline: only the dates are wanted here. Today can lie
     # behind the real deadline, and check_plan would then find no workday to plan in.
     open_end = project.model_copy(
@@ -1113,7 +1164,7 @@ def forecast(tracking: Tracking, today: date, reassign: dict[str, str] | None = 
     )
     # Scheduled like any plan: the Planung says the same about the rest when it is
     # loaded there ("Rest mit dem Agenten umplanen").
-    expected = check_plan(rest, tracking.team, open_end, dates_only=True)
+    expected = check_plan(rest, active_team, open_end, dates_only=True)
     if expected.errors:
         return Forecast(
             planned_end=planned_end,
@@ -1180,7 +1231,11 @@ def week_ahead(tracking: Tracking, today: date, days: int = 5) -> list[dict[str,
 def reassignment_effect(tracking: Tracking, today: date, task_ids: list[str], member: str) -> str:
     """What giving these tasks to `member` does to the forecast, as one sentence. Finished
     tasks stay where they are."""
-    people = {m.name: m for m in tracking.team}
+    try:
+        active_team = current_team(tracking)
+    except InputError as err:
+        return f"Nicht prüfbar: {err}"
+    people = {m.name: m for m in active_team}
     if member not in people:
         return f"Nicht prüfbar: {member} ist nicht im Team"
     tasks = {task.id: task for task in tracking.plan.tasks}

@@ -7,6 +7,7 @@ reschedule for the Kontrolle agent) go next to the Submission in the run functio
 """
 
 import json
+import logging
 from collections.abc import Callable
 from dataclasses import asdict
 from datetime import date
@@ -21,12 +22,25 @@ from pm_agent.tracking import (
     Forecast,
     Tracking,
     as_shown,
+    current_team,
     evaluate,
     forecast,
     key_figures,
     requirement_progress,
     signed_hours,
 )
+from pm_agent.workbench import InputError
+
+logger = logging.getLogger(__name__)
+
+
+def _team(tracking: Tracking) -> list[Member]:
+    try:
+        return current_team(tracking)
+    except InputError as err:
+        # A damaged team.json is already surfaced via forecast().problem in facts().
+        logger.warning("Using adopted team snapshot because team.json could not be read: %s", err)
+        return list(tracking.team)
 
 
 def run_status_summary(
@@ -69,7 +83,7 @@ def run_control_report(
             "ist, und nennt die Gründe."
         ),
         schema=ControlReport,
-        check=lambda report: check_report(report, evaluation, tracking.team, outlook),
+        check=lambda report: check_report(report, evaluation, _team(tracking), outlook),
     )
     return _run("kontrolle", submission, tracking, evaluation, log_dir, on_round)
 
@@ -199,7 +213,7 @@ def facts(tracking: Tracking, evaluation: Evaluation) -> str:
         "je_person": evaluation.by_member,
         # Empty when no approved requirements were adopted with the plan.
         "je_anforderung": requirement_progress(tracking),
-        "team": [m.model_dump() for m in tracking.team],
+        "team": [m.model_dump() for m in _team(tracking)],
         "risiken": tracking.plan.risks,
     }
     return json.dumps(as_shown(data), ensure_ascii=False, indent=2)
