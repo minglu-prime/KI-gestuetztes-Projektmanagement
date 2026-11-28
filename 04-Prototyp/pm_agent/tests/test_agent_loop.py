@@ -292,3 +292,159 @@ def test_a_run_without_log_dir_writes_where_agent_log_dir_points_now(api, monkey
     monkeypatch.setattr(agent, "LOG_DIR", tmp_path / "logs")
     run_planning(PROJECT, TEAM)
     assert len(list((tmp_path / "logs").glob("run-*.json"))) == 1
+
+
+def test_openai_client_receives_explicit_timeout_and_retry_limit(monkeypatch, tmp_path):
+    import httpx2 as httpx
+    import openai
+
+    captured = {}
+
+    def handle(_request):
+        return httpx.Response(200, json=reply([submit(plan_input(), "call_1")]))
+
+    def fake_openai(*args, **kwargs):
+        captured.update(kwargs)
+        return openai.OpenAI(
+            api_key="test",
+            max_retries=0,
+            http_client=httpx.Client(transport=httpx.MockTransport(handle)),
+        )
+
+    monkeypatch.setattr(agent, "OpenAI", fake_openai)
+    monkeypatch.setenv("PM_AGENT_MODEL", "gpt-test")
+    monkeypatch.delenv("PM_AGENT_TIMEOUT", raising=False)
+
+    plan = run_planning(PROJECT, TEAM, log_dir=tmp_path)
+
+    assert plan == Plan.model_validate(plan_input())
+    assert isinstance(captured.get("timeout"), openai.Timeout)
+    assert 0 < captured["timeout"].read <= 180.0
+    assert 0 < captured["timeout"].connect <= 15.0
+    assert captured.get("max_retries") == agent.MAX_RETRIES
+
+
+@pytest.mark.parametrize(
+    "outcome, error_type, expected_fragment",
+    [
+        (401, "AuthenticationError", "HTTP 401"),
+        (403, "PermissionDeniedError", "HTTP 403"),
+        (404, "NotFoundError", "HTTP 404"),
+        (429, "RateLimitError", "HTTP 429"),
+        (500, "InternalServerError", "HTTP 500"),
+        ("timeout", "APITimeoutError", "Zeitüberschreitung"),
+        ("connect", "APIConnectionError", "Verbindung"),
+    ],
+)
+def test_real_sdk_errors_propagate_get_logged_and_format_in_german(
+    monkeypatch, tmp_path, outcome, error_type, expected_fragment
+):
+    import httpx2 as httpx
+    import openai
+
+    def handle(request):
+        if outcome == "timeout":
+            raise httpx.ReadTimeout("timed out", request=request)
+        if outcome == "connect":
+            raise httpx.ConnectError("connection refused", request=request)
+        return httpx.Response(
+            outcome, json={"error": {"message": f"raw {outcome}", "type": "api_error"}}
+        )
+
+    client = openai.OpenAI(
+        api_key="test",
+        max_retries=0,
+        http_client=httpx.Client(transport=httpx.MockTransport(handle)),
+    )
+    monkeypatch.setattr(agent, "OpenAI", lambda *args, **kwargs: client)
+    monkeypatch.setenv("PM_AGENT_MODEL", "gpt-test")
+    monkeypatch.setenv("OPENAI_BASE_URL", "https://ki.beispiel.test/v1")
+
+    expected_cls = getattr(openai, error_type)
+    with pytest.raises(expected_cls) as exc_info:
+        run_planning(PROJECT, TEAM, log_dir=tmp_path)
+
+    text = agent.describe_api_error(exc_info.value)
+    assert expected_fragment in text
+    assert "ki.beispiel.test" in text
+    assert "OpenAI API" not in text
+
+    log = read_log(tmp_path)
+    assert log["outcome"] == "error"
+    assert error_type in log["error"]
+
+
+def test_missing_key_and_model_errors_name_configured_service_not_openai_api(monkeypatch, tmp_path):
+    for name in [n for n in os.environ if n.startswith("OPENAI_")]:
+        monkeypatch.delenv(name)
+    monkeypatch.setenv("OPENAI_BASE_URL", "https://ki.beispiel.test/v1")
+    monkeypatch.setenv("PM_AGENT_MODEL", "gpt-test")
+
+    with pytest.raises(PlanningError) as key_err:
+        run_planning(PROJECT, TEAM, log_dir=tmp_path / "key")
+    assert "ki.beispiel.test" in str(key_err.value)
+    assert "OPENAI_API_KEY" in str(key_err.value)
+    assert "OpenAI API" not in str(key_err.value)
+
+    monkeypatch.setenv("OPENAI_API_KEY", "dummy-key")
+    monkeypatch.delenv("PM_AGENT_MODEL")
+    monkeypatch.delenv("PM_MODEL", raising=False)
+    with pytest.raises(PlanningError) as model_err:
+        run_planning(PROJECT, TEAM, log_dir=tmp_path / "model")
+    assert "ki.beispiel.test" in str(model_err.value)
+    assert "PM_AGENT_MODEL" in str(model_err.value)
+    assert "OpenAI-Modells" not in str(model_err.value)
+
+
+def test_log_write_oserror_keeps_accepted_plan_and_reports_warning(
+    api, monkeypatch, tmp_path, caplog
+):
+    replies, _ = api
+    replies.append(reply([submit(plan_input(), "call_1")]))
+
+    def deny(*args, **kwargs):
+        raise PermissionError(13, "Zugriff verweigert")
+
+    monkeypatch.setattr(agent, "_write_log", deny)
+    seen_errors = []
+    with caplog.at_level("WARNING", logger="pm_agent.agent"):
+        with agent.collect_log_errors() as collected:
+            plan = run_planning(PROJECT, TEAM, log_dir=tmp_path, on_log_error=seen_errors.append)
+
+    assert plan == Plan.model_validate(plan_input())
+    assert len(seen_errors) == 1 and isinstance(seen_errors[0], PermissionError)
+    assert len(collected) == 1 and "Laufprotokoll" in collected[0]
+    assert "Zugriff verweigert" in collected[0]
+    assert any("Laufprotokoll" in rec.message for rec in caplog.records)
+
+
+def test_uncreatable_log_dir_keeps_accepted_result(api, tmp_path, caplog):
+    replies, _ = api
+    replies.append(reply([submit(plan_input(), "call_1")]))
+    blocker = tmp_path / "not-a-dir"
+    blocker.write_text("file", encoding="utf-8")
+
+    with caplog.at_level("WARNING", logger="pm_agent.agent"):
+        with agent.collect_log_errors() as collected:
+            plan = run_planning(PROJECT, TEAM, log_dir=blocker)
+
+    assert plan == Plan.model_validate(plan_input())
+    assert len(collected) == 1 and "Laufprotokoll" in collected[0]
+    assert any("Laufprotokoll" in rec.message for rec in caplog.records)
+
+
+def test_log_write_oserror_does_not_mask_original_agent_failure(api, monkeypatch, tmp_path, caplog):
+    replies, _ = api
+    replies.append(reply([{"type": "text", "text": "Ich höre auf."}]))
+
+    def deny(*args, **kwargs):
+        raise PermissionError(13, "Zugriff verweigert")
+
+    monkeypatch.setattr(agent, "_write_log", deny)
+    with caplog.at_level("WARNING", logger="pm_agent.agent"):
+        with agent.collect_log_errors() as collected:
+            with pytest.raises(PlanningError, match="ohne einen Plan einzureichen"):
+                run_planning(PROJECT, TEAM, log_dir=tmp_path)
+
+    assert len(collected) == 1 and "Laufprotokoll" in collected[0]
+    assert any("Laufprotokoll" in rec.message for rec in caplog.records)

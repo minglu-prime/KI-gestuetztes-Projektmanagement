@@ -2,13 +2,11 @@
 
 import datetime
 import math
-import os
 import re
 from collections.abc import Callable, Sequence
 from html import escape
 from pathlib import Path
 from typing import Any, TypeVar
-from urllib.parse import urlsplit
 
 import altair as alt
 import pandas as pd
@@ -17,7 +15,13 @@ from openai import APIError
 from pydantic import ValidationError
 
 from pm_agent import closing, comparison, lifecycle
-from pm_agent.agent import MAX_ROUNDS, AgentError
+from pm_agent.agent import (
+    MAX_ROUNDS,
+    AgentError,
+    collect_log_errors,
+    describe_api_error,
+    service_host,
+)
 from pm_agent.lifecycle import Lifecycle
 from pm_agent.models import Plan
 from pm_agent.tracking import (
@@ -548,15 +552,14 @@ def strip(*chips: str) -> str:
     return f'<div class="chips">{"".join(chips)}</div>'
 
 
-TEAM_DATA = "ihre Angaben (Name, Skills, Stunden, Aufgaben, Notizen)"
+TEAM_DATA = "ihre Angaben (Name, Skills, Stunden, Abwesenheiten, Aufgaben, Notizen)"
 
 
 def ai_service() -> str:
     """The service the agents send their data to, as consent has to name it: the host of
     OPENAI_BASE_URL (the school's endpoint), or OpenAI's own API without it. Read when called,
     like the OpenAI client reads it."""
-    host = urlsplit(os.environ.get("OPENAI_BASE_URL", "")).hostname
-    return f"den KI-Dienst {host or 'api.openai.com'}"
+    return f"den KI-Dienst {service_host()}"
 
 
 def consent(key: str, data: str = TEAM_DATA, **checkbox: Any) -> bool:
@@ -754,11 +757,17 @@ class Track:
         self.show("done" if ok else "failed")
 
 
+def rounds_text(count: int) -> str:
+    """German round count: '0 Runden', '1 Runde', '2 Runden'."""
+    return f"{count} Runde" if count == 1 else f"{count} Runden"
+
+
 def run_with_progress(label: str, run: Callable[[Callable[[dict[str, Any]], None]], T]) -> T | None:
     """Run an agent and show each round as it happens. `run` gets the on_round callback.
     If the agent fails, the page shows why and gets None."""
     rounds = 0
     result = failure = None
+    log_errors: list[str] = []
     track = Track()
     with st.status(label, expanded=True) as status:
         st.caption(BUSY_HINT)
@@ -773,14 +782,17 @@ def run_with_progress(label: str, run: Callable[[Callable[[dict[str, Any]], None
                 st.caption(as_text(message))
 
         try:
-            result = run(on_round)
+            with collect_log_errors() as log_errors:
+                result = run(on_round)
         except AgentError as err:
             failure = str(err)
         except APIError as err:
-            failure = f"Die OpenAI API meldet einen Fehler: {err}"
+            failure = describe_api_error(err)
         track.end(not failure)
         status.update(
-            label=f"Kein Ergebnis nach {rounds} Runden" if failure else "Vorschlag angenommen",
+            label=f"Kein Ergebnis nach {rounds_text(rounds)}"
+            if failure
+            else "Vorschlag angenommen",
             state="error" if failure else "complete",
             # Folded once accepted: the result below is what counts, the rounds are a detail.
             expanded=bool(failure),
@@ -788,6 +800,8 @@ def run_with_progress(label: str, run: Callable[[Callable[[dict[str, Any]], None
     # The message goes below the box: a collapsed status would hide it.
     if failure:
         st.error(as_text(failure))
+    if log_errors:
+        st.warning("\n".join(as_text(msg) for msg in log_errors))
     return result
 
 

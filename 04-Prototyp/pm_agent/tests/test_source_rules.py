@@ -357,6 +357,19 @@ def test_no_text_says_the_data_go_to_openai():
     assert found == []
 
 
+def test_no_error_message_hardcodes_openai_api():
+    # Error messages name the configured service (OPENAI_BASE_URL via agent.service_host /
+    # ui.ai_service), never hardcoded "OpenAI API".
+    found = [
+        f"{path.name}:{number}"
+        for path in SOURCES
+        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1)
+        if re.search(r"\b(zur|die|der)\s+OpenAI API\b", line, re.I)
+        and not line.lstrip().startswith("#")
+    ]
+    assert found == []
+
+
 def test_no_function_binds_a_module_constant_as_its_default():
     # `def load_team(path=TEAM_FILE)` takes the value at import. A script or test that then
     # points workbench.TEAM_FILE (or agent.LOG_DIR, lab_server.PORT) elsewhere still read and
