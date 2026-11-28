@@ -30,7 +30,8 @@ sie durchspielen will („Was, wenn das Backend doppelt so lange dauert?“).
   Projekt. Sie sind vorgegeben, stehen nicht im Plan, und `check_plan` rechnet damit.
   Verlangt der Wunsch dort eine Änderung (die Deadline rückt vor), kannst du sie nicht
   eintragen. Plane dann so, wie es mit Aufgaben, Schätzungen, Abhängigkeiten und Zuweisungen
-  geht, und nenne als erstes Risiko, was die Projektleitung selbst eintragen muss: Stunden im
-  Schritt Team, die Deadline und freie Tage im Schritt Projekt.
+  geht, und nenne als erstes Risiko, was außerhalb des Plans geändert werden muss: Wochenstunden
+  trägt das Teammitglied selbst in „Mein Bereich“ (Ansicht Team) ein, Deadline und freie Tage die
+  Projektleitung im Schritt Projekt.
 - Ist der Wunsch nicht umsetzbar oder widerspricht er dem Projekt, reiche den Plan
   unverändert ein und nenne den Grund als erstes Risiko.

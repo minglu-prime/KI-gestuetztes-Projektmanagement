@@ -1254,7 +1254,11 @@ if state.plan is not None:
 people = f"Team: {len(team)} Person{'' if len(team) == 1 else 'en'}" if team else "Team fehlt"
 # What is next, in the order of the steps: one line, and a button that opens that step.
 if not team:
-    todo, step = "Trage das Team ein: Name, Skills und Stunden pro Woche.", 0
+    todo, step = (
+        "Noch niemand im Team. Bitte das Team, Name, Skills und Stunden pro Woche in "
+        "„Mein Bereich“ (Ansicht Team) einzutragen.",
+        0,
+    )
 elif not consent:
     todo, step = "Bestätige die Zustimmung des Teams, dass seine Angaben an den Agenten gehen.", 0
 elif project is None:
