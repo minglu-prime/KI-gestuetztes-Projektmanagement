@@ -397,6 +397,26 @@ class Lab:
             raise failure
         return {'answer': result['text']}
 
+    def delete(self, participant):
+        if not isinstance(participant, str) or not participant.strip():
+            raise Problem('Teilnehmerkennung angeben.')
+        participant = participant.strip()
+        with self.lock:
+            rows = self.db.execute('SELECT token, body FROM sessions ORDER BY rowid').fetchall()
+            tokens = [token for token, body in rows if json.loads(body).get('participant') == participant]
+            if not tokens:
+                raise Problem(f'Teilnehmerkennung nicht gefunden: {participant}', 404)
+            self.db.executemany('DELETE FROM sessions WHERE token=?', [(t,) for t in tokens])
+            self.db.commit()
+            compacted = False
+            try:
+                self.db.execute('VACUUM')
+                row = self.db.execute('PRAGMA wal_checkpoint(TRUNCATE)').fetchone()
+                compacted = bool(row is not None and row[0] == 0 and row[1] == 0)
+            except sqlite3.OperationalError:
+                compacted = False
+            return {'deleted': participant, 'sessions_removed': len(tokens), 'compacted': compacted}
+
     def raw(self):
         with self.lock:
             tokens = [r[0] for r in self.db.execute('SELECT token FROM sessions ORDER BY rowid')]

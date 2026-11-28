@@ -250,6 +250,60 @@ class LabTests(unittest.TestCase):
         with self.assertRaises(Problem):
             self.lab.freeze('TEST ONLY: controlled configuration attestation')
 
+    def test_delete_removes_participant_session_and_rejects_unknown(self):
+        self.lab.api_key = 'test-only'
+        self.lab.model = 'gpt-6-sol'
+        self.lab.freeze('TEST ONLY: controlled configuration attestation')
+        first = self.lab.create(group=1, pilot=False, participant='P001')
+        second = self.lab.create(group=2, pilot=False, participant='P002')
+        self.start(first['token'])
+        marker = 'VERTRAULICHER-TEXT-P001-LOESCHEN'
+        self.lab.save(first['token'], {'plan': marker, 'risks': ''})
+
+        result = self.lab.delete('P001')
+        self.assertEqual(result['deleted'], 'P001')
+        self.assertEqual(result['sessions_removed'], 1)
+        self.assertTrue(result['compacted'])
+        self.assertEqual([s['participant'] for s in self.lab.raw()], ['P002'])
+        with self.assertRaises(Problem) as gone:
+            self.lab.view(first['token'])
+        self.assertEqual(gone.exception.status, 404)
+        self.assertEqual(self.lab.view(second['token'])['participant'], 'P002')
+        # Verify deleted answer text is also purged from the SQLite database file on disk.
+        raw_bytes = self.lab.path.read_bytes()
+        wal_path = Path(str(self.lab.path) + '-wal')
+        if wal_path.exists():
+            raw_bytes += wal_path.read_bytes()
+        self.assertNotIn(marker.encode('utf-8'), raw_bytes)
+
+        with self.assertRaises(Problem) as unknown:
+            self.lab.delete('P999')
+        self.assertEqual(unknown.exception.status, 404)
+        with self.assertRaises(Problem):
+            self.lab.delete('   ')
+
+    def test_delete_reports_uncompacted_when_concurrent_wal_reader_blocks_truncate(self):
+        import sqlite3
+
+        token = self.create()
+        self.start(token)
+        participant = self.lab.view(token)['participant']
+        self.lab.save(token, {'plan': 'WAL-READER-TEXT', 'risks': ''})
+
+        reader = sqlite3.connect(self.lab.path, isolation_level=None)
+        self.addCleanup(reader.close)
+        reader.execute('BEGIN')
+        reader.execute('SELECT count(*) FROM sessions').fetchone()
+        self.lab.db.execute('PRAGMA busy_timeout = 100')
+        try:
+            result = self.lab.delete(participant)
+            self.assertEqual(result['deleted'], participant)
+            self.assertEqual(result['sessions_removed'], 1)
+            self.assertFalse(result['compacted'])
+            self.assertEqual(self.lab.raw(), [])
+        finally:
+            reader.execute('ROLLBACK')
+
 
 
 class MaterialsTests(unittest.TestCase):

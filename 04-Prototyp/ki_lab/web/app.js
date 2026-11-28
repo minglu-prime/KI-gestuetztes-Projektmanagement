@@ -125,13 +125,17 @@ function startClock() {
 function between() {
   nav(2);
   const r=state.rounds[0];
-  $('app').innerHTML=`<section class="hero"><div><p class="eyebrow">Runde 1 abgeschlossen</p><h1>Ein Moment<br>zum <em>Durchatmen.</em></h1><p class="lead">${r.status==='timed_out' ? 'Die Zeit ist abgelaufen. Der letzte rechtzeitig gespeicherte Stand wurde als unvollständiges Ergebnis gesichert.' : 'Ihr Ergebnis wurde verbindlich gespeichert.'}</p></div></section><section class="card"><h2>Kurze Pause · 3 Minuten</h2><p class="muted">Bitte die erste Aufgabe nicht weiterbearbeiten und Ergebnisse nicht besprechen. Starten Sie die nächste Runde nach der Pause gemeinsam mit der Studienleitung.</p><p>Als Nächstes: <strong>${state.rounds[1].condition==='ai' ? 'KI-Assistenz' : 'manuelle Bearbeitung'}</strong>. Neues Fallmaterial, erneut ${roundDuration()}.</p><div class="actions"><button class="primary" id="next">Zweite Runde starten →</button><button id="export">Bisherige Ergebnisse herunterladen</button></div></section>`;
-  bind('next',async()=>{state=await api('start',{}); dirty=false; render();}); bindExport();
+  $('app').innerHTML=`<section class="hero"><div><p class="eyebrow">Runde 1 abgeschlossen</p><h1>Ein Moment<br>zum <em>Durchatmen.</em></h1><p class="lead">${r.status==='timed_out' ? 'Die Zeit ist abgelaufen. Der letzte rechtzeitig gespeicherte Stand wurde als unvollständiges Ergebnis gesichert.' : 'Ihr Ergebnis wurde verbindlich gespeichert.'}</p></div></section><section class="card"><h2>Kurze Pause · 3 Minuten</h2><p class="muted">Bitte die erste Aufgabe nicht weiterbearbeiten und Ergebnisse nicht besprechen. Starten Sie die nächste Runde nach der Pause gemeinsam mit der Studienleitung.</p><p>Als Nächstes: <strong>${state.rounds[1].condition==='ai' ? 'KI-Assistenz' : 'manuelle Bearbeitung'}</strong>. Neues Fallmaterial, erneut ${roundDuration()}.</p><div class="actions"><button class="primary" id="next">Zweite Runde starten →</button>${state.pilot ? '<button id="export">Bisherige Pilot-Ergebnisse herunterladen</button>' : ''}</div></section>`;
+  bind('next',async()=>{state=await api('start',{}); dirty=false; render();});
+  if (state.pilot) bindExport();
 }
 function reflection() {
   nav(3);
   const keys = ['time_spent','trust','human_decisions','workload','protocol_deviations'];
-  $('app').innerHTML=`<section class="hero"><div><p class="eyebrow">Beide Runden beendet</p><h1>Was hat sich<br><em>verändert?</em></h1><p class="lead">Ihre Beobachtungen helfen, die Ergebnisse einzuordnen. Eine schnelle Antwort ist nicht automatisch eine gute Antwort.</p></div></section><div class="grid-two"><section class="card"><h2>Ihre Reflexion</h2>${[['time_spent','Wofür haben Sie die meiste Zeit gebraucht?'],['trust','Welche KI-Aussagen haben Sie geprüft oder verworfen?'],['human_decisions','Welche Entscheidungen müssen bei Menschen bleiben?'],['workload','Wie hat sich die Arbeitsbelastung zwischen den Runden verändert?'],['protocol_deviations','Gab es technische Probleme oder Abweichungen von den Regeln?']].map(([key,label])=>`<label for="${key}">${label}</label><textarea id="${key}" rows="2" maxlength="5000">${esc(state.reflection[key]||'')}</textarea>`).join('')}<div class="actions"><button id="reflect" class="primary">Reflexion speichern</button><span id="reflection-status" role="status" class="small"></span></div></section><section class="card"><div class="done-icon">✓</div><h2>Ergebnisse gesichert</h2><p class="muted small">Die Bewertung erfolgt später anhand einheitlicher Kriterien durch zwei unabhängige Personen.</p><div class="results-grid">${state.rounds.map((r,i)=>`<div class="result"><strong>Runde ${i+1} · ${esc(r.case_id)}</strong><span>${r.status==='submitted' ? 'Abgegeben' : 'Zeitlimit · unvollständig'}<br>${Math.round(r.ended_at-r.started_at)} Sekunden</span></div>`).join('')}</div><button id="export" class="full-width">Eigene Aufzeichnung herunterladen ↓</button><p class="note">${state.pilot ? 'Pilot-Sitzung: Diese Ergebnisse werden standardmäßig aus der formalen Analyse ausgeschlossen.' : 'Die Aufzeichnung enthält nur Ihre eigene Sitzung. Bewahren Sie sie geschützt auf.'}</p><button id="leave">Sitzung verlassen</button></section></div>`;
+  const exportBlock = state.pilot
+    ? '<button id="export" class="full-width">Pilot-Aufzeichnung herunterladen ↓</button><p class="note">Pilot-Sitzung: Diese Ergebnisse werden standardmäßig aus der formalen Analyse ausgeschlossen. Auf geteilten Rechnern heruntergeladene Dateien danach löschen.</p>'
+    : `<p class="note">Ihre Aufzeichnung ist unter der Kennung <strong>${esc(state.participant)}</strong> bei der Studienleitung gesichert. Auf geteilten Studienrechnern wird keine Datei lokal heruntergeladen, damit nachfolgende Personen keine Antworten einsehen können. Bitte klicken Sie abschließend auf „Sitzung verlassen“.</p>`;
+  $('app').innerHTML=`<section class="hero"><div><p class="eyebrow">Beide Runden beendet</p><h1>Was hat sich<br><em>verändert?</em></h1><p class="lead">Ihre Beobachtungen helfen, die Ergebnisse einzuordnen. Eine schnelle Antwort ist nicht automatisch eine gute Antwort.</p></div></section><div class="grid-two"><section class="card"><h2>Ihre Reflexion</h2>${[['time_spent','Wofür haben Sie die meiste Zeit gebraucht?'],['trust','Welche KI-Aussagen haben Sie geprüft oder verworfen?'],['human_decisions','Welche Entscheidungen müssen bei Menschen bleiben?'],['workload','Wie hat sich die Arbeitsbelastung zwischen den Runden verändert?'],['protocol_deviations','Gab es technische Probleme oder Abweichungen von den Regeln?']].map(([key,label])=>`<label for="${key}">${label}</label><textarea id="${key}" rows="2" maxlength="5000">${esc(state.reflection[key]||'')}</textarea>`).join('')}<div class="actions"><button id="reflect" class="primary">Reflexion speichern</button><span id="reflection-status" role="status" class="small"></span></div></section><section class="card"><div class="done-icon">✓</div><h2>Ergebnisse gesichert</h2><p class="muted small">Die Bewertung erfolgt später anhand einheitlicher Kriterien durch zwei unabhängige Personen.</p><div class="results-grid">${state.rounds.map((r,i)=>`<div class="result"><strong>Runde ${i+1} · ${esc(r.case_id)}</strong><span>${r.status==='submitted' ? 'Abgegeben' : 'Zeitlimit · unvollständig'}<br>${Math.round(r.ended_at-r.started_at)} Sekunden</span></div>`).join('')}</div>${exportBlock}<button id="leave">Sitzung verlassen</button></section></div>`;
   const saveReflection = async () => {
     clearTimeout(saveTimer);
     if (!$('time_spent')) return;
@@ -149,10 +153,24 @@ function reflection() {
     saveTimer = setTimeout(() => saveReflection().catch(err => error(err.message)), 700);
   });
   bind('reflect', saveReflection);
-  bind('leave', async () => { if (dirty) await saveReflection(); sessionStorage.removeItem('pm-token'); token=''; state=null; history.replaceState(null,'','/'); render(); });
-  bindExport(() => dirty ? saveReflection() : null);
+  bind('leave', async () => {
+    if (dirty) await saveReflection();
+    clearSessionStorage();
+    token=''; state=null; history.replaceState(null,'','/'); render();
+  });
+  if (state.pilot) bindExport(() => dirty ? saveReflection() : null);
 }
-function bindExport(before) { bind('export',async()=>{ if (before) await before(); download('pm-lab-'+state.participant+'.json',await api('export')); }); }
+function clearSessionStorage() {
+  sessionStorage.removeItem('pm-token');
+  for (const k of Object.keys(sessionStorage)) if (k.startsWith('pm-draft-')) sessionStorage.removeItem(k);
+}
+function bindExport(before) {
+  bind('export', async () => {
+    if (!confirm('Hinweis für geteilte Rechner: Die JSON-Datei bleibt im Download-Ordner für andere sichtbar. Pilot-Aufzeichnung trotzdem herunterladen?')) return;
+    if (before) await before();
+    download('pm-lab-' + state.participant + '.json', await api('export'));
+  });
+}
 function render() {
   generation++;
   clearInterval(tick); clearInterval(poll); clearTimeout(saveTimer);
@@ -165,4 +183,4 @@ function render() {
 }
 async function load() { if(token) state=await api('session'); render(); }
 window.addEventListener('beforeunload',event=>{ if(dirty){event.preventDefault();event.returnValue='';} });
-(async()=>{try{health=await api('health'); if(token) sessionStorage.setItem('pm-token',token); await load();}catch(err){error(err.message); $('app').innerHTML='<section class="card"><h2>Sitzung nicht erreichbar</h2><p>Server starten oder den Einladungslink prüfen. Ein neuer Pilot verändert keine vorhandenen Ergebnisse.</p><button id="reset">Neuen Pilot öffnen</button></section>';bind('reset',()=>{token='';state=null;sessionStorage.removeItem('pm-token');history.replaceState(null,'','/');intro();});}})();
+(async()=>{try{health=await api('health'); if(token) sessionStorage.setItem('pm-token',token); await load();}catch(err){error(err.message); $('app').innerHTML='<section class="card"><h2>Sitzung nicht erreichbar</h2><p>Server starten oder den Einladungslink prüfen. Ein neuer Pilot verändert keine vorhandenen Ergebnisse.</p><button id="reset">Neuen Pilot öffnen</button></section>';bind('reset',()=>{token='';state=null;clearSessionStorage();history.replaceState(null,'','/');intro();});}})();
