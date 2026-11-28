@@ -356,3 +356,64 @@ def test_the_agents_get_the_trace_and_the_progress_per_requirement(traced_again)
     sent = json.loads(facts(traced_again, evaluate(traced_again, THURSDAY)))
     assert [t["requirement_ids"] for t in sent["aufgaben"]] == [["R1", "R2"]]
     assert sent["je_anforderung"] == requirement_progress(traced_again)
+
+
+def test_dropping_a_started_task_still_reaches_full_progress_and_keeps_actual_hours(path):
+    first = adopt(PROJECT, TEAM, PLAN, path=path)
+    first = apply_rows(
+        first,
+        [
+            {"ID": "A", "Status": "fertig", "Ist (h)": 10},
+            {"ID": "B", "Status": "in Arbeit", "Ist (h)": 4},
+        ],
+        today=THURSDAY,
+    )
+    # New plan drops started task B and introduces C (6 h).
+    replacement = Plan.model_validate(
+        {
+            "tasks": [{"id": "C", "title": "Neuer Weg", "estimate_hours": 6}],
+            "assignments": [{"task_id": "C", "member": "Anna", "reason": "passt"}],
+        }
+    )
+    second = adopt(PROJECT, TEAM, replacement, path=path, keep=first)
+    done = apply_rows(second, [{"ID": "C", "Status": "fertig", "Ist (h)": 6}], today=THURSDAY)
+    result = evaluate(done, THURSDAY)
+    assert result.planned_hours == 14  # A (8) + C (6); dropped B does not block 100 %
+    assert result.earned == 14
+    assert result.progress == pytest.approx(1.0)
+    assert result.actual_hours == 20  # 10 + 4 + 6: sunk hours still count
+    ev = earned_value(done, result)
+    assert (ev.planned, ev.earned, ev.actual) == (14, 14, 20)
+
+    # Legacy file already storing planned_hours > 0 for an abandoned part still reaches 100 %.
+    legacy = done.model_copy(
+        update={
+            "history": [
+                e.model_copy(update={"planned_hours": 4}) if e.id == "B" else e
+                for e in done.history
+            ]
+        }
+    )
+    legacy_result = evaluate(legacy, THURSDAY)
+    assert (legacy_result.planned_hours, legacy_result.earned, legacy_result.progress) == (
+        14,
+        14,
+        pytest.approx(1.0),
+    )
+    assert earned_value(legacy, legacy_result).planned == 14
+
+
+def test_member_status_hours_includes_history_and_matches_by_member(replanned):
+    from pm_agent.tracking import member_status_hours
+
+    result = evaluate(replanned, THURSDAY)
+    rows = member_status_hours(result)
+    assert rows == [
+        {"Person": "Anna", "Status": "fertig", "Stunden": 8},
+        {"Person": "Anna", "Status": "in Arbeit", "Stunden": 16},
+    ]
+    assert sum(r["Stunden"] for r in rows) == result.by_member[0]["Plan (h)"]
+    assert (
+        sum(r["Stunden"] for r in rows if r["Status"] == "fertig")
+        == (result.by_member[0]["Fertig (Plan-h)"])
+    )

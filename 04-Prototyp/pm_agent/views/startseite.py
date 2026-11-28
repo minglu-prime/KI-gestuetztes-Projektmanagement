@@ -154,6 +154,10 @@ with st.container(key="project"):
                     "Fehler beheben", icon=":material/bug_report:", type="primary"
                 ):
                     st.switch_page("views/testlauf.py")
+                if where == "abschluss" and st.button(
+                    "Projekt abschließen", icon=":material/flag_circle:", type="primary"
+                ):
+                    st.switch_page("views/abschluss.py")
 
 with st.container(key="lifecycle"):
     st.subheader("Der ganze Ablauf")

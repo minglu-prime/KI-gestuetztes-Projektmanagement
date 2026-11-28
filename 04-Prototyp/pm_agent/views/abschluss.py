@@ -44,6 +44,7 @@ from pm_agent.ui import (
     adopted_project,
     as_text,
     check_verdict,
+    clear_run_state,
     comparison_card,
     consent,
     heading,
@@ -293,7 +294,15 @@ with closing_tab:
             num_rows="dynamic",
             width="stretch",
         )
-        if st.button("Lessons Learned speichern", icon=":material/save:") and not conflict:
+        can_save_lessons = not conflict
+        if (
+            st.button(
+                "Lessons Learned speichern",
+                icon=":material/save:",
+                disabled=not can_save_lessons,
+            )
+            and can_save_lessons
+        ):
             try:
                 items = rows_to_lessons(edited.to_dict("records"))
             except InputError as err:
@@ -342,9 +351,14 @@ with operations_tab:
                 disabled=["Baustein", "Name"],
                 width="stretch",
             )
+            can_save_handbook = not handbook_conflict
             if (
-                st.button("Betriebshandbuch speichern", icon=":material/save:")
-                and not handbook_conflict
+                st.button(
+                    "Betriebshandbuch speichern",
+                    icon=":material/save:",
+                    disabled=not can_save_handbook,
+                )
+                and can_save_handbook
             ):
                 items = rows_to_operations(handbook.to_dict("records"))
                 done = "Betriebshandbuch gespeichert."
@@ -476,9 +490,25 @@ with next_tab:
                     "Datei in einem anderen Programm geöffnet?"
                 )
             else:
-                st.success(
-                    f"Archiviert unter {as_text(str(folder))}. Weiter mit dem Projektauftrag."
+                clear_run_state(
+                    skip_keys=(
+                        "signoff_req",
+                        "signoff_decision",
+                        "signoff_reason",
+                        "consent_abschluss",
+                        "incident_id",
+                        "incident_component",
+                        "incident_impact",
+                        "incident_cause",
+                        "incident_measure",
+                        "next_run_sure",
+                    ),  # fmt: skip
+                    skip_prefixes=(
+                        f"lessons_editor_{state.get('lessons_version', 0)}_",
+                        f"operations_editor_{state.get('operations_version', 0)}_",
+                        "incident_fixed_",
+                        "incident_unfix_",
+                    ),
                 )
-                st.page_link(
-                    "views/auftrag.py", label="Zum Projektauftrag", icon=":material/arrow_forward:"
-                )
+                notify(f"Archiviert unter {folder}. Weiter mit dem Projektauftrag.")
+                st.switch_page("views/auftrag.py")

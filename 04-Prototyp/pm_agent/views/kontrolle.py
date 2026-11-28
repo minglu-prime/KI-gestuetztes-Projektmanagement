@@ -460,7 +460,13 @@ if tracking is not None:
     with numbers.container(border=True, key="panel-cost"):
         heading("euro", "Kosten", du="setzt den Stundensatz", python="rechnet")
         rate = st.number_input(
-            "Stundensatz (€)", min_value=0.0, value=None, step=5.0, placeholder="nicht gesetzt"
+            "Stundensatz (€)",
+            min_value=0.0,
+            value=None,
+            step=5.0,
+            placeholder="nicht gesetzt",
+            key="hourly_rate",
+            persist_state="session",
         )
         if rate is not None:
             plan_cost, actual_cost = st.columns(2)

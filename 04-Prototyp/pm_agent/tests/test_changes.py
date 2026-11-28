@@ -145,7 +145,7 @@ def test_a_warning_whose_numbers_change_stays_a_warning():
         "Planende: 18.11.2026 → 16.11.2026 (2 Arbeitstage früher)",
         "Warnung bleibt: Der Plan endet am 16.11.2026, 1 Arbeitstag nach der Deadline (13.11.2026)",
         "Warnung bleibt: Clara ist überlastet: 12 h zugewiesen, bis zur Deadline sind 10 h "
-        "verfügbar (120%)",
+        "verfügbar (120 %)",
         "Termine von einer Aufgabe verschieben sich",
     ]
 

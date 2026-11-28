@@ -30,6 +30,7 @@ from pm_agent.tracking import (
     first_five,
     hours_text,
     percent,
+    project_start,
 )
 from pm_agent.workbench import InputError, _cell, _date, _md, _reason
 
@@ -347,7 +348,7 @@ def closing_document(
             else "Kein Projektauftrag."
         ),
         stand=_date(evaluation.today),
-        start=_date(project.start_date),
+        start=_date(project_start(tracking)),
         deadline=_date(project.deadline),
         planende=_date(max(t.planned_end for t in evaluation.tasks)),
         erstende=first_end(tracking, evaluation),

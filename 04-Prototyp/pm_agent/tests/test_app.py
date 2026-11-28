@@ -4248,3 +4248,171 @@ def test_mein_bereich_disables_save_button_on_conflict(site):
     assert not at.exception
     assert any("inzwischen geändert" in w.value for w in at.warning)
     assert button(at, "Fortschritt speichern").disabled
+
+
+def test_testplan_warns_when_either_requirements_or_design_is_not_approved(site):
+    from test_lifecycle import design
+
+    base = lifecycle.Lifecycle(project=PROJECT, requirements=NEEDS, design=design())
+    lifecycle.save(lifecycle.approve_requirements(base, APPROVED_AT))
+    at = site.switch_page("views/testplan.py").run()
+    assert any("Entwurf ist nicht freigegeben" in w.value for w in at.warning)
+    lifecycle.save(lifecycle.approve_design(base, APPROVED_AT))
+    assert any("Anforderungen sind nicht freigegeben" in w.value for w in at.run().warning)
+    lifecycle.save(base)
+    assert any(
+        "Anforderungen und Entwurf sind nicht freigegeben" in w.value for w in at.run().warning
+    )
+    lifecycle.save(
+        lifecycle.approve_design(lifecycle.approve_requirements(base, APPROVED_AT), APPROVED_AT)
+    )
+    assert not any("nicht freigegeben" in w.value for w in at.run().warning)
+
+
+def test_planung_keeps_status_strip_outside_agent_status_box_and_uses_singular_round(
+    app, monkeypatch
+):
+    one_round = {"tool_results": [{"tool": "submit_plan", "is_error": False, "content": "ok"}]}
+
+    def draft(project, team, on_round=None, **context):
+        if on_round:
+            on_round(one_round)
+        return PLAN
+
+    monkeypatch.setattr(agent, "run_planning", draft)
+    at = fill_project(app)
+    button(at, "Plan mit dem Agenten erstellen").click()
+    at = at.run()
+    assert not at.exception and not at.error
+    assert any("nach 1 Runde." in s.value for s in at.success)
+    assert at.status and not any("Plan geprüft" in h.value for box in at.status for h in box.html)
+    assert "Plan geprüft" in chips(at)
+
+
+def test_kontrolle_keeps_hourly_rate_across_page_switches(tracked):
+    at = tracked.switch_page("views/kontrolle.py").run()
+    next(n for n in at.number_input if n.label == "Stundensatz (€)").set_value(50.0).run()
+    at = at.switch_page("views/durchfuehrung.py").run().switch_page("views/kontrolle.py").run()
+    assert not at.exception
+    assert next(n for n in at.number_input if n.label == "Stundensatz (€)").value == 50.0
+    assert any(m.label == "Plankosten gesamt" for m in at.metric)
+
+
+def test_planung_clearing_start_is_german_and_step6_blocks_unchecked_edits(with_plan):
+    at = with_plan.date_input(key="start").set_value(None).run()
+    assert not at.exception
+    assert not any("Input should be a valid date" in e.value for e in at.error)
+    assert any("Start" in i.value and "Deadline" in i.value for i in at.info)
+
+    at = at.date_input(key="start").set_value(PROJECT.start_date).run()
+    at = edit_table(at, "plan_editor_", {0: {"Stunden": 12}})
+    assert button(at, "Plan als Projekt übernehmen").disabled
+    assert any("ungeprüfte Änderungen" in w.value for w in at.warning)
+
+
+def test_starting_next_run_clears_session_state_notifies_and_resets_auftrag(
+    site, monkeypatch, tmp_path
+):
+    from pm_agent import closing
+
+    monkeypatch.setattr(workbench, "DATA_DIR", tmp_path)
+    lifecycle.save(with_charter())
+    adopted = tracking.adopt(PROJECT, TEAM, PLAN, requirements=NEEDS.items)
+    tracking.save(
+        closing.record_signoff(
+            adopted, tracking.Signoff(requirement_id="R1", decision="abgenommen")
+        )
+    )
+    at = site.switch_page("views/auftrag.py").run()
+    assert at.text_area(key="charter_goal").value == CHARTER.goal
+    at = at.switch_page(PLANUNG).run()
+    at.text_area(key="idea").input("Alter Plan-Text").run()
+
+    at = at.switch_page("views/abschluss.py").run()
+    at.checkbox(key="next_run_sure").check().run()
+    button(at, "Neuen Durchlauf beginnen").click()
+    at = at.run()
+    assert not at.exception and not at.error
+    assert any("Archiviert unter" in text for text in notices(at))
+    at = at.switch_page("views/auftrag.py").run()
+    assert (
+        at.text_area(key="charter_goal").value == ""
+        and at.text_area(key="auftrag_idea").value == ""
+    )
+    assert at.switch_page(PLANUNG).run().text_area(key="idea").value == ""
+
+    lifecycle.save(with_charter())
+    active = tracking.adopt(PROJECT, TEAM, PLAN)
+    at = at.switch_page("views/auftrag.py").run()
+    assert at.text_area(key="charter_goal").value == CHARTER.goal
+    closing.start_next_run(active, APPROVED_AT, tmp_path / "archiv")
+    assert at.run().text_area(key="charter_goal").value == ""
+
+
+def test_abschluss_disables_save_buttons_on_editor_conflict(site):
+    from test_lifecycle import design
+
+    from pm_agent.models import Lesson
+    from pm_agent.tracking import Operation
+
+    lifecycle.save(lifecycle.Lifecycle(project=PROJECT, design=design()))
+    adopted = tracking.adopt(PROJECT, TEAM, PLAN)
+    tracking.save(
+        adopted.model_copy(
+            update={
+                "lessons": [Lesson(observation="Alt", advice="Testen")],
+                "operations": [Operation(component_id="B2", owner="Team")],
+            }
+        )
+    )
+    at = site.switch_page("views/abschluss.py").run()
+    at = edit_table(at, "lessons_editor_", {0: {"Empfehlung": "Mein Entwurf"}})
+    at = edit_table(at, "operations_editor_", {0: {"Überwachung": "Mein Check"}})
+    tracking.save(
+        tracking.load().model_copy(
+            update={
+                "lessons": [Lesson(observation="Neu", advice="Anders")],
+                "operations": [Operation(component_id="B2", owner="Andere")],
+            }
+        )
+    )
+    at = at.run()
+    assert not at.exception
+    assert button(at, "Lessons Learned speichern").disabled
+    assert button(at, "Betriebshandbuch speichern").disabled
+
+
+def test_startseite_leads_to_abschluss_when_all_tasks_are_finished(tracked):
+    done = tracking.apply_rows(
+        tracking.load(), [{"ID": "A", "Status": "fertig"}, {"ID": "B", "Status": "fertig"}]
+    )
+    tracking.save(done)
+    at = tracked.switch_page("views/startseite.py").run()
+    assert not at.exception
+    assert [b.label for b in at.button if b.proto.type == "primary"] == ["Projekt abschließen"]
+
+
+def test_projektstand_uses_history_in_member_progress_chart(site, monkeypatch):
+    ben = workbench.Member(name="Ben", skills={"SQL": 4}, hours_per_week=40)
+    team = [*TEAM, ben]
+    data = plan_input()
+    data["assignments"][0]["member"] = "Ben"
+    first = tracking.apply_rows(
+        tracking.adopt(PROJECT, team, Plan.model_validate(data)),
+        [{"ID": "A", "Status": "fertig", "Ist (h)": 8}],
+        today=date(2026, 11, 10),
+    )
+    project, rest = tracking.rest_project(first, date(2026, 11, 12))
+    tracking.adopt(project, team, rest, keep=first)
+
+    charts, real_chart = [], st.altair_chart
+    monkeypatch.setattr(
+        st,
+        "altair_chart",
+        lambda chart, *a, **kw: (charts.append(chart), real_chart(chart, *a, **kw))[1],
+    )
+    at = as_member(site).switch_page(f"{PAGES}/projektstand.py").run()
+    assert not at.exception
+    people_rows = charts[0].data.to_dict("records")
+    assert {"Person": "Ben", "Status": "fertig", "Stunden": 8.0} in people_rows
+    assert {"Person": "Anna (du)", "Status": "offen", "Stunden": 16.0} in people_rows

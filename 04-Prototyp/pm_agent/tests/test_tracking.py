@@ -498,8 +498,8 @@ def test_the_next_step_follows_from_the_state_of_the_project(tracking):
         "kontrolle",
     )
     assert advice(date(2026, 11, 12), A="fertig", B="fertig") == (
-        "Alle Aufgaben sind fertig. Halte den Abschluss im Statusbericht fest.",
-        "durchfuehrung",
+        "Alle Aufgaben sind fertig. Prüfe die Abnahme und schließe das Projekt ab.",
+        "abschluss",
     )
 
 
@@ -516,8 +516,8 @@ def test_beside_the_forecast_the_next_step_says_only_what_to_do(tracking):
         "kontrolle",
     )
     assert advice(date(2026, 11, 12), A="fertig", B="fertig") == (
-        "Halte den Abschluss im Statusbericht fest.",
-        "durchfuehrung",
+        "Prüfe die Abnahme und schließe das Projekt ab.",
+        "abschluss",
     )
     assert advice(date(2026, 11, 10), A="fertig") == (
         "Achte darauf, dass das Team seinen Fortschritt aktuell hält.",
@@ -1268,3 +1268,22 @@ def test_current_team_keeps_former_member_with_open_tasks_and_surfaces_damaged_t
     workbench.TEAM_FILE.write_text("{kaputt", encoding="utf-8")
     broken = forecast(adopted, date(2026, 11, 9))
     assert broken.end is None and broken.problem and "team.json ist beschädigt" in broken.problem
+
+
+def test_finished_project_next_step_guides_to_abschluss(tmp_path):
+    from pm_agent import closing
+    from pm_agent.models import Requirement
+    from pm_agent.tracking import Signoff
+
+    need = Requirement(
+        id="R1", title="Räume", story="Als Nutzer ...", priority="Muss", criteria=["K1"]
+    )
+    adopted = adopt(PROJECT, TEAM, PLAN, path=tmp_path / "p.json", requirements=[need])
+    done = progressed(adopted, A="fertig", B="fertig")
+    advice, page = next_step(done, date(2026, 11, 12))
+    assert page == "abschluss"
+    assert "Es steht nichts mehr an" not in advice
+    # Once requirements are signed off, still points to Abschluss (closing report / next run).
+    closed = closing.record_signoff(done, Signoff(requirement_id="R1", decision="abgenommen"))
+    advice_closed, page_closed = next_step(closed, date(2026, 11, 12))
+    assert page_closed == "abschluss" and "abgenommen" in advice_closed

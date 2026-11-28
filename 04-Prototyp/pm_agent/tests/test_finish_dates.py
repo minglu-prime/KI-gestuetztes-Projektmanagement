@@ -193,3 +193,31 @@ def test_without_replanning_the_report_does_not_repeat_the_first_plan(tracking):
 def test_a_project_adopted_before_the_first_end_was_kept_says_unknown(tracking):
     old = tracking.model_copy(update={"first_planned_end": None})
     assert "**Geplantes Ende laut erstem Plan:** unbekannt" in report(old)
+
+
+def test_finishing_before_project_start_keeps_date_empty_and_allows_resaving(tracking):
+    early = date(2026, 11, 5)  # before Mon 09.11.2026 project start
+    done = apply_rows(tracking, [{"ID": "A", "Status": "fertig"}], today=early)
+    assert done.progress["A"].finished_on is None
+    again = apply_rows(done, progress_rows(done, today=early), today=early)
+    assert again.progress["A"].finished_on is None
+
+
+def test_readopting_keeps_original_project_start_for_finish_dates_and_reports(tracking, tmp_path):
+    from pm_agent.tracking import control_document, project_start, status_report, work_packages
+
+    done = apply_rows(tracking, [{"ID": "A", "Status": "fertig", "Fertig am": TUE}], today=TUE)
+    project, rest = rest_project(done, date(2026, 11, 12))
+    again = adopt(project, TEAM, rest, path=tmp_path / "neu.json", keep=done)
+    assert again.first_start_date == MON
+    assert project_start(again) == MON
+    # B finished on Wed 11.11. (after original start 09.11., before replan start 12.11.).
+    finished = apply_rows(again, [{"ID": "B", "Status": "fertig", "Fertig am": WED}], today=FRI)
+    assert finished.progress["B"].finished_on == WED
+    ev = evaluate(finished, FRI)
+    assert "09.11.2026 bis 18.12.2026" in status_report(finished, ev)
+    assert "09.11.2026 bis 18.12.2026" in control_document(finished, ev)
+    assert "09.11.2026 bis 18.12.2026" in work_packages(finished)
+    assert "09.11.2026 bis 18.12.2026" in report(finished)
+    legacy = again.model_copy(update={"first_start_date": None})
+    assert project_start(legacy) == again.project.start_date
