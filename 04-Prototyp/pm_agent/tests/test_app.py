@@ -2526,6 +2526,8 @@ def test_a_failed_case_needs_a_defect_which_can_reopen_its_task(tracked):
     assert not any("keinen Fehlereintrag" in e.value for e in at.error)
     assert "keinen Fehlereintrag" not in verdict(at)
 
+    tracking.save(tracking.apply_rows(tracking.load(), [{"ID": "B", "Status": "fertig"}]))
+    at = at.run()
     button(at, "F1: Aufgabe B wieder öffnen").click()
     at = at.run()
     assert tracking.load().progress["B"].status == "in Arbeit"
@@ -2542,7 +2544,7 @@ def test_a_failed_case_needs_a_defect_which_can_reopen_its_task(tracked):
     at.selectbox(key="defect_id").set_value("F1").run()
     at.radio(key="defect_severity").set_value("leicht").run()
     at.text_input(key="defect_cause").input("Nur Tippfehler").run()
-    button(at, "Fehler erfassen").click()
+    button(at, "Änderungen speichern").click()
     at = at.run()
     (edited_defect,) = tracking.load().defects
     assert (edited_defect.id, edited_defect.severity, edited_defect.cause) == (
@@ -2559,7 +2561,7 @@ def test_a_failed_case_needs_a_defect_which_can_reopen_its_task(tracked):
     assert at.radio(key="defect_severity").value == "leicht"
     assert at.selectbox(key="defect_task").value == "B"
     at.text_input(key="defect_cause").input("Tippfehler im Titel").run()
-    button(at, "Fehler erfassen").click()
+    button(at, "Änderungen speichern").click()
     at = at.run()
     (edited_defect,) = tracking.load().defects
     assert (edited_defect.cause, edited_defect.status, edited_defect.fixed_on) == (
@@ -2571,6 +2573,194 @@ def test_a_failed_case_needs_a_defect_which_can_reopen_its_task(tracked):
     at.selectbox(key="defect_id").set_value("F1").run()
     at.selectbox(key="defect_id").set_value("").run()
     assert at.text_input(key="defect_cause").value == ""
+
+
+def test_editing_a_defect_keeps_a_deleted_case_and_removed_task_and_changes_the_button(tracked):
+    from test_lifecycle import design
+    from test_testplan import ACCEPT, INTEGRATE, cases
+
+    lifecycle.save(
+        lifecycle.Lifecycle(
+            project=PROJECT, requirements=NEEDS, design=design(), cases=cases(ACCEPT, INTEGRATE)
+        )
+    )
+    saved = tracking.load()
+    only_b_plan = saved.plan.model_copy(
+        update={
+            "tasks": [saved.plan.tasks[1].model_copy(update={"depends_on": []})],
+            "assignments": [a for a in saved.plan.assignments if a.task_id == "B"],
+        }
+    )
+    # Defects recorded before test case T3 was deleted and before task A left the plan.
+    saved = saved.model_copy(
+        update={
+            "plan": only_b_plan,
+            "progress": {"B": saved.progress["B"]},
+            "defects": [
+                tracking.Defect(
+                    id="F1",
+                    case_id="T3",
+                    severity="schwer",
+                    cause="Alt schwer",
+                    task_id="A",
+                ),
+                tracking.Defect(
+                    id="F2",
+                    case_id="T1",
+                    severity="mittel",
+                    cause="Alt mittel",
+                    task_id="A",
+                ),
+            ],
+        }
+    )
+    tracking.save(saved)
+
+    at = tracked.switch_page("views/testlauf.py").run()
+    assert not at.exception
+    assert "Fehler erfassen" in labels(at) and "Änderungen speichern" not in labels(at)
+    assert "T3" not in at.selectbox(key="defect_case").options
+    assert "A" not in at.selectbox(key="defect_task").options
+
+    # Selecting F1 shows the edit button and keeps both the deleted case and the removed task.
+    at.selectbox(key="defect_id").set_value("F1").run()
+    assert "Änderungen speichern" in labels(at) and "Fehler erfassen" not in labels(at)
+    assert at.selectbox(key="defect_case").value == "T3"
+    assert at.selectbox(key="defect_task").value == "A"
+    # Recording a failed result above does not overwrite defect_case while editing F1.
+    at.selectbox(key="test_case").set_value("T2").run()
+    at.radio(key="test_result").set_value("fehlgeschlagen").run()
+    button(at, "Ergebnis speichern").click()
+    at = at.run()
+    assert at.selectbox(key="defect_case").value == "T3"
+    at.text_input(key="defect_cause").input("Neu schwer").run()
+    button(at, "Änderungen speichern").click()
+    at = at.run()
+    assert not at.exception and not at.error
+    assert notices(at) == ["Fehler F1 geändert."]
+    f1 = next(d for d in tracking.load().defects if d.id == "F1")
+    assert (f1.case_id, f1.task_id, f1.cause) == ("T3", "A", "Neu schwer")
+    # Back to "Neuer Fehler": the removed case and task leave the choices again.
+    assert "Fehler erfassen" in labels(at) and "Änderungen speichern" not in labels(at)
+    assert "T3" not in at.selectbox(key="defect_case").options
+    assert "A" not in at.selectbox(key="defect_task").options
+
+    # Editing a non-severe defect also keeps its removed task instead of resetting it to None.
+    at.selectbox(key="defect_id").set_value("F2").run()
+    assert at.selectbox(key="defect_task").value == "A"
+    at.text_input(key="defect_cause").input("Neu mittel").run()
+    button(at, "Änderungen speichern").click()
+    at = at.run()
+    assert not at.exception and not at.error
+    f2 = next(d for d in tracking.load().defects if d.id == "F2")
+    assert (f2.case_id, f2.task_id, f2.cause) == ("T1", "A", "Neu mittel")
+
+    # Explicitly reassigning F1 to a current case and task still works.
+    at.selectbox(key="defect_id").set_value("F1").run()
+    at.selectbox(key="defect_case").set_value("T2").run()
+    at.selectbox(key="defect_task").set_value("B").run()
+    button(at, "Änderungen speichern").click()
+    at = at.run()
+    assert not at.exception and not at.error
+    f1 = next(d for d in tracking.load().defects if d.id == "F1")
+    assert (f1.case_id, f1.task_id) == ("T2", "B")
+
+
+def test_reopen_button_appears_only_for_a_finished_task_of_an_open_defect(tracked):
+    from test_lifecycle import design
+    from test_testplan import cases
+
+    lifecycle.save(
+        lifecycle.Lifecycle(project=PROJECT, requirements=NEEDS, design=design(), cases=cases())
+    )
+    saved = tracking.record_defect(
+        tracking.load(), tracking.Defect(case_id="T2", severity="schwer", cause="x", task_id="B")
+    )
+    tracking.save(saved)
+
+    # Task B is "offen": no reopen button.
+    at = tracked.switch_page("views/testlauf.py").run()
+    assert "F1: Aufgabe B wieder öffnen" not in labels(at)
+
+    # Task B is "in Arbeit": still no reopen button.
+    tracking.save(tracking.apply_rows(tracking.load(), [{"ID": "B", "Status": "in Arbeit"}]))
+    at = at.run()
+    assert "F1: Aufgabe B wieder öffnen" not in labels(at)
+
+    # Task B is "fertig": reopen button appears, reopens B, then disappears again.
+    tracking.save(tracking.apply_rows(tracking.load(), [{"ID": "B", "Status": "fertig"}]))
+    at = at.run()
+    assert "F1: Aufgabe B wieder öffnen" in labels(at)
+    button(at, "F1: Aufgabe B wieder öffnen").click()
+    at = at.run()
+    assert not at.exception and not at.error
+    assert tracking.load().progress["B"].status == "in Arbeit"
+    assert "F1: Aufgabe B wieder öffnen" not in labels(at)
+
+    # A defect whose task left the plan gets no reopen button either.
+    gone = tracking.load()
+    tracking.save(
+        gone.model_copy(
+            update={
+                "defects": [
+                    tracking.Defect(
+                        id="F1", case_id="T2", severity="schwer", cause="x", task_id="Z"
+                    )
+                ]
+            }
+        )
+    )
+    at = at.run()
+    assert "F1: Aufgabe Z wieder öffnen" not in labels(at)
+
+
+def test_test_result_records_the_chosen_test_date_and_rejects_empty_date(tracked):
+    from test_lifecycle import design
+    from test_testplan import cases
+
+    lifecycle.save(
+        lifecycle.Lifecycle(project=PROJECT, requirements=NEEDS, design=design(), cases=cases())
+    )
+    today = date.today()
+    yesterday = today - datetime.timedelta(days=1)
+    two_days_ago = today - datetime.timedelta(days=2)
+    # Defect F1 on T2 was fixed yesterday.
+    fixed = tracking.record_defect(
+        tracking.load(),
+        tracking.Defect(
+            case_id="T2", severity="mittel", cause="x", status="behoben", fixed_on=yesterday
+        ),
+    )
+    tracking.save(fixed)
+
+    at = tracked.switch_page("views/testlauf.py").run()
+    assert not at.exception
+    assert at.date_input(key="test_date").value == today
+
+    # Recording a failure executed two days ago stores that date, not today.
+    at.selectbox(key="test_case").set_value("T2").run()
+    at.radio(key="test_result").set_value("fehlgeschlagen").run()
+    at.date_input(key="test_date").set_value(two_days_ago).run()
+    button(at, "Ergebnis speichern").click()
+    at = at.run()
+    assert not at.exception and not at.error
+    (result,) = tracking.load().results
+    assert (result.case_id, result.result, result.on) == ("T2", "fehlgeschlagen", two_days_ago)
+    results_table = next(f.value for f in at.dataframe if "Ergebnis" in f.value.columns)
+    assert results_table.set_index("ID").loc["T2", "Am"] == f"{two_days_ago:%d.%m.%Y}"
+    # Because the failure predates the fix, check_results asks to retest rather than reopen.
+    assert "Testfall wiederholen" in unescape(verdict(at))
+    assert "wieder fehlgeschlagen" not in unescape(verdict(at))
+    # Chosen date stays for entering further results of the same test day.
+    assert at.date_input(key="test_date").value == two_days_ago
+
+    # Clearing the date input refuses to save with a German error instead of crashing.
+    at.date_input(key="test_date").set_value(None).run()
+    button(at, "Ergebnis speichern").click()
+    at = at.run()
+    assert not at.exception
+    assert any("Testdatum" in e.value for e in at.error)
+    assert tracking.load().results[0].on == two_days_ago
 
 
 def test_without_a_test_plan_the_test_page_leads_to_it(tracked):
@@ -3536,6 +3726,7 @@ def test_every_entry_of_the_test_page_answers(tracked):
     lifecycle.save(
         lifecycle.Lifecycle(project=PROJECT, requirements=NEEDS, design=design(), cases=cases())
     )
+    tracking.save(tracking.apply_rows(tracking.load(), [{"ID": "B", "Status": "fertig"}]))
     at = tracked.switch_page("views/testlauf.py").run()
     at.selectbox(key="test_case").set_value("T2").run()
     at.radio(key="test_result").set_value("fehlgeschlagen").run()
