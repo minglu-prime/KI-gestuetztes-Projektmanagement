@@ -179,6 +179,22 @@ class ManageCliTests(unittest.TestCase):
         self.assertNotEqual(code, 0)
         self.assertIn('nicht gefunden', err)
 
+        # If a concurrent WAL reader prevents compaction, delete still succeeds and warns on stderr.
+        import sqlite3
+        real_connect = sqlite3.connect
+        reader = real_connect(self.db, isolation_level=None)
+        self.addCleanup(reader.close)
+        reader.execute('BEGIN')
+        reader.execute('SELECT count(*) FROM sessions').fetchone()
+        try:
+            with patch('lab.sqlite3.connect', side_effect=lambda *a, **kw: real_connect(*a, **{**kw, 'timeout': 0.1})):
+                code, out, err = self.run_cli('delete', 'P002', '--confirm')
+            self.assertEqual(code, 0, err)
+            self.assertIn('P002', out)
+            self.assertIn('Warnung', err)
+        finally:
+            reader.execute('ROLLBACK')
+
 
 if __name__ == '__main__':
     unittest.main()

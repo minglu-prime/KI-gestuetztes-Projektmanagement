@@ -282,6 +282,28 @@ class LabTests(unittest.TestCase):
         with self.assertRaises(Problem):
             self.lab.delete('   ')
 
+    def test_delete_reports_uncompacted_when_concurrent_wal_reader_blocks_truncate(self):
+        import sqlite3
+
+        token = self.create()
+        self.start(token)
+        participant = self.lab.view(token)['participant']
+        self.lab.save(token, {'plan': 'WAL-READER-TEXT', 'risks': ''})
+
+        reader = sqlite3.connect(self.lab.path, isolation_level=None)
+        self.addCleanup(reader.close)
+        reader.execute('BEGIN')
+        reader.execute('SELECT count(*) FROM sessions').fetchone()
+        self.lab.db.execute('PRAGMA busy_timeout = 100')
+        try:
+            result = self.lab.delete(participant)
+            self.assertEqual(result['deleted'], participant)
+            self.assertEqual(result['sessions_removed'], 1)
+            self.assertFalse(result['compacted'])
+            self.assertEqual(self.lab.raw(), [])
+        finally:
+            reader.execute('ROLLBACK')
+
 
 
 class MaterialsTests(unittest.TestCase):

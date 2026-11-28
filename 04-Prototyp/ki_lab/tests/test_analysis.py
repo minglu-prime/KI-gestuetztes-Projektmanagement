@@ -39,6 +39,10 @@ class AnalysisTests(unittest.TestCase):
         self.assertEqual(summarize([])['quality_pairs'], [])
         with self.assertRaises(ValueError):
             summarize([], ratings=[{'rating_id':'X', 'rater':'R1'}, {'rating_id':'X', 'rater':'R1'}])
+        with self.assertRaises(ValueError):
+            summarize([], ratings=[{'rating_id': ['X'], 'rater': 'R1'}])
+        with self.assertRaises(ValueError):
+            summarize([], ratings=[{'rating_id': 'X', 'rater': {'name': 'R1'}}])
 
     def test_quality_pairs_report_single_criteria_beside_sums(self):
         records = [{'participant':'P001', 'pilot':False, 'group':1, 'rounds':[

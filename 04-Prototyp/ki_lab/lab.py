@@ -408,10 +408,11 @@ class Lab:
                 raise Problem(f'Teilnehmerkennung nicht gefunden: {participant}', 404)
             self.db.executemany('DELETE FROM sessions WHERE token=?', [(t,) for t in tokens])
             self.db.commit()
-            compacted = True
+            compacted = False
             try:
                 self.db.execute('VACUUM')
-                self.db.execute('PRAGMA wal_checkpoint(TRUNCATE)')
+                row = self.db.execute('PRAGMA wal_checkpoint(TRUNCATE)').fetchone()
+                compacted = bool(row is not None and row[0] == 0 and row[1] == 0)
             except sqlite3.OperationalError:
                 compacted = False
             return {'deleted': participant, 'sessions_removed': len(tokens), 'compacted': compacted}

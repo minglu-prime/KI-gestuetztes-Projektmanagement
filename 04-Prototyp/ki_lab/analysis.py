@@ -51,7 +51,11 @@ def summarize(records, ratings=None, include_pilots=False):
     valid_ids = {r['rating_id'] for s in started for r in s['rounds']
                  if r['status'] in ('submitted', 'timed_out')}
     for row in ratings or []:
-        if not isinstance(row, dict) or 'rating_id' not in row or 'rater' not in row:
+        if (
+            not isinstance(row, dict)
+            or not isinstance(row.get('rating_id'), str)
+            or not isinstance(row.get('rater'), str)
+        ):
             raise ValueError('Ungültige Bewertungszeile: rating_id und rater erforderlich.')
         key = (row['rating_id'], row['rater'])
         if key in seen:
