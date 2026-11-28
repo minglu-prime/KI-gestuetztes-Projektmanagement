@@ -18,7 +18,13 @@ from openai import APIError
 from pydantic import ValidationError
 
 from pm_agent import lifecycle
-from pm_agent.agent import PlanningError, run_planning, run_replanning
+from pm_agent.agent import (
+    PlanningError,
+    collect_log_errors,
+    describe_api_error,
+    run_planning,
+    run_replanning,
+)
 from pm_agent.models import Project
 from pm_agent.planning import check_plan
 from pm_agent.tools import with_absences
@@ -51,6 +57,7 @@ from pm_agent.ui import (
     phase_chip,
     roles,
     round_printer,
+    rounds_text,
     said_in_full,
     strip,
     style_priority,
@@ -420,7 +427,7 @@ with tabs[0]:
         )
     consent = ask_consent(
         "consent",
-        "ihre Angaben (Name, Skills, Stunden, Notiz) zur Planung",
+        "ihre Angaben (Name, Skills, Stunden, Abwesenheiten, Notiz) zur Planung",
         persist_state="session",
     )
     next_step("Weiter zum Projekt", STEPS[1], bool(team) and consent, "to_project")
@@ -528,25 +535,31 @@ with tabs[2]:
 
                 started = time.monotonic()
                 failure = None
+                log_errors: list[str] = []
                 try:
-                    plan = run_planning(project, team, on_round=on_round, **context)
+                    with collect_log_errors() as log_errors:
+                        plan = run_planning(project, team, on_round=on_round, **context)
                 except PlanningError as err:
                     failure = str(err)
                 except APIError as err:
-                    failure = f"Die OpenAI API meldet einen Fehler: {err}"
+                    failure = describe_api_error(err)
                 else:
                     show_plan(plan, rounds, "Agent", round(time.monotonic() - started, 1))
                     forget_conversation()
                 # The message goes below the box: a collapsed status would hide it.
                 track.end(not failure)
-                label = f"Kein Plan nach {len(rounds)} Runden" if failure else "Plan angenommen"
+                label = (
+                    f"Kein Plan nach {rounds_text(len(rounds))}" if failure else "Plan angenommen"
+                )
                 status.update(label=label, state="error" if failure else "complete", expanded=True)
             if failure:
                 st.error(as_text(failure))
             else:
                 st.success(
-                    f"Plan angenommen nach {len(rounds)} Runden. Er steht in Schritt 4 und 5."
+                    f"Plan angenommen nach {rounds_text(len(rounds))}. Er steht in Schritt 4 und 5."
                 )
+            if log_errors:
+                st.warning("\n".join(as_text(msg) for msg in log_errors))
 
     with logged_run.container(border=True, key="panel-run", height="stretch"):
         heading("history", "Protokollierten Lauf öffnen", du="öffnest einen früheren Lauf")
@@ -566,7 +579,7 @@ with tabs[2]:
 
     if state.rounds and not ran_now:
         # Folded: the result is the plan in step 4; how it came about is a detail.
-        title = f"So ist der Plan entstanden ({state.source}, {len(state.rounds)} Runden)"
+        title = f"So ist der Plan entstanden ({state.source}, {rounds_text(len(state.rounds))})"
         with st.expander(title), st.container(key="rounds-log"):
             show_logged_round = round_printer(state.rounds_start)
             for record in state.rounds:
@@ -940,14 +953,21 @@ with tabs[4]:
 
                         started = time.monotonic()
                         failure = None
+                        log_errors: list[str] = []
                         try:
-                            replanned = run_replanning(
-                                project, team, state.plan, wish, on_round=on_change_round, **context
-                            )
+                            with collect_log_errors() as log_errors:
+                                replanned = run_replanning(
+                                    project,
+                                    team,
+                                    state.plan,
+                                    wish,
+                                    on_round=on_change_round,
+                                    **context,
+                                )
                         except PlanningError as err:
                             failure = str(err)
                         except APIError as err:
-                            failure = f"Die OpenAI API meldet einen Fehler: {err}"
+                            failure = describe_api_error(err)
                         else:
                             state.proposal = proposal = {
                                 "wish": wish,
@@ -961,9 +981,9 @@ with tabs[4]:
                             }
                     track.end(not failure)
                     label = (
-                        f"Kein Vorschlag nach {len(change_rounds)} Runden"
+                        f"Kein Vorschlag nach {rounds_text(len(change_rounds))}"
                         if failure
-                        else f"Vorschlag nach {len(change_rounds)} Runden"
+                        else f"Vorschlag nach {rounds_text(len(change_rounds))}"
                     )
                     status.update(
                         label=label, state="error" if failure else "complete", expanded=True
@@ -971,9 +991,16 @@ with tabs[4]:
                 # The message goes below the box: a collapsed status would hide it.
                 if failure:
                     st.error(as_text(failure))
+                    if log_errors:
+                        st.warning("\n".join(as_text(msg) for msg in log_errors))
                 else:
+                    if log_errors:
+                        state.replan_log_warning = "\n".join(log_errors)
                     # Again from the top: the input is locked while the proposal is open.
                     st.rerun()
+
+            if log_warning := state.pop("replan_log_warning", None):
+                st.warning(as_text(log_warning))
 
             if proposal is not None:
                 proposed = (

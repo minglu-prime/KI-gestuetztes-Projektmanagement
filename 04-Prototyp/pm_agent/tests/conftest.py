@@ -95,6 +95,6 @@ def api(monkeypatch):
         max_retries=0,
         http_client=httpx.Client(transport=httpx.MockTransport(handle)),
     )
-    monkeypatch.setattr(agent, "OpenAI", lambda: client)
+    monkeypatch.setattr(agent, "OpenAI", lambda *args, **kwargs: client)
     monkeypatch.setenv("PM_AGENT_MODEL", "gpt-test")
     return replies, requests

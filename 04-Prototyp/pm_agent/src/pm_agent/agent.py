@@ -5,20 +5,44 @@ result. The agents for Durchführung and Kontrolle (followup.py) use the same lo
 """
 
 import json
+import logging
+import math
 import os
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from datetime import datetime
 from pathlib import Path
 from typing import Any, NamedTuple, TypeVar
+from urllib.parse import urlsplit
 
-from openai import OpenAI, OpenAIError
+from openai import (
+    APIConnectionError,
+    APIError,
+    APIStatusError,
+    APITimeoutError,
+    AuthenticationError,
+    InternalServerError,
+    NotFoundError,
+    OpenAI,
+    OpenAIError,
+    PermissionDeniedError,
+    RateLimitError,
+    Timeout,
+)
 
 from pm_agent.models import Design, Member, MemberAbsence, Plan, Project, Requirement
 from pm_agent.tools import PlanningTools, Submission, Tool, ToolError
 
+logger = logging.getLogger(__name__)
+
 # One round is one reply from the agent. Drafting, a few checks and the submission take about
 # five; ten without an accepted result means the agent is stuck.
 MAX_ROUNDS = 10
+# Limit each API call: the SDK defaults to 10 minutes per try with 2 retries (~30 min).
+REQUEST_TIMEOUT = 120.0
+CONNECT_TIMEOUT = 10.0
+MAX_RETRIES = 1
 PROMPTS = Path(__file__).parent / "prompts"
 SYSTEM_PROMPT = (PROMPTS / "planning.md").read_text(encoding="utf-8")
 # Changing a plan follows the same rules for a plan, plus how to treat the existing one.
@@ -27,6 +51,7 @@ REPLANNING_PROMPT = SYSTEM_PROMPT + "\n\n" + (PROMPTS / "replanning.md").read_te
 LOG_DIR = Path(__file__).resolve().parents[2] / "logs"
 
 T = TypeVar("T")
+_log_error_sink: ContextVar[list[str] | None] = ContextVar("_log_error_sink", default=None)
 
 
 class AgentError(RuntimeError):
@@ -34,6 +59,78 @@ class AgentError(RuntimeError):
 
 
 PlanningError = AgentError  # the name the planning page and its tests use
+
+
+def service_host() -> str:
+    """Host of OPENAI_BASE_URL, or api.openai.com when none is set. Read when called,
+    like the OpenAI client reads it."""
+    return urlsplit(os.environ.get("OPENAI_BASE_URL", "").strip()).hostname or "api.openai.com"
+
+
+def describe_api_error(err: APIError) -> str:
+    """Translate a provider APIError into an actionable German message naming the
+    configured service host (OPENAI_BASE_URL, or api.openai.com)."""
+    host = service_host()
+    if isinstance(err, APITimeoutError):
+        return (
+            f"Zeitüberschreitung bei der Anfrage an den KI-Dienst {host}: keine rechtzeitige "
+            "Antwort. Versuche es erneut oder erhöhe PM_AGENT_TIMEOUT in "
+            "04-Prototyp/pm_agent/.env."
+        )
+    if isinstance(err, APIConnectionError):
+        return (
+            f"Keine Verbindung zum KI-Dienst {host}. Prüfe Netzwerk, VPN und OPENAI_BASE_URL "
+            "in 04-Prototyp/pm_agent/.env."
+        )
+    if isinstance(err, APIStatusError):
+        code = err.status_code
+        if isinstance(err, AuthenticationError) or code == 401:
+            return (
+                f"Anmeldung beim KI-Dienst {host} fehlgeschlagen (HTTP 401). Prüfe "
+                "OPENAI_API_KEY und OPENAI_BASE_URL in 04-Prototyp/pm_agent/.env."
+            )
+        if isinstance(err, PermissionDeniedError) or code == 403:
+            return (
+                f"Zugriff auf den KI-Dienst {host} verweigert (HTTP 403). Prüfe Berechtigungen "
+                "für OPENAI_API_KEY und PM_AGENT_MODEL."
+            )
+        if isinstance(err, NotFoundError) or code == 404:
+            model = _model()
+            model_hint = f" (PM_AGENT_MODEL={model})" if model else ""
+            return (
+                f"Modell oder Endpunkt beim KI-Dienst {host} nicht gefunden "
+                f"(HTTP 404){model_hint}. Prüfe PM_AGENT_MODEL und OPENAI_BASE_URL in "
+                "04-Prototyp/pm_agent/.env."
+            )
+        if isinstance(err, RateLimitError) or code == 429:
+            return (
+                f"Anfragelimit oder Kontingent beim KI-Dienst {host} erreicht (HTTP 429). "
+                "Warte kurz und versuche es erneut, oder prüfe dein Kontingent."
+            )
+        if isinstance(err, InternalServerError) or code >= 500:
+            return (
+                f"Der KI-Dienst {host} hat vorübergehend ein Problem (HTTP {code}). Versuche es "
+                "in einigen Minuten erneut."
+            )
+        return (
+            f"Der KI-Dienst {host} hat die Anfrage abgewiesen (HTTP {code}). Prüfe "
+            "Modell-Einstellungen und Eingaben oder versuche es erneut."
+        )
+    return (
+        f"Der KI-Dienst {host} meldet einen unerwarteten Fehler. Versuche es erneut oder prüfe "
+        "das Laufprotokoll in logs/."
+    )
+
+
+@contextmanager
+def collect_log_errors() -> Iterator[list[str]]:
+    """Collect German warnings for run-log write errors raised inside the block."""
+    errors: list[str] = []
+    token = _log_error_sink.set(errors)
+    try:
+        yield errors
+    finally:
+        _log_error_sink.reset(token)
 
 
 def run_planning(
@@ -45,6 +142,7 @@ def run_planning(
     requirements: list[Requirement] | None = None,
     covered: frozenset[str] = frozenset(),
     design: Design | None = None,
+    on_log_error: Callable[[OSError], None] | None = None,
 ) -> Plan:
     """Let the agent plan the project. Returns the first plan that submit_plan accepts: no
     errors, warnings possible. Raises PlanningError; errors of the API itself propagate.
@@ -58,7 +156,17 @@ def run_planning(
         f"{_inputs(project, team, trace)}\n\n"
         "Erstelle den Plan, prüfe ihn mit check_plan und reiche ihn mit submit_plan ein."
     )
-    return _plan_run(SYSTEM_PROMPT, request, project, team, {}, log_dir, on_round, trace).plan
+    return _plan_run(
+        SYSTEM_PROMPT,
+        request,
+        project,
+        team,
+        {},
+        log_dir,
+        on_round,
+        trace,
+        on_log_error=on_log_error,
+    ).plan
 
 
 class Replan(NamedTuple):
@@ -80,6 +188,7 @@ def run_replanning(
     requirements: list[Requirement] | None = None,
     covered: frozenset[str] = frozenset(),
     design: Design | None = None,
+    on_log_error: Callable[[OSError], None] | None = None,
 ) -> "Replan":
     """Let the agent change `plan` the way the project lead asks in `wish`. Same tools, same
     check and same kind of log as run_planning; the log also keeps the wish. The agent may also
@@ -104,6 +213,7 @@ def run_replanning(
         on_round,
         trace,
         absences=True,
+        on_log_error=on_log_error,
     )
 
 
@@ -117,6 +227,7 @@ def _plan_run(
     on_round: Callable[[dict[str, Any]], None] | None,
     trace: "Trace",
     absences: bool = False,
+    on_log_error: Callable[[OSError], None] | None = None,
 ) -> Replan:
     tools = PlanningTools(project, team, trace.requirements, trace.covered, absences=absences)
     if trace.requirements is not None:  # what the plan was traced to, for the record
@@ -142,6 +253,7 @@ def _plan_run(
         },
         log_dir=log_dir,
         on_round=on_round,
+        on_log_error=on_log_error,
     )
     return Replan(plan, tools.absences)
 
@@ -152,6 +264,8 @@ def run_submission(
     data: str,
     log_dir: Path | None = None,
     on_round: Callable[[dict[str, Any]], None] | None = None,
+    *,
+    on_log_error: Callable[[OSError], None] | None = None,
 ) -> T:
     """An agent with one submit tool: the system prompt is prompts/<name>.md, the request
     the JSON text `data`, and the log keeps input and result under the prefix `name`."""
@@ -168,6 +282,7 @@ def run_submission(
         },
         log_dir=log_dir,
         on_round=on_round,
+        on_log_error=on_log_error,
     )
 
 
@@ -182,6 +297,7 @@ def run_agent(
     record: Callable[[T | None], dict[str, Any]],
     log_dir: Path | None = None,
     on_round: Callable[[dict[str, Any]], None] | None = None,
+    on_log_error: Callable[[OSError], None] | None = None,
 ) -> T:
     """One agent run. `result` returns what the submit tool accepted, or None until then.
     `noun` names the result in messages ("Plan", "Statusbericht"; a masculine German noun).
@@ -198,7 +314,6 @@ def run_agent(
         error = f"{type(err).__name__}: {err}"
         raise
     finally:
-        log_dir.mkdir(parents=True, exist_ok=True)
         entry = {
             "started": started.isoformat(timespec="seconds"),
             "seconds": round((datetime.now().astimezone() - started).total_seconds(), 1),
@@ -208,7 +323,17 @@ def run_agent(
             "rounds": [{"round": n, **item} for n, item in enumerate(rounds, start=1)],
             **record(accepted),
         }
-        _write_log(log_dir, log_prefix, started, entry)
+        try:
+            log_dir.mkdir(parents=True, exist_ok=True)
+            _write_log(log_dir, log_prefix, started, entry)
+        except OSError as log_err:
+            # Never lose an accepted result or mask the original run error on log-write failure.
+            message = f"Das Laufprotokoll konnte nicht in {log_dir} gespeichert werden: {log_err}"
+            logger.warning("%s", message)
+            if on_log_error is not None:
+                on_log_error(log_err)
+            if (sink := _log_error_sink.get()) is not None:
+                sink.append(message)
 
 
 def _run(
@@ -220,18 +345,25 @@ def _run(
     rounds: list[dict[str, Any]],
     on_round: Callable[[dict[str, Any]], None],
 ) -> T:
+    timeout = _timeout()
+    host = service_host()
     try:
-        client = OpenAI()  # reads OPENAI_API_KEY and, for another endpoint, OPENAI_BASE_URL
-    except OpenAIError:
+        # Reads OPENAI_API_KEY and, for another endpoint, OPENAI_BASE_URL.
+        client = OpenAI(timeout=timeout, max_retries=MAX_RETRIES)
+    except OpenAIError as err:
+        if not os.environ.get("OPENAI_API_KEY"):
+            raise AgentError(
+                f"Kein Zugang zum KI-Dienst {host}: OPENAI_API_KEY ist nicht gesetzt. Trage den "
+                "Schlüssel in 04-Prototyp/pm_agent/.env ein und starte mit --env-file .env."
+            ) from None
         raise AgentError(
-            "Kein Zugang zur OpenAI API: OPENAI_API_KEY ist nicht gesetzt. Trage den "
-            "Schlüssel in 04-Prototyp/pm_agent/.env ein und starte mit --env-file .env."
+            f"Der Zugang zum KI-Dienst {host} konnte nicht eingerichtet werden: {err}"
         ) from None
     model = _model()
     if not model:  # no default: which models an account may use differs
         raise AgentError(
             "Kein Modell gewählt: PM_AGENT_MODEL ist nicht gesetzt. Trage den Namen eines "
-            "OpenAI-Modells in 04-Prototyp/pm_agent/.env ein und starte mit --env-file .env."
+            f"Modells für {host} in 04-Prototyp/pm_agent/.env ein und starte mit --env-file .env."
         )
     by_name = {tool.name: tool for tool in tools}
     # Responses API: function tools work together with reasoning, which the planning needs.
@@ -279,6 +411,25 @@ def _run(
     # every round.
     last = f" Zuletzt abgelehnt: {rejected}" if rejected else ""
     raise AgentError(f"Der Agent hat nach {MAX_ROUNDS} Runden noch keinen gültigen {noun}.{last}")
+
+
+def _timeout() -> Timeout:
+    """Per-request timeout. Default REQUEST_TIMEOUT; PM_AGENT_TIMEOUT overrides it."""
+    raw = os.environ.get("PM_AGENT_TIMEOUT", "").strip()
+    if not raw:
+        seconds = REQUEST_TIMEOUT
+    else:
+        try:
+            seconds = float(raw)
+        except ValueError:
+            raise AgentError(
+                f"Ungültiges Zeitlimit in PM_AGENT_TIMEOUT ({raw!r}): Zahl in Sekunden erwartet."
+            ) from None
+        if not math.isfinite(seconds) or seconds <= 0:
+            raise AgentError(
+                f"Ungültiges Zeitlimit in PM_AGENT_TIMEOUT ({raw!r}): Wert muss größer als 0 sein."
+            )
+    return Timeout(seconds, connect=min(CONNECT_TIMEOUT, seconds))
 
 
 def _effort() -> str:
